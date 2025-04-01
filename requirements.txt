@@ -1,0 +1,17 @@
+fastapi
+pydantic
+uvicorn
+sqlalchemy
+alembic
+asyncpg
+asyncmy
+aioodbc
+greenlet
+python-jose[cryptography]
+passlib[bcrypt]
+bcrypt
+python-dotenv
+pydantic-settings
+psycopg2-binary
+pydantic[email]
+python-decouple

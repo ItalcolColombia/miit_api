@@ -1,0 +1,28 @@
+from core.exceptions.base_exception import BaseException
+
+
+
+class EntityAlreadyRegisteredException(BaseException):
+    """
+       Class responsible for handling exceptions when an entity is not found.
+
+       This exception is raised when an entity does not exist in the database.
+
+       Class Args:
+           message (str): The error message describing the issue.
+           status_code (int): The HTTP status code associated with the exception (default: 404 Not Found).
+       """
+
+    def __init__(self, entity_name: str):
+        super().__init__(
+            message=f'{entity_name} ya se encuentra registrado.',
+            status_code=400
+        )
+
+
+class EntityNotFoundException(BaseException):
+    def __init__(self, entity_name: str, entity_id: int):
+        super().__init__(
+            message=f'{entity_name} con id {entity_id} no encontrada.',
+            status_code=404
+        )
