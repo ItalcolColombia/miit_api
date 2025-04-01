@@ -37,6 +37,7 @@ class UsuarioCreate(BaseSchema):
                 "full_name": "Administrador del Sistema",
                 "cedula": "2222222",
                 "email" : "sysadmin@mail.com",
+                "clave" : "admin1234",
                 "rol_id" : "1",
                 "estado": "true"
             }

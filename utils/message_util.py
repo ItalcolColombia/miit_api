@@ -1,6 +1,7 @@
 # /src/utils/message_util.py
 
-from src.core.configurations.env_configuration import EnvConfiguration
+from core.settings import Settings
+
 
 
 class MessageUtil:
@@ -24,10 +25,10 @@ class MessageUtil:
             None
         """
 
-        self.__api_name = EnvConfiguration().api_name
-        self.__api_host = EnvConfiguration().api_host
-        self.__api_port = EnvConfiguration().api_port
-        self.__api_version = EnvConfiguration().api_version
+        self.__api_name = Settings().API_NAME
+        self.__api_host = Settings().API_HOST
+        self.__api_port = Settings().API_PORT
+        self.__api_version = Settings().API_VERSION
 
     def on_startup(self):
         """

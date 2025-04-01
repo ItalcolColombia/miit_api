@@ -1,52 +1,97 @@
-# /src/utils/dot_env_util.py
+
+from datetime import datetime, timedelta, timezone
+
+import jwt
+from fastapi import HTTPException
+from jwt.exceptions import (
+    ExpiredSignatureError,
+    InvalidKeyError,
+    InvalidTokenError,
+)
+
+from core.settings import Settings
+from core.exceptions.jwt_exception import UnauthorizedToken
+from utils.logger_util import LoggerUtil
+
+log = LoggerUtil()
+
+# Env variables Setup
+JWT_ACCESS_TOKEN_EXPIRE_MINUTES = (
+    Settings().JWT_ACCESS_TOKEN_EXPIRE_MINUTES
+)
+JWT_SECRET_KEY = Settings().JWT_SECRET_KEY
+JWT_ALGORITHM = Settings().JWT_ALGORITHM
 
 
-from dotenv import find_dotenv
-
-
-class DotEnvUtil:
+class JWTUtil:
     """
-    Class responsible for handling `.env` file operations.
+    Class responsible for handling JSON Web Token (JWT) operations.
 
-    This class provides methods to check whether the `.env` file is loaded or if
-    the system is using default environment variables.
+    This class provides methods for creating, verifying, and decoding JWT tokens.
 
     Class Args:
         None
     """
 
-    def __init__(self):
+    @staticmethod
+    def create_token(
+        data: dict, expires_delta: timedelta | None = None
+    ) -> str:
         """
-        Constructor method for DotEnvUtil.
+        Static method responsible for creating a JWT access token.
 
-        Initializes the utility by locating the `.env` file path.
+        This method encodes user-related data into a JWT token with an expiration time.
 
         Args:
-            None
-        """
-
-        self.__env_path = find_dotenv()
-
-    def check_dot_env(self) -> None:
-        """
-        Public method responsible for verifying if the `.env` file is loaded.
-
-        This method checks for the presence of the `.env` file and prints a message
-        indicating whether it was successfully loaded or if default environment
-        variables are being used.
-
-        Args:
-            None
+            data (dict): The payload to be encoded in the token.
+            expires_delta (timedelta | None, optional): The time until the token expires.
+                Defaults to `JWT_ACCESS_TOKEN_EXPIRE_MINUTES`.
 
         Returns:
-            None
+            str: The generated JWT token.
         """
 
-        additional_message = "ENV VARIABLES -> "
+        to_encode = data.copy()
+        expire = datetime.now(timezone.utc) + (
+            expires_delta or timedelta(minutes=JWT_ACCESS_TOKEN_EXPIRE_MINUTES)
+        )
+        to_encode.update({"exp": expire})
+        encoded_jwt = jwt.encode(
+            to_encode, JWT_SECRET_KEY, algorithm=JWT_ALGORITHM
+        )
+        return encoded_jwt
 
-        if not self.__env_path:
-            message = f"\n\033[32m\033[1m{additional_message}The file .env is not loaded! ... running default env variables\033[0m"
-            print(message)
-        else:
-            message = f"\n\033[32m\033[1m{additional_message}The file .env is loaded!\033[0m"
-            print(message)
+    @staticmethod
+    def verify_token(token: str) -> dict:
+        """
+        Static method responsible for verifying and decoding a JWT token.
+
+        This method decodes a JWT token, ensuring its validity and integrity.
+
+        Args:
+            token (str): The JWT token to be verified.
+
+        Returns:
+            dict: The decoded token payload.
+
+        Raises:
+            UnauthorizedToken: If the token is expired, invalid, or has an incorrect signature.
+            HTTPException: If an unexpected error occurs during verification.
+        """
+
+        try:
+            payload = jwt.decode(
+                token, JWT_SECRET_KEY, algorithms=[JWT_ALGORITHM]
+            )
+            return payload
+        except ExpiredSignatureError:
+            raise UnauthorizedToken("Token expired!")
+        except InvalidTokenError:
+            raise UnauthorizedToken("Invalid token!")
+        except InvalidKeyError:
+            raise UnauthorizedToken("Invalid signing key!")
+        except Exception as e:
+            log.error(f"Unexpected error in verify_token: {e}")
+            raise HTTPException(
+                status_code=500, detail=f"JWT decoding error: {str(e)}"
+            )

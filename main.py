@@ -2,15 +2,27 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import ORJSONResponse
 from api.v1.routes import routers as v1_routers
+from core.settings import Settings
+from core.middleware.auth_middleware import AuthMiddleware
+from core.middleware.logger_middleware import LoggerMiddleware
+from utils.database_util import DatabaseUtil
+from utils.dot_env_util import DotEnvUtil
+from utils.logger_util import LoggerUtil
+from utils.message_util import MessageUtil
 import uvicorn
 
+# Env variables Setup
+API_HOST = Settings().API_HOST
+API_NAME = Settings().API_NAME
+API_PORT = Settings().API_PORT
+API_VERSION = Settings().API_VERSION
 
 
 app = FastAPI(
 
-    title="API_MIIT BDC API",
-    description="API dispuesta para el flujo de información entre el ERP y ETL con la Base de Datos Central. ",
-    version="0.0.5",
+    title= API_NAME,
+    description="API interconsulta de la data almacenada en el repositorio central por parte de los stackholders: operador portuario y automatizador. ",
+    version=API_VERSION,
     docs_url="/docs",   # Swagger UI endpoint
     redoc_url="/redoc",
     openapi_url="/openapi.json",
@@ -18,13 +30,13 @@ app = FastAPI(
     docExpansion="None"
  )
 
-# app.add_middleware(
-#     CORSMiddleware,
-#     allow_origins=["*"],
-#     allow_credentials=True,
-#     allow_methods=["*"],
-#     allow_headers=["*"],
-# )
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 app.include_router(v1_routers, prefix="/api/v1")
 
@@ -33,10 +45,32 @@ async def root():
     return {"message": "MIIT API"}
 
 
+
+@app.on_event("startup")
+async def startup_event():
+    """
+        Application startup sequence.
+
+        This section ensures that essential configurations are checked before
+        running the FastAPI server.
+    """
+    # On Startup Message
+    MessageUtil().on_startup()
+
+    # Check ENV variables
+    DotEnvUtil().check_dot_env()
+
+    # Check Database Connection
+    await DatabaseUtil().check_connection()
+
+@app.on_event("shutdown")
+async def shutdown_event():
+
+    print("Application shutdown")
+
+
 if __name__ == "__main__":
-    uvicorn.run(
-        "main:app",
-        host="localhost",
-        port=8000,
-        reload=True
-    )
+    width = 80
+    border = "=" * width
+
+    uvicorn.run("main:app", host=API_HOST, port=API_PORT, log_config=None)

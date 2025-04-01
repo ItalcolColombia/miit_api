@@ -5,7 +5,7 @@ import os
 
 from colorlog import ColoredFormatter
 
-from src.core.configurations.env_configuration import EnvConfiguration
+from core.settings import Settings
 
 
 class LoggerUtil:
@@ -29,8 +29,8 @@ class LoggerUtil:
             None
         """
 
-        self.__api_name = EnvConfiguration().api_name
-        self.__api_log_level = EnvConfiguration().api_log_level
+        self.__api_name = Settings().API_NAME
+        self.__api_log_level = Settings().API_LOG_LEVEL
 
         self.__valid_log_levels = [
             "DEBUG",

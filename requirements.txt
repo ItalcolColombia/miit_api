@@ -10,6 +10,7 @@ greenlet
 python-jose[cryptography]
 passlib[bcrypt]
 bcrypt
+colorlog
 python-dotenv
 pydantic-settings
 psycopg2-binary

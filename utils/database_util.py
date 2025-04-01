@@ -1,11 +1,9 @@
-from sqlalchemy import create_engine
+import asyncio
+from sqlalchemy.ext.asyncio import create_async_engine
 from sqlalchemy.exc import OperationalError
 
-from core.settings import get_settings
-from database.configuration import (
-    DatabaseConfigurationUtil,
-)
-
+from core.settings import Settings
+from database.configuration import DatabaseConfigurationUtil
 
 class DatabaseUtil:
     """
@@ -30,10 +28,10 @@ class DatabaseUtil:
         """
 
         _db_url = DatabaseConfigurationUtil().get_url()
-        self.__database_type = get_settings().database_type
-        self.__engine = create_engine(_db_url)
+        self.__database_type = Settings().DB_TYPE
+        self.__engine = create_async_engine(_db_url)  # Use create_async_engine
 
-    def check_connection(self) -> None:
+    async def check_connection(self) -> None:  # Define as async
         """
         Public method responsible for verifying the database connection.
 
@@ -54,7 +52,7 @@ class DatabaseUtil:
         )
 
         try:
-            with self.__engine.connect():
+            async with self.__engine.connect() as connection:  # Use async with
                 print(
                     f"\033[32m\033[1m\nDatabase -> {checked_database_type} connection successful!\n\033[0m"
                 )
@@ -63,3 +61,11 @@ class DatabaseUtil:
                 f"\033[31m\033[1m\nDatabase connection failed!\n\033[0m Error: {str(e)}"
             )
             raise
+
+# Example usage (in main.py or another async context):
+async def main():
+    db_util = DatabaseUtil()
+    await db_util.check_connection()
+
+if __name__ == "__main__":
+    asyncio.run(main())
