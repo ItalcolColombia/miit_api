@@ -15,7 +15,7 @@ class EntityAlreadyRegisteredException(BaseException):
 
     def __init__(self, entity_name: str):
         super().__init__(
-            message=f'{entity_name} ya se encuentra registrado.',
+            message=f'{entity_name} ya está registrado en la base de datos.',
             status_code=400
         )
 

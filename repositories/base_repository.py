@@ -20,6 +20,14 @@ class IRepository(Generic[ModelType, SchemaType]):
         result = await self.db.execute(query)
         items = result.scalars().all()
         return [self.schema.model_validate(item) for item in items]
+
+    async def get_all_paginated(self, skip: int = 0,  limit: Optional[int] = None) -> List[SchemaType]:
+        query = select(self.model).offset(skip)
+        if limit:
+            query = query.limit(limit)
+        result = await self.db.execute(query)
+        items = result.scalars().all()
+        return [self.schema.model_validate(item) for item in items]
     
     async def find_many(self, **kwargs) -> List[SchemaType]:
         try:
@@ -39,7 +47,7 @@ class IRepository(Generic[ModelType, SchemaType]):
             item = result.scalar_one()
             return self.schema.model_validate(item)
         except NoResultFound:
-            raise EntityNotFoundException(self.model.__name__, id)
+            return None
         
     async def find_one(self, **kwargs) -> Optional[SchemaType]:
         try:

@@ -2,7 +2,7 @@
 from datetime import datetime, timedelta, timezone
 
 import jwt
-from fastapi import HTTPException
+from fastapi import HTTPException, status
 from jwt.exceptions import (
     ExpiredSignatureError,
     InvalidKeyError,
@@ -16,9 +16,8 @@ from utils.logger_util import LoggerUtil
 log = LoggerUtil()
 
 # Env variables Setup
-JWT_ACCESS_TOKEN_EXPIRE_MINUTES = (
-    Settings().JWT_ACCESS_TOKEN_EXPIRE_MINUTES
-)
+JWT_ACCESS_TOKEN_EXPIRE_MINUTES = Settings().JWT_ACCESS_TOKEN_EXPIRE_MINUTES
+JWT_REFRESH_TOKEN_EXPIRE_DAYS = Settings().JWT_REFRESH_TOKEN_EXPIRE_DAYS
 JWT_SECRET_KEY = Settings().JWT_SECRET_KEY
 JWT_ALGORITHM = Settings().JWT_ALGORITHM
 
@@ -50,15 +49,49 @@ class JWTUtil:
         Returns:
             str: The generated JWT token.
         """
+    
+        try:
+            to_encode = data.copy()
+            expire = datetime.now(timezone.utc) + (
+                expires_delta or timedelta(minutes=JWT_ACCESS_TOKEN_EXPIRE_MINUTES)
+            )
+            to_encode.update({"exp": expire})
+            encoded_jwt = jwt.encode(
+                to_encode, JWT_SECRET_KEY, algorithm=JWT_ALGORITHM
+            )
+            return encoded_jwt
+        except Exception as e:
+            # General exception handling
+            print(f"An error occurred while creating the token: {e}")
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail="Token creation failed"
+            )
 
+    @staticmethod
+    def create_refresh_token(data: dict, expires_delta: timedelta = None) -> str:
+        """
+               Static method responsible for refreshing a JWT token.
+
+               This method refresh a JWT token, ensuring its validity.
+
+               Args:
+                   token (str): The JWT token to be refreshed.
+
+               Returns:
+                   dict: The encoded token.
+
+               Raises:
+                   UnauthorizedToken: If the token is expired, invalid, or has an incorrect signature.
+                   HTTPException: If an unexpected error occurs during verification.
+               """
         to_encode = data.copy()
-        expire = datetime.now(timezone.utc) + (
-            expires_delta or timedelta(minutes=JWT_ACCESS_TOKEN_EXPIRE_MINUTES)
-        )
+        if expires_delta:
+            expire = datetime.utcnow() + expires_delta
+        else:
+            expire = datetime.utcnow() + timedelta(days=JWT_REFRESH_TOKEN_EXPIRE_DAYS)
         to_encode.update({"exp": expire})
-        encoded_jwt = jwt.encode(
-            to_encode, JWT_SECRET_KEY, algorithm=JWT_ALGORITHM
-        )
+        encoded_jwt = jwt.encode(to_encode, JWT_SECRET_KEY, algorithm=JWT_ALGORITHM)
         return encoded_jwt
 
     @staticmethod

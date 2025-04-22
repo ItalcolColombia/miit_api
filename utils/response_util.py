@@ -1,7 +1,7 @@
 # /src/utils/response_util.py
 
 from http import HTTPStatus
-from typing import Dict, Union
+from typing import Dict, Union, Any
 
 from fastapi.responses import JSONResponse
 
@@ -21,7 +21,7 @@ class ResponseUtil:
         self,
         status_code: int,
         message: str | None = None,
-        data: Dict[str, str] | None = None,
+        data: Dict[str, Any]| None = None,
     ) -> JSONResponse:
         """
         Public method responsible for generating a standardized JSON response.

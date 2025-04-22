@@ -51,8 +51,8 @@ class AuthMiddleware(BaseHTTPMiddleware):
         try:
 
             PUBLIC_PATHS = [
-                f"/api-{API_VERSION}/login",
-                f"/api-{API_VERSION}/register",
+                f"/api/{API_VERSION}/auth",
+                f"/api/{API_VERSION}/create",
                 "/docs",
                 "/openapi.json",
             ]

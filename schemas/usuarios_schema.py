@@ -4,7 +4,7 @@ from typing import Optional
 from datetime import datetime  
 
 
-class UsuarioResponse(BaseSchema):
+class UsuariosResponse(BaseSchema):
     id: int
     nick_name: str
     full_name: str
@@ -54,12 +54,13 @@ class UsuarioUpdate(BaseSchema):
     estado: bool = False
 
 
-class UsuarioResponseWithPassword(UsuarioResponse):
+class UsuariosResponseWithPassword(UsuariosResponse):
     clave: str
 
 class UsuarioResponseWithToken(BaseSchema):
     access_token: str
-    token_type: str = "bearer"
+    refresh_token :str
+    #token_type: str = "bearer"
     expires_in: int
 
 class UserAuth(BaseSchema):

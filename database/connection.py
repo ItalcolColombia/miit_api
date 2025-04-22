@@ -28,7 +28,7 @@ class DatabaseConfiguration:
 
     # Create the SQLAlchemy engine
     _engine = create_async_engine(
-        _db_url, echo=True,  future=True
+        _db_url, echo=True,  future=True, max_overflow=10, pool_size=5
     )
     # Create a session factory
     _async_session = sessionmaker( bind=_engine, class_=AsyncSession, autoflush=False, 

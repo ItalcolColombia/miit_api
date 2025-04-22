@@ -1,8 +1,9 @@
 from sqlalchemy import Column, Integer, Double, Numeric, Table, String, DateTime, Boolean, ForeignKey, DECIMAL, \
     Date, Boolean, TIMESTAMP
+from sqlalchemy.schema import UniqueConstraint
 from sqlalchemy import Identity
 from sqlalchemy.sql import func
-from sqlalchemy.orm import relationship, declarative_base
+from sqlalchemy.orm import relationship, declarative_base, backref
 from utils.any_utils import AnyUtils
 
 Base = declarative_base()
@@ -43,12 +44,41 @@ class Buques(Base):
     estado = Column(Boolean)
     transacciones = relationship("Transacciones", backref="Buques")
 
+class Bls(Base):
+    __tablename__ = "bls"
+    id = Column(Integer, primary_key=True, index=True)
+    flota_id = Column(Integer, ForeignKey("flotas.id"))
+    material_id = Column(Integer, ForeignKey("materiales.id"))
+    no_bl = Column(String)
+    peso_bl = Column(Numeric(10, 2))
+
+    # Define relationships
+    flota = relationship("Flotas", backref=backref("bls"))  # If you need to access Flotas from BL
+    material = relationship("Materiales", backref=backref("bls")) # If you need to access Materiales from BL
+
+    __table_args__ = (
+        UniqueConstraint('flota_id', 'material_id', 'no_bl', name='uk_bls'),
+    )
+
+
 class Camiones(Base):
     __tablename__ = "camiones"
     id = Column(Integer, primary_key=True, index=True)
     placa = Column(String(6), unique=True, index=True)
     puntos = Column(Integer, nullable=True)
     transacciones = relationship("Transacciones", backref="Camiones")
+
+class Clientes(Base):
+    __tablename__ = "clientes"
+    id = Column(Integer, primary_key=True, index=True)
+    tipo_idetificacion = Column(Integer, nullable=False)
+    num_identificacion = Column(Integer, nullable=False)
+    razon_social = Column(String(100), nullable=False)
+    primer_nombre = Column(String(30))
+    segundo_nombre = Column(String(30))
+    primer_apellido = Column(String(30))
+    segundo_apellido = Column(String(30))
+    id_actividad = Column(Integer)
 
 
 class Flotas(Base):
@@ -60,7 +90,8 @@ class Flotas(Base):
     peso = Column(Numeric(10,2), nullable=False)
     fecha_llegada = Column(DateTime(timezone=False), nullable=True)
     fecha_salida = Column(DateTime(timezone=False), nullable=True)
-    material_id = Column(Integer,nullable=False)
+    material_id = Column(Integer,nullable=True)
+    despacho_directo = Column(Boolean, nullable=True)
 
 class Materiales(Base):
     __tablename__ = "materiales"
@@ -156,3 +187,19 @@ class Pesadas(Base):
     peso_real = Column(Numeric(10,2), nullable=False)
     peso_vuelo = Column(Numeric(10,2), nullable=True)
     peso_fino = Column(Numeric(10,2), nullable=True)
+
+
+
+class VFlotas(Base):
+    __tablename__ = "v_flotas"
+    id = Column(Integer, primary_key=True, index=True)
+    tipo = Column(String(6))
+    referencia = Column(String(300), unique=True, index=True)
+    consecutivo = Column(Double, nullable=False)
+    peso = Column(Numeric(10,2), nullable=False)
+    fecha_llegada = Column(DateTime(timezone=False), nullable=True)
+    fecha_salida = Column(DateTime(timezone=False), nullable=True)
+    material_id = Column(Integer,nullable=True)
+    material= Column(String(300), nullable=True)
+    estado = Column(Boolean, nullable=True)
+    despacho_directo = Column(Boolean, nullable=True)

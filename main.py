@@ -1,6 +1,9 @@
 from fastapi import FastAPI
-from fastapi.middleware.cors import CORSMiddleware
+from starlette.middleware.cors import CORSMiddleware
+from starlette.middleware.sessions import SessionMiddleware
+from core.middleware.time_middleware import ProcessTimeHeaderMiddleware
 from fastapi.responses import ORJSONResponse
+from fastapi.middleware.gzip import GZipMiddleware
 from api.v1.routes import routers as v1_routers
 from core.settings import Settings
 from core.middleware.auth_middleware import AuthMiddleware
@@ -16,6 +19,7 @@ API_HOST = Settings().API_HOST
 API_NAME = Settings().API_NAME
 API_PORT = Settings().API_PORT
 API_VERSION = Settings().API_VERSION
+SECRET_KEY = Settings().JWT_SECRET_KEY
 
 
 app = FastAPI(
@@ -30,6 +34,10 @@ app = FastAPI(
     docExpansion="None"
  )
 
+# Middlewares
+app.add_middleware(GZipMiddleware, minimum_size=1000)
+app.add_middleware(SessionMiddleware, secret_key=SECRET_KEY)
+
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -38,7 +46,12 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-app.include_router(v1_routers, prefix="/api/v1")
+app.add_middleware(ProcessTimeHeaderMiddleware)
+
+app.add_middleware(LoggerMiddleware)
+#app.add_middleware(AuthMiddleware)
+
+app.include_router(v1_routers, prefix="/api/"+API_VERSION)
 
 app.get("/")
 async def root():
