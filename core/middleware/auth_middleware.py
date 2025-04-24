@@ -29,7 +29,8 @@ class AuthMiddleware(BaseHTTPMiddleware):
         None
     """
 
-    async def dispatch(self, request: Request, call_next):
+    @staticmethod
+    async def dispatch(request: Request, call_next):
         """
         Public asynchronous method responsible for processing incoming requests.
 
@@ -50,14 +51,14 @@ class AuthMiddleware(BaseHTTPMiddleware):
 
         try:
 
-            PUBLIC_PATHS = [
+            public_paths = [
                 f"/api/{API_VERSION}/auth",
                 f"/api/{API_VERSION}/create",
                 "/docs",
                 "/openapi.json",
             ]
 
-            if any(request.url.path.startswith(path) for path in PUBLIC_PATHS):
+            if any(request.url.path.startswith(path) for path in public_paths):
                 response = await call_next(request)
                 return response
 

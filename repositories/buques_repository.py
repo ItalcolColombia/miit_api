@@ -1,4 +1,3 @@
-from imaplib import Flags
 from typing import Optional
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
@@ -38,7 +37,7 @@ class BuquesRepository(IRepository[Buques, BuquesResponse]):
                             Check if a Buque already exists. If not, create a new Buque.
 
                             Args:
-                                buque_create: The buque object.
+                                nombre: The buque object.
 
                             Returns:
                                 The existing or newly created buque

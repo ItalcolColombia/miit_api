@@ -162,18 +162,18 @@ class LoggerUtil:
         default_level = "INFO"
         obtained_log_level = self.__api_log_level.upper()
 
-        YELLOW = "\033[33m"
-        RESET = "\033[0m"
+        yellow = "\033[33m"
+        reset = "\033[0m"
 
         if not obtained_log_level:
             print(
-                f"{YELLOW}Empty or invalid ‘LOG_LEVEL’ value found. Using default value '{default_level}'!{RESET}"
+                f"{yellow}Empty or invalid ‘LOG_LEVEL’ value found. Using default value '{default_level}'!{reset}"
             )
             return default_level
 
         if obtained_log_level not in self.__valid_log_levels:
             print(
-                f"{YELLOW}Invalid value for 'LOG_LEVEL' found: {self.__api_log_level}! Using the default value '{default_level}{RESET}!"
+                f"{yellow}Invalid value for 'LOG_LEVEL' found: {self.__api_log_level}! Using the default value '{default_level}{reset}!"
             )
             return default_level
 

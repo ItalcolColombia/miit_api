@@ -37,6 +37,7 @@ app = FastAPI(
 # Middlewares
 app.add_middleware(GZipMiddleware, minimum_size=1000)
 app.add_middleware(SessionMiddleware, secret_key=SECRET_KEY)
+app.add_middleware(ProcessTimeHeaderMiddleware)
 
 app.add_middleware(
     CORSMiddleware,

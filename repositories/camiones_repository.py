@@ -1,4 +1,3 @@
-from imaplib import Flags
 from typing import Optional
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
@@ -21,7 +20,7 @@ class CamionesRepository(IRepository[Camiones, CamionResponse]):
                         Find a Camion by 'placa'
 
                         Args:
-                            placa: The truck plate param to filter.
+                            plate: The truck plate param to filter.
 
                         Returns:
                             An Camion object based on their placa value.

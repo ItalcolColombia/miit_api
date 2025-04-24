@@ -14,11 +14,7 @@ class FlotasRepository(IRepository[Flotas, FlotasResponse]):
 
     async def get_buques_activos(self) -> List[FlotasActResponse]:
         """
-                Filters flotas by 'tipo' = buque and 'estado = True
-
-                Args:
-                    tipo: The value to filter the 'tipo' column by (e.g., 'Buque').
-                    estado: The value to filter the 'estado' column by (e.g., True).
+                Shows buques which estado = True
 
                 Returns:
                     A list of Buques objects matching the filter.
@@ -38,14 +34,10 @@ class FlotasRepository(IRepository[Flotas, FlotasResponse]):
 
     async def get_camiones_activos(self) -> List[FlotasActResponse]:
         """
-                Filters flotas by 'tipo' = camion and 'estado = True
-
-                Args:
-                    tipo: The value to filter the 'tipo' column by (e.g., 'Buque').
-                    estado: The value to filter the 'estado' column by (e.g., True).
+                Shows camiones which estado = True
 
                 Returns:
-                    A list of Buques objects matching the filter.
+                    A list of camiones objects matching the filter.
                 """
         query = (
             select(VFlotas)

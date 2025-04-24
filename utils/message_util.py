@@ -37,8 +37,6 @@ class MessageUtil:
         This method prints a formatted banner with API details, including its
         name, version, and running URL.
 
-        Args:
-            None
 
         Returns:
             None

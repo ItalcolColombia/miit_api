@@ -105,7 +105,7 @@ class FlotasService:
         updated_buque = await self.buque_service.update_status(buque, estado)
         return updated_buque
 
-    async def set_buque_load(self, voyage: int, noBl:str, customer:str, product: str, peso: float) -> BuquesResponse:
+    async def set_buque_load(self, voyage: int, no_bl:str, customer:str, product: str, peso: float) -> BuquesResponse:
         flota = await self._repo.get_by_id(voyage)
         if not flota:
             raise BaseException(f"Flota con id '{voyage}' no encontrada")

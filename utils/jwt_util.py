@@ -76,7 +76,8 @@ class JWTUtil:
                This method refresh a JWT token, ensuring its validity.
 
                Args:
-                   token (str): The JWT token to be refreshed.
+                   data (dict): The JWT token to be refreshed.
+                   expires_delta: Expiration  time
 
                Returns:
                    dict: The encoded token.

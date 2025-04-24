@@ -20,8 +20,8 @@ class PesadasService:
     async def get_pesada(self, id: int) -> Optional[PesadaResponse]:
         return await self._repo.get_by_id(id)
 
-    async def get_pesada_by_idtrans(self, idTran: int) -> Optional[PesadaResponse]:
-        return await self._repo.get_pesada_by_transaccion(idTran)
+    async def get_pesada_by_idtrans(self, id_transaccion: int) -> Optional[PesadaResponse]:
+        return await self._repo.get_pesada_by_transaccion(id_transaccion)
 
     async def get_all_pesadas(self) -> List[PesadaResponse]:
         return await self._repo.get_all()

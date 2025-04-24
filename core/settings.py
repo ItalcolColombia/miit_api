@@ -28,9 +28,8 @@ class Settings(BaseSettings):
     JWT_ACCESS_TOKEN_EXPIRE_MINUTES: int = 30
     JWT_REFRESH_TOKEN_EXPIRE_DAYS: int = 1
 
-    #@property
-    # def DATABASE_URL(self) -> str:
-    #     return f"postgresql+asyncpg://{self.DB_USER}:{self.DB_PASSWORD}@{self.DB_HOST}:{self.DB_PORT}/{self.DB_NAME}"
+    #Aditional vars
+    ENCRYPTION_KEY:str
 
     class Config:
         env_file = ".env"

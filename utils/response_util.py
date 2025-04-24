@@ -17,9 +17,9 @@ class ResponseUtil:
         None
     """
 
+    @staticmethod
     def json_response(
-        self,
-        status_code: int,
+            status_code: int,
         message: str | None = None,
         data: Dict[str, Any]| None = None,
     ) -> JSONResponse:
