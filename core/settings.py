@@ -6,10 +6,10 @@ from pydantic_settings import BaseSettings
 class Settings(BaseSettings):
     #Api settings
     API_NAME: str
-    API_VERSION: str
+    API_V1_STR: str
     API_HOST: str
     API_PORT: int
-    API_DOC_VERSION: str
+    API_VERSION: str
     API_LOG_LEVEL: str
     API_USER_ADMINISTRATOR: str
     API_PASSWORD_ADMINISTRATOR: str
@@ -27,6 +27,8 @@ class Settings(BaseSettings):
     JWT_ALGORITHM: str = "HS256"
     JWT_ACCESS_TOKEN_EXPIRE_MINUTES: int = 30
     JWT_REFRESH_TOKEN_EXPIRE_DAYS: int = 1
+    JWT_ISSUER: str = "MIIT"
+    JWT_AUDIENCE: str = "MIIT-API"
 
     #Aditional vars
     ENCRYPTION_KEY:str

@@ -4,7 +4,7 @@ import logging
 import os
 
 from colorlog import ColoredFormatter
-
+from database.connection import AsyncSession 
 from core.settings import Settings
 
 
@@ -42,7 +42,7 @@ class LoggerUtil:
 
         # Directory and path for the log file
         _project_root = os.path.abspath(os.path.dirname(__file__))
-        _log_dir = os.path.join(_project_root, "../../logs")
+        _log_dir = os.path.join(_project_root, "/logs")
         os.makedirs(_log_dir, exist_ok=True)
 
         _log_file_name = f"{self.__api_name}.log"
@@ -92,6 +92,20 @@ class LoggerUtil:
                 logging.getLogger("uvicorn").propagate = False
                 logging.getLogger("apscheduler").disabled = True
                 logging.getLogger("apscheduler").propagate = False
+
+
+    def _log_to_db(self, level: str, message: str, resource: str = None):
+        db: AsyncSession = AsyncSession()
+        try:
+            db_log = Log(level=level, message=message, resource=resource, timestamp=datetime.utcnow())
+            db.add(db_log)
+            db.commit()
+        except Exception as e:
+            self.logger.error(f"Error al escribir log en la base de datos: {e}")
+            db.rollback()
+        finally:
+            db.close()
+
 
     def info(self, message: str) -> None:
         """

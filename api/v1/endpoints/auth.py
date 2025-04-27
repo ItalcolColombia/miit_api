@@ -1,12 +1,14 @@
 from fastapi import APIRouter, Depends, HTTPException, status
 from core.di.service_injection import get_auth_service
 from services.auth_service import AuthService
-from schemas.usuarios_schema import UserAuth, UsuarioResponseWithToken  # You'll need to create these
+from schemas.usuarios_schema import UserAuth, Token  # You'll need to create these
+from utils.response_util import ResponseUtil
 
-router = APIRouter(prefix="/auth", tags=["Autenticación - Operaciones relacionadas con la autenticación"])
+router = APIRouter(prefix="/auth", tags=["Autenticación"])
 
+response_json = ResponseUtil().json_response
 
-@router.post("", response_model=UsuarioResponseWithToken)
+@router.post("", response_model=Token)
 async def login(
     login_data: UserAuth,
     auth_service: AuthService = Depends(get_auth_service),
@@ -18,9 +20,14 @@ async def login(
             detail="Invalid credentials",
             headers={"WWW-Authenticate": "Bearer"},
         )
-    return token
+    return response_json(
+        status_code=status.HTTP_200_OK,
+        message="Inicio de sesión exitoso",
+        token=token
+    )
 
-@router.post("/token/refresh", response_model=UsuarioResponseWithToken)  # Usa el mismo schema Token
+
+@router.post("/token/refresh", response_model=Token)  # Usa el mismo schema Token
 async def refresh_token(
     token: str,
     auth_service: AuthService = Depends(get_auth_service)

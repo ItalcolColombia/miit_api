@@ -12,13 +12,26 @@ class UsuariosResponse(BaseSchema):
     email: str
     clave: str
     rol_id: int
+    rol_nombre: str  
     estado: bool = False
 
+    class Config:
+     from_attributes = True
 
-   
-
-    # class Config:
-    #     from_attributes = True
+    @classmethod
+    def model_validate(cls, obj):
+        kwargs = {
+            "id": obj.id,
+            "nick_name": obj.nick_name,
+            "full_name": obj.full_name,
+            "cedula": obj.cedula,
+            "email": obj.email,
+            "clave": obj.clave,
+            "rol_id": obj.rol_id,
+            "rol_nombre": obj.rol.nombre if obj.rol else None,  
+            "estado": obj.estado
+        }
+        return cls(**kwargs)
 
 class UsuarioCreate(BaseSchema):
     nick_name: str = Field(..., min_length=5, max_length=10)
@@ -57,11 +70,9 @@ class UsuarioUpdate(BaseSchema):
 class UsuariosResponseWithPassword(UsuariosResponse):
     clave: str
 
-class UsuarioResponseWithToken(BaseSchema):
+class Token(BaseSchema):
     access_token: str
-    refresh_token :str
-    #token_type: str = "bearer"
-    expires_in: int
+    token_type: str
 
 class UserAuth(BaseSchema):
     nick_name: str = "admin"

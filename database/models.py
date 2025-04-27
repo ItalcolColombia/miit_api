@@ -138,6 +138,7 @@ class Usuarios(Base):
     clave = Column(String(200), nullable=False)
     fecha_modificado = Column(TIMESTAMP, server_default=func.now(), onupdate=func.now())
     rol_id = Column(Integer, ForeignKey('roles.id'), nullable=False)
+    rol = relationship("Roles", backref="Usuarios")
     recuperacion = Column(String(300), nullable=True)
     foto = Column(String, nullable=True)
     estado = Column(Boolean, nullable=False)

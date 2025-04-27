@@ -5,24 +5,27 @@ from core.di.service_injection import get_flotas_service, get_mat_service, get_a
 from schemas.almacenamientos_schema import AlmacenamientoResponse
 from schemas.materiales_schema import MaterialesResponse
 from schemas.movimientos_schema import MovimientosResponse
-from schemas.pesadas_schema import PesadaResponse
+from schemas.pesadas_schema import PesadaResponse, PesadaCreate
 from schemas.transacciones_schema import TransaccionResponse
 from services.almacenamientos_service import AlmacenamientosService
 from services.flotas_service import FlotasService
 from services.movimientos_service import MovimientosService
+from services.materiales_service import MaterialesService
 from services.transacciones_service import TransaccionesService
 from services.pesadas_service import PesadasService
 from api.v1.middleware.auth_middleware import get_current_user
 from schemas.usuarios_schema import UsuariosResponse
+from utils.response_util import ResponseUtil
+from utils.schema_util import CreateResponse, ErrorResponse, ValidationErrorResponse, UpdateResponse
 from schemas.flotas_schema import (
     FlotasResponse,
     FlotaCreate,
     FlotaUpdate,
     FlotasActResponse
 )
-from services.materiales_service import MaterialesService
 
-router = APIRouter(prefix="/scada", tags=["SCADA - Operaciones de interés para la automatización"])
+response_json = ResponseUtil().json_response
+router = APIRouter(prefix="/scada", tags=["Automatizador"], dependencies=[Depends(get_current_user)])
 
 
 
@@ -49,7 +52,6 @@ router = APIRouter(prefix="/scada", tags=["SCADA - Operaciones de interés para 
             response_model=List[AlmacenamientoResponse])
 async def get_almacenamientos_listado(
     alm_service: AlmacenamientosService = Depends(get_alm_service),
-    current_user: UsuariosResponse = Depends(get_current_user)
 ):
     return  await alm_service.get_all_alm()
 
@@ -60,7 +62,6 @@ async def get_almacenamientos_listado(
             response_model=List[FlotasActResponse])
 async def get_buques_listado(
     flotas_service: FlotasService = Depends(get_flotas_service),
-    current_user: UsuariosResponse = Depends(get_current_user)
 ):
     flotas = await flotas_service.get_buques_activos()
     return flotas
@@ -74,7 +75,6 @@ async def get_camiones_listado(
     skip: int = 0,
     limit: int = 20,
     flotas_service: FlotasService = Depends(get_flotas_service),
-    current_user: UsuariosResponse = Depends(get_current_user)
 ):
     return await flotas_service.get_paginated_flotas(skip, limit)
 
@@ -84,7 +84,6 @@ async def get_camiones_listado(
             response_model=List[MaterialesResponse])
 async def get_materiales_listado(
     mat_service: MaterialesService = Depends(get_mat_service),
-    current_user: UsuariosResponse = Depends(get_current_user)
 ):
     return  await mat_service.get_all_mat()
 
@@ -97,10 +96,39 @@ async def get_movs_listado(
     skip: int = 0,
     limit: int = 20,
     mov_service: MovimientosService = Depends(get_mov_service),
-    current_user: UsuariosResponse = Depends(get_current_user)
 ):
     return  await mov_service.get_paginated_mov(skip, limit)
 
+@router.post("/Pesada",
+             status_code=status.HTTP_201_CREATED,
+             summary="Registrar pesada",
+             description="Evento para registrar la información de una pesada.",
+             response_model=PesadaCreate,
+             responses={
+                 status.HTTP_400_BAD_REQUEST: {"model": ErrorResponse},
+                 status.HTTP_422_UNPROCESSABLE_ENTITY: {"model": ValidationErrorResponse},
+             })
+async def create_pesada(
+    pesada: PesadaCreate,
+    service: PesadasService = Depends(get_pesadas_service),
+):
+    try:
+        db_pesada = await service.create(pesada.model_dump())
+        return response_json(
+            status_code=status.HTTP_201_CREATED,
+            message="Registro de pesada exitoso",
+            data={"id": db_pesada.id}
+        )
+    except HTTPException as http_exc:
+        return response_json(
+            status_code=http_exc.status_code,
+            message=http_exc.detail
+        )
+    except Exception as e:
+        return response_json(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            message=str(e)
+        )
 
 @router.get("/Pesadas/{transaccion_id}",
     summary="Obtener pesadas de transacción específica",
@@ -110,7 +138,6 @@ async def get_movs_listado(
 async def get_pesadas_listado(
     transaccion_id: int,
     pesada_service: PesadasService = Depends(get_pesadas_service),
-    current_user: UsuariosResponse = Depends(get_current_user)
 ):
     return await pesada_service.get_pesada_by_idtrans(transaccion_id)
 
@@ -122,7 +149,6 @@ async def get_trans_listado(
     skip: int = 0,
     limit: int = 20,
     tran_service: TransaccionesService = Depends(get_transacciones_service),
-    current_user: UsuariosResponse = Depends(get_current_user)
 ):
     return  await tran_service.get_paginated_transacciones(skip, limit)
 

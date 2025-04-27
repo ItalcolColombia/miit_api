@@ -2,7 +2,7 @@ from typing import Optional
 from datetime import datetime, timedelta
 from jose import jwt
 from repositories.usuarios_repository import UsuariosRepository
-from schemas.usuarios_schema import UsuariosResponse, UsuarioResponseWithToken
+from schemas.usuarios_schema import UsuariosResponse, Token
 from core.settings import settings
 from fastapi import HTTPException, status
 from core.exceptions.auth_exception import InvalidCredentialsException
@@ -18,49 +18,63 @@ class AuthService:
     def __init__(self, user_repository: UsuariosRepository) -> None:
         self._user_repo = user_repository
 
-    async def login(self, username: str, password: str) -> Optional[UsuarioResponseWithToken]:
+    async def login(self, username: str, password: str) -> Optional[str]:
 
         user = await self._user_repo.get_by_username(username)
         if not user or not self._verify_password(password, user.clave):
             log.info(
-                    f"Invalid user or password {username}!"
+                    f"Creenciales invalidas {username}!"
                 )
-            raise InvalidCredentialsException("Invalid credentials!")
+            raise InvalidCredentialsException("Creenciales invalidas")
+
+        if not user.estado:
+            raise HTTPException(status_code=400, detail='Usuario inactivo')
+
 
         try:
-            token_data = {"user": user.id, "role": user.rol_id}
+            token_data = {
+            'sub': user.nick_name,
+            'email': user.email,
+            'fullname': user.full_name,
+            "role" : user.rol_nombre,
+            'is_active': user.estado
+            }
+
             access_token = JWTUtil.create_token(token_data)
-            refresh_token = JWTUtil.create_refresh_token(token_data) # Genera el refresh token
-            return UsuarioResponseWithToken(
-                access_token=access_token,
-                refresh_token=refresh_token,
-                expires_in=settings.JWT_ACCESS_TOKEN_EXPIRE_MINUTES * 60
-            )
+            return access_token
         except Exception as e:
             raise HTTPException(
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                detail="Could not create access token"
+                detail="Creación de token fallída"
             )
 
-    async def refresh_token(self, refresh_token: str) -> Optional[UsuarioResponseWithToken]:
+    async def refresh_token(self, refresh_token: str) -> Optional[str]:
         try:
             payload = JWTUtil.verify_token(refresh_token)
             if not payload:
-                return None  # Invalid token
+                return None  
 
-            #Verifica si el usuario existe
-            user_id = payload.get("user")
-            user = await self._user_repo.get_by_id(user_id)
+            user = payload.get("sub")
+            user = await self._user_repo.get_by_username(user)
             if not user:
-                return None  # User not found
+                return None
 
-            token_data = {"user": user.id, "role": user.rol_id}
-            access_token = JWTUtil.create_token(token_data)
+            token_data = {
+            'sub': user.nick_name,
+            'email': user.email,
+            'fullname': user.full_name,
+            "role" : user.rol_nombre,
+            'is_active': user.estado
+            }
             refresh_token = JWTUtil.create_refresh_token(token_data)
-            return UsuarioResponseWithToken(access_token=access_token, refresh_token=refresh_token)
+            return refresh_token
         except Exception as e:
             log.error(f"Error refreshing token: {e}")
-            return None  # Handle errors gracefully
+            raise HTTPException(
+                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                 detail="Refrescado de token fallído"
+            )
+            #return None  # Handle errors gracefully
 
     # def _create_access_token(self, user: UsuarioResponse) -> str:
     #     try:

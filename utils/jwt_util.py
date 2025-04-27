@@ -3,6 +3,7 @@ from datetime import datetime, timedelta, timezone
 
 import jwt
 from fastapi import HTTPException, status
+from jwt import exceptions as jwt_exceptions
 from jwt.exceptions import (
     ExpiredSignatureError,
     InvalidKeyError,
@@ -20,6 +21,8 @@ JWT_ACCESS_TOKEN_EXPIRE_MINUTES = Settings().JWT_ACCESS_TOKEN_EXPIRE_MINUTES
 JWT_REFRESH_TOKEN_EXPIRE_DAYS = Settings().JWT_REFRESH_TOKEN_EXPIRE_DAYS
 JWT_SECRET_KEY = Settings().JWT_SECRET_KEY
 JWT_ALGORITHM = Settings().JWT_ALGORITHM
+JWT_ISSUER = Settings().JWT_ISSUER
+JWT_AUDIENCE = Settings().JWT_AUDIENCE
 
 
 class JWTUtil:
@@ -53,12 +56,13 @@ class JWTUtil:
         try:
             to_encode = data.copy()
             expire = datetime.now(timezone.utc) + (
-                expires_delta or timedelta(minutes=JWT_ACCESS_TOKEN_EXPIRE_MINUTES)
+                    expires_delta or timedelta(minutes=JWT_ACCESS_TOKEN_EXPIRE_MINUTES)
             )
-            to_encode.update({"exp": expire})
-            encoded_jwt = jwt.encode(
-                to_encode, JWT_SECRET_KEY, algorithm=JWT_ALGORITHM
-            )
+            to_encode.update({"iat": int(datetime.now().timestamp()),
+                              "exp": expire,
+                              "aud": JWT_AUDIENCE,
+                              "iss": JWT_ISSUER})
+            encoded_jwt = jwt.encode(to_encode, JWT_SECRET_KEY, algorithm=JWT_ALGORITHM)
             return encoded_jwt
         except Exception as e:
             # General exception handling
@@ -91,7 +95,10 @@ class JWTUtil:
             expire = datetime.utcnow() + expires_delta
         else:
             expire = datetime.utcnow() + timedelta(days=JWT_REFRESH_TOKEN_EXPIRE_DAYS)
-        to_encode.update({"exp": expire})
+        to_encode.update({"iat": int(datetime.now().timestamp()),
+                          "exp": expire,
+                          "aud": JWT_AUDIENCE,
+                          "iss": JWT_ISSUER })
         encoded_jwt = jwt.encode(to_encode, JWT_SECRET_KEY, algorithm=JWT_ALGORITHM)
         return encoded_jwt
 
@@ -115,7 +122,11 @@ class JWTUtil:
 
         try:
             payload = jwt.decode(
-                token, JWT_SECRET_KEY, algorithms=[JWT_ALGORITHM]
+                token,
+                JWT_SECRET_KEY,
+                algorithms=[JWT_ALGORITHM],
+                audience="MIIT-API",
+                issuer="MIIT-API-Authentication"
             )
             return payload
         except ExpiredSignatureError:

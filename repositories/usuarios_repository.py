@@ -1,6 +1,7 @@
 from typing import List, Optional
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select,func
+from sqlalchemy import select, func
+from sqlalchemy.orm import joinedload
 from repositories.base_repository import IRepository
 from schemas.usuarios_schema import UsuariosResponse, UsuariosResponseWithPassword, UsuarioCreate, UsuarioUpdate
 from database.models import Usuarios, Roles
@@ -15,7 +16,7 @@ class UsuariosRepository(IRepository[Usuarios, UsuariosResponse]):
         super().__init__(model, schema, db) 
     
     async def get_by_username(self, username:str) -> Optional[UsuariosResponse]:
-        query = select(Usuarios).where(Usuarios.nick_name == username)
+        query = select(Usuarios).options(joinedload(Usuarios.rol)).where(Usuarios.nick_name == username)
         result = await self.db.execute(query)
         user = result.scalar_one_or_none()
 

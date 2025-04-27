@@ -1,7 +1,7 @@
 # /src/utils/response_util.py
 
 from http import HTTPStatus
-from typing import Dict, Union, Any
+from typing import Optional, Dict, Union, Any
 
 from fastapi.responses import JSONResponse
 
@@ -20,8 +20,9 @@ class ResponseUtil:
     @staticmethod
     def json_response(
             status_code: int,
-        message: str | None = None,
-        data: Dict[str, Any]| None = None,
+            message: str | None = None,
+            data: Optional[Dict[str, Any]] = None,
+            token: Optional[str]  = None
     ) -> JSONResponse:
         """
         Public method responsible for generating a standardized JSON response.
@@ -36,6 +37,7 @@ class ResponseUtil:
 
         Returns:
             JSONResponse: A formatted JSON response containing the specified status code, message, and data.
+            :param token:
         """
 
         response_content: Dict[str, Union[str, Dict[str, str]]] = {
@@ -45,6 +47,9 @@ class ResponseUtil:
 
         if message is not None:
             response_content["message"] = message
+
+        if token is not None:
+            response_content["token"] = token
 
         if data is not None:
             response_content["data"] = data

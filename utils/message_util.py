@@ -28,7 +28,7 @@ class MessageUtil:
         self.__api_name = Settings().API_NAME
         self.__api_host = Settings().API_HOST
         self.__api_port = Settings().API_PORT
-        self.__api_version = Settings().API_VERSION
+        self.__api_version = Settings().API_V1_STR
 
     def on_startup(self):
         """

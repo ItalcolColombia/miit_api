@@ -8,7 +8,7 @@ from utils.logger_util import LoggerUtil
 from utils.response_util import ResponseUtil
 
 # Env variables Setup
-API_VERSION = Settings().API_VERSION
+API_VERSION = Settings().API_V1_STR
 
 # Utils Setup
 json_response = ResponseUtil().json_response

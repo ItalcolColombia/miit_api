@@ -3,7 +3,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from utils.response_util import ResponseUtil
 from core.di.service_injection import get_flotas_service
 from services.flotas_service import FlotasService
-from api.v1.middleware.auth_middleware import get_current_user
+#from api.v1.middleware.auth_middleware import get_current_user
 from schemas.usuarios_schema import UsuariosResponse
 from utils.schema_util import CreateResponse, ErrorResponse, ValidationErrorResponse, UpdateResponse
 from schemas.flotas_schema import (
@@ -17,7 +17,7 @@ from schemas.flotas_schema import (
 )
 
 response_json = ResponseUtil().json_response
-router = APIRouter(prefix="/operador", tags=["Integrador - Operaciones de inter√©s para el operador portuario"])
+router = APIRouter(prefix="/operador", tags=["Integrador"])
 
 
 @router.post("/BuqueRegistro",
@@ -33,7 +33,7 @@ router = APIRouter(prefix="/operador", tags=["Integrador - Operaciones de inter√
 async def create_flota(
         flota: FlotaBuqueExtCreate,
         service: FlotasService = Depends(get_flotas_service),
-        current_user: UsuariosResponse = Depends(get_current_user)
+    # current_user: UsuariosResponse = Depends(get_current_user)
 ):
     try:
 
@@ -69,7 +69,7 @@ async def create_flota(
 async def load_flota(
         flota: FlotaExtLoadCreate,
         service: FlotasService = Depends(get_flotas_service),
-        current_user: UsuariosResponse = Depends(get_current_user)
+    # current_user: UsuariosResponse = Depends(get_current_user)
 ):
     try:
 
@@ -105,7 +105,7 @@ async def load_flota(
 async def status_buque(
         flota_id: int,
         service: FlotasService = Depends(get_flotas_service),
-        current_user: UsuariosResponse = Depends(get_current_user)
+    # current_user: UsuariosResponse = Depends(get_current_user)
 ):
     try:
 
@@ -139,7 +139,7 @@ async def status_buque(
 async def create_new_camion(
         camion: FlotaCamionExtCreate,
         service: FlotasService = Depends(get_flotas_service),
-        current_user: UsuariosResponse = Depends(get_current_user)
+    # current_user: UsuariosResponse = Depends(get_current_user)
 ):
     try:
 
