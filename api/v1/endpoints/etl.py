@@ -1,31 +1,30 @@
 from typing import List
+
 from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi_pagination import Page, add_pagination, paginate, Params
 from core.di.service_injection import get_flotas_service, get_mat_service, get_alm_service, get_mov_service, \
     get_pesadas_service, get_transacciones_service
+
 from schemas.almacenamientos_schema import AlmacenamientoResponse
 from schemas.materiales_schema import MaterialesResponse
 from schemas.movimientos_schema import MovimientosResponse
 from schemas.pesadas_schema import PesadaResponse, PesadaCreate
 from schemas.transacciones_schema import TransaccionResponse
 from services.almacenamientos_service import AlmacenamientosService
+from services.auth_service import AuthService
 from services.flotas_service import FlotasService
 from services.movimientos_service import MovimientosService
 from services.materiales_service import MaterialesService
 from services.transacciones_service import TransaccionesService
 from services.pesadas_service import PesadasService
-from api.v1.middleware.auth_middleware import get_current_user
-from schemas.usuarios_schema import UsuariosResponse
 from utils.response_util import ResponseUtil
-from utils.schema_util import CreateResponse, ErrorResponse, ValidationErrorResponse, UpdateResponse
+from utils.schema_util import ErrorResponse, ValidationErrorResponse
 from schemas.flotas_schema import (
-    FlotasResponse,
-    FlotaCreate,
-    FlotaUpdate,
     FlotasActResponse
 )
 
 response_json = ResponseUtil().json_response
-router = APIRouter(prefix="/scada", tags=["Automatizador"], dependencies=[Depends(get_current_user)])
+router = APIRouter(prefix="/scada", tags=["Automatizador"], dependencies=[Depends(AuthService.get_current_user)]) #
 
 
 
@@ -46,60 +45,69 @@ router = APIRouter(prefix="/scada", tags=["Automatizador"], dependencies=[Depend
 #     created_flota = await service.create_flota(flota)
 #     return created_flota
 
-@router.get("/AlmacenamientosListado/",
+@router.get("/almacenamientos-listado/",
             summary="Obtener listado de almacenamientos",
             description="",
             response_model=List[AlmacenamientoResponse])
 async def get_almacenamientos_listado(
-    alm_service: AlmacenamientosService = Depends(get_alm_service),
-):
+    alm_service: AlmacenamientosService = Depends(get_alm_service)):
     return  await alm_service.get_all_alm()
 
 
-@router.get("/BuquesListado/",
+@router.get("/buques-listado/",
             summary="Obtener listado de buques habilitados para recibo",
             description="Este listado se actualiza cuando PBCU confirma el atraco del buque al puerto.",
             response_model=List[FlotasActResponse])
 async def get_buques_listado(
-    flotas_service: FlotasService = Depends(get_flotas_service),
-):
+    flotas_service: FlotasService = Depends(get_flotas_service)):
     flotas = await flotas_service.get_buques_activos()
     return flotas
 
 
-@router.get("/CamionesListado/",
+@router.get("/camiones-listado/",
             summary="Obtener listado de camiones registrados para despacho",
             description="Este listado se actualiza cuando PBCU confirma la llegada del camión al puerto.",
-            response_model=List[FlotasActResponse])
+            response_model=Page[FlotasActResponse])
 async def get_camiones_listado(
-    skip: int = 0,
-    limit: int = 20,
-    flotas_service: FlotasService = Depends(get_flotas_service),
-):
-    return await flotas_service.get_paginated_flotas(skip, limit)
+        flotas_service: FlotasService = Depends(get_flotas_service),
+        params: Params = Depends()):
+    flotas = await flotas_service.get_all_flotas()
+    return paginate(flotas, params)
 
-@router.get("/MaterialesListado/",
+@router.get("/materiales-listado/",
             summary="Obtener listado de materiales",
             description="",
             response_model=List[MaterialesResponse])
 async def get_materiales_listado(
-    mat_service: MaterialesService = Depends(get_mat_service),
-):
+    mat_service: MaterialesService = Depends(get_mat_service)):
     return  await mat_service.get_all_mat()
 
 
-@router.get("/MovimientosListado/",
+# @router.get("/movimientos-listado/",
+#             summary="Obtener listado páginado de movimientos",
+#             description="",
+#             response_model=List[MovimientosResponse])
+# async def get_movs_listado(
+#     skip: int = 0,
+#     limit: int = 20,
+#     mov_service: MovimientosService = Depends(get_mov_service)):
+#     return  await mov_service.get_paginated_mov(skip, limit)
+
+
+@router.get("/movimientos-listado/",
             summary="Obtener listado páginado de movimientos",
             description="",
-            response_model=List[MovimientosResponse])
+            response_model=Page[MovimientosResponse])
 async def get_movs_listado(
-    skip: int = 0,
-    limit: int = 20,
     mov_service: MovimientosService = Depends(get_mov_service),
-):
-    return  await mov_service.get_paginated_mov(skip, limit)
+    params: Params = Depends()):
+    movimientos = await  mov_service.get_all_mov()
+    return paginate(movimientos, params)
 
-@router.post("/Pesada",
+
+
+
+@router.post("/pesada-registro",
              status_code=status.HTTP_201_CREATED,
              summary="Registrar pesada",
              description="Evento para registrar la información de una pesada.",
@@ -113,7 +121,7 @@ async def create_pesada(
     service: PesadasService = Depends(get_pesadas_service),
 ):
     try:
-        db_pesada = await service.create(pesada.model_dump())
+        db_pesada = await service.create_pesada(pesada.model_dump())
         return response_json(
             status_code=status.HTTP_201_CREATED,
             message="Registro de pesada exitoso",
@@ -130,18 +138,20 @@ async def create_pesada(
             message=str(e)
         )
 
-@router.get("/Pesadas/{transaccion_id}",
-    summary="Obtener pesadas de transacción específica",
-    description="Devuelve un listado de pesadas asociadas a una transacción",
-    response_model=List[PesadaResponse]
+
+@router.get("/pesada-obtener/{transaccion_id}",
+    summary="Obtener pesadas de una transacción específica",
+    description="Devuelve listado paginado de pesadas asociadas a una transacción",
+    response_model=Page[PesadaResponse]
 )
 async def get_pesadas_listado(
     transaccion_id: int,
     pesada_service: PesadasService = Depends(get_pesadas_service),
-):
-    return await pesada_service.get_pesada_by_idtrans(transaccion_id)
+    params: Params = Depends()):
+    pesadas = await pesada_service.get_pesada_by_idtrans(transaccion_id)
+    return paginate(pesadas, params)
 
-@router.get("/TransaccionesListado/",
+@router.get("/transacciones-listado/",
             summary="Obtener listado páginado de transacciones",
             description="",
             response_model=List[TransaccionResponse])

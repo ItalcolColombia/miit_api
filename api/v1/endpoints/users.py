@@ -2,7 +2,7 @@ from typing import List
 from fastapi import APIRouter, Depends, HTTPException, status
 from core.di.service_injection import get_user_service
 from services.usuarios_service import UsuariosService
-from api.v1.middleware.auth_middleware import get_current_user
+from api.v1.auth import get_current_user
 from schemas.usuarios_schema import UsuarioCreate, UsuariosResponse, UsuarioUpdate
 
 router = APIRouter(prefix="/usuarios", tags=["Usuarios - Crud"])

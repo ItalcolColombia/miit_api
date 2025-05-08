@@ -17,24 +17,21 @@ from schemas.flotas_schema import (
 )
 
 response_json = ResponseUtil().json_response
-router = APIRouter(prefix="/operador", tags=["Integrador"])
+router = APIRouter(prefix="/integrador", tags=["Integrador"])
 
 
-@router.post("/BuqueRegistro",
+@router.post("/buque-registro",
              status_code=status.HTTP_201_CREATED,
              summary="Registrar nuevo buque",
              description="Evento efectuado por el operador posterior al anuncio de nueva visita obtenida a traves de la interfaz de PBCU.",
              response_model=CreateResponse,
              responses={
-                 status.HTTP_400_BAD_REQUEST: {"model": ErrorResponse},  # Use CustomErrorResponse
+                 status.HTTP_400_BAD_REQUEST: {"model": ErrorResponse},
                  status.HTTP_422_UNPROCESSABLE_ENTITY: {"model": ValidationErrorResponse},
-                 # Use ValidationErrorResponse
              })
 async def create_flota(
         flota: FlotaBuqueExtCreate,
-        service: FlotasService = Depends(get_flotas_service),
-    # current_user: UsuariosResponse = Depends(get_current_user)
-):
+        service: FlotasService = Depends(get_flotas_service)):
     try:
 
         await service.create_buque_nuevo(flota)
@@ -56,7 +53,7 @@ async def create_flota(
         )
 
 
-@router.post("/BuqueCarga",
+@router.post("/buque-carga",
              status_code=status.HTTP_201_CREATED,
              summary="Registrar Bl de buque",
              description="Evento efectuado por el operador con la data obtenida a traves de la interfaz de PBCU.",
@@ -68,9 +65,7 @@ async def create_flota(
              })
 async def load_flota(
         flota: FlotaExtLoadCreate,
-        service: FlotasService = Depends(get_flotas_service),
-    # current_user: UsuariosResponse = Depends(get_current_user)
-):
+        service: FlotasService = Depends(get_flotas_service)):
     try:
 
         await service.create_buque_nuevo(flota)
@@ -92,7 +87,7 @@ async def load_flota(
         )
 
 
-@router.put("/BuqueArribo/{flota_id}",
+@router.put("/buque-arribo/{flota_id}",
             status_code=status.HTTP_200_OK,
             summary="Modificar estado buque",
             description="Evento realizado por el operador post confirmación del arribo de la motonave a traves de la interfaz de PBCU.",
@@ -104,9 +99,7 @@ async def load_flota(
             })
 async def status_buque(
         flota_id: int,
-        service: FlotasService = Depends(get_flotas_service),
-    # current_user: UsuariosResponse = Depends(get_current_user)
-):
+        service: FlotasService = Depends(get_flotas_service)):
     try:
 
         await service.chg_estado_buque(flota_id, True)
@@ -127,7 +120,7 @@ async def status_buque(
             message=str(e)
         )
 
-@router.post("/CamionRegistro",
+@router.post("/camion-registro",
              status_code=status.HTTP_201_CREATED,
              summary="Registrar camión",
              description="Evento realizado por el operador con la cita de enturnamiento notificada a traves de la interfaz de PBCU.",
@@ -138,9 +131,7 @@ async def status_buque(
              })
 async def create_new_camion(
         camion: FlotaCamionExtCreate,
-        service: FlotasService = Depends(get_flotas_service),
-    # current_user: UsuariosResponse = Depends(get_current_user)
-):
+        service: FlotasService = Depends(get_flotas_service)):
     try:
 
         await service.create_camion(camion)
