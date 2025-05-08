@@ -9,12 +9,12 @@ from fastapi.middleware.gzip import GZipMiddleware
 from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.openapi.docs import get_swagger_ui_html
+from fastapi_pagination import add_pagination
 
 from core.middleware.time_middleware import ProcessTimeHeaderMiddleware
 from api.v1.routes import routers as v1_routers
 from core.settings import Settings
 from core.exceptions.exception_handler import ExceptionHandler
-from core.middleware.auth_middleware import AuthMiddleware
 from core.middleware.logger_middleware import LoggerMiddleware
 from utils.database_util import DatabaseUtil
 from utils.dot_env_util import DotEnvUtil
@@ -25,7 +25,8 @@ from utils.message_util import MessageUtil
 # Env variables Setup
 API_HOST = Settings().API_HOST
 API_PORT = Settings().API_PORT
-API_VERSION = Settings().API_V1_STR
+API_VERSION_STR = Settings().API_V1_STR
+API_VERSION = Settings().API_VERSION
 API_STAGE = Settings().API_LOG_LEVEL
 
 SECRET_KEY = Settings().JWT_SECRET_KEY
@@ -69,7 +70,6 @@ app.add_exception_handler(RequestValidationError, ExceptionHandler.json_decode_e
 
 
 # Middlewares
-# app.add_middleware(AuthMiddleware)
 app.add_middleware(LoggerMiddleware)
 app.add_middleware(GZipMiddleware, minimum_size=1000)
 app.add_middleware(SessionMiddleware, secret_key=SECRET_KEY)
@@ -83,15 +83,16 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# Rutas
+app.include_router(v1_routers, prefix="/api/" + API_VERSION_STR)
 
-
-app.include_router(v1_routers, prefix="/api/"+API_VERSION)
-
+# Libreria de paginación
+add_pagination(app)
 
 #Urls
 @app.get('/', include_in_schema=False)
 async def root():
-    return JSONResponse({'service': app.title, 'version': API_VERSION, 'env': API_STAGE})
+    return JSONResponse({'service': app.title, 'version': API_VERSION_STR, 'env': API_STAGE})
 
 
 # @app.get("/docs", include_in_schema=False)
