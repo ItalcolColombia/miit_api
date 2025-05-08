@@ -1,13 +1,14 @@
 from typing import Optional
-from datetime import datetime, timedelta
-from jose import jwt
+
+from core.di.repository_injection import get_user_repository
+from database.models import Usuarios
+from utils.jwt_util import JWTUtil, JWTBearer
 from repositories.usuarios_repository import UsuariosRepository
 from schemas.usuarios_schema import UsuariosResponse, Token
-from core.settings import settings
-from fastapi import HTTPException, status
+from fastapi import Depends, HTTPException, Request, status
 from core.exceptions.auth_exception import InvalidCredentialsException
 from utils.jwt_util import JWTUtil
-from utils.any_utils import AnyUtils
+from typing import Annotated
 from utils.logger_util import LoggerUtil
 import bcrypt 
 
@@ -130,3 +131,43 @@ s
             bool: True if the passwords match, otherwise False.
         """
         return AnyUtils.check_password_hash(plain_password, hashed_password)
+
+    @staticmethod
+    async def get_current_user(token: Annotated[Token, Depends(JWTBearer())], user_repository: UsuariosRepository = Depends(get_user_repository)):
+        credentials_exception = HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Could not validate credentials",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+        try:
+            payload = JWTUtil.verify_token(token)
+            username: str = payload.get("sub")
+            if username is None:
+                raise credentials_exception
+        except JWTUtil:
+            raise
+
+        user = await user_repository.get_by_username(username)
+        if user is None:
+            raise InvalidCredentialsException
+        return user
+
+    async def get_current_active_user(
+            self: Usuarios = Depends(get_current_user)
+    ) -> Usuarios:
+        if not self.is_active:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Inactive user"
+            )
+        return self
+
+    async def get_current_super_user(
+            self: Usuarios = Depends(get_current_user)
+    ) -> Usuarios:
+        if not self.rol_id == 4:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Not enough privileges"
+            )
+        return self

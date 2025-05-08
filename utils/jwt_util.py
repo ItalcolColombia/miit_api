@@ -2,7 +2,8 @@
 from datetime import datetime, timedelta, timezone
 
 import jwt
-from fastapi import HTTPException, status
+from fastapi import Depends, HTTPException, Request, status
+from fastapi.security import HTTPBearer,HTTPAuthorizationCredentials
 from jwt import exceptions as jwt_exceptions
 from jwt.exceptions import (
     ExpiredSignatureError,
@@ -23,6 +24,21 @@ JWT_SECRET_KEY = Settings().JWT_SECRET_KEY
 JWT_ALGORITHM = Settings().JWT_ALGORITHM
 JWT_ISSUER = Settings().JWT_ISSUER
 JWT_AUDIENCE = Settings().JWT_AUDIENCE
+
+class JWTBearer(HTTPBearer):
+    def __init__(self, auto_error: bool = True):
+        super(JWTBearer, self).__init__(scheme_name="JWT-Auth", description="Enter JWT token",  auto_error=auto_error)
+
+    async def __call__(self, request: Request):
+        credentials: HTTPAuthorizationCredentials = await super(JWTBearer, self).__call__(request)
+        if credentials:
+            if not credentials.scheme == "Bearer":
+                raise HTTPException(status_code=403, detail="Invalid authentication scheme.")
+            if not JWTUtil.verify_token(credentials.credentials):
+                raise HTTPException(status_code=403, detail="Invalid token or expired token.")
+            return credentials.credentials
+        else:
+            raise HTTPException(status_code=403, detail="Invalid authorization code.")
 
 
 class JWTUtil:
