@@ -1,48 +1,76 @@
-from typing import Optional, List
-from sqlalchemy.ext.asyncio import AsyncSession
-
+from typing import List, Optional
 from database.models import Bls
-from schemas.bls_schema import BlsResponse, BlsCreate
+from schemas.bls_schema import BlsResponse, BlsCreate, BlsUpdate
 from repositories.bls_repository import BlsRepository
 
+from utils.logger_util import LoggerUtil
+log = LoggerUtil()
 
 class BlsService:
 
     def __init__(self, bls_repository: BlsRepository) -> None:
         self._repo = bls_repository
 
-    async def create_bls(self, bl: BlsCreate) -> BlsResponse:
-        return await self._repo.create(bl)
+    async def create(self, bl: BlsCreate) -> BlsResponse:
+        bl_model = Bls(**bl.dict())
+        created_bl = await self._repo.create(bl_model)
+        log.info(f"BL creado con N°: {created_bl.no_bl}")
+        return BlsResponse.model_validate(created_bl)
 
-    async def update_bls(self, id: int, bl: BlsCreate) -> Optional[BlsResponse]:
-        return await self._repo.update(id, bl)
+    async def update(self, id: int, bl: BlsResponse) -> Optional[BlsResponse]:
+        bl_model = Bls(**bl.dict())
+        updated_bl = await self._repo.update(id, bl_model)
+        log.info(f"BL actualizado con ID: {id}")
+        return BlsResponse.model_validate(updated_bl)
 
-    async def delete_bls(self, id: int) -> bool:
-        return await self._repo.delete(id)
+    async def delete(self, id: int) -> bool:
+        deleted = await self._repo.delete(id)
+        log.info(f"BL eliminado con ID: {id}")
+        return deleted
 
-    async def get_bls(self, id: int) -> Optional[BlsResponse]:
-        return await self._repo.get_by_id(id)
+    async def get(self, id: int) -> Optional[BlsResponse]:
+        bl = await self._repo.get_by_id(id)
+        return BlsResponse.model_validate(bl) if bl else None
 
-    async def get_all_bls(self) -> List[BlsResponse]:
-        return await self._repo.get_all()
+    async def get_all(self) -> List[BlsResponse]:
+        bls = await self._repo.get_all()
+        return [BlsResponse.model_validate(bl) for bl in bls]
 
-    async def get_paginated_bls(self, skip_number: int, limit_number: int):
-        return await self._repo.get_all_paginated(skip=skip_number, limit=limit_number)
 
-    async def get_bls_by_flota_id(self, flota_id: int) -> Optional[BlsResponse]:
+
+    async def create_bl_if_not_exitst(self, bl_data: BlsCreate) -> BlsResponse:
         """
-         Find a Bls by their 'name'
+               Check if a BL already exists. If not, create a new one.
+
+               Args:
+                   bl_data: The schema of BL object.
+
+               Returns:
+                   The existing or newly created BL
+       """
+        try:
+            bl_existente = await self._repo.get_bls_no_bl(bl_data.no_bl)
+            if bl_existente:
+                log.info(f"BL ya existente con N°: {bl_data.no_bl}")
+                return BlsResponse.model_validate(bl_existente)
+
+            bl_creado = await self._repo.create(bl_data)
+            log.info(f"Se creó BL: {bl_creado.no_bl}")
+            return BlsResponse.model_validate(bl_creado)
+
+        except Exception as e:
+            log.error(f"Error al crear o consultar BL: {bl_data.referencia} - {e}")
+            raise
+
+    async def get_bl_by_num(self, number: str) -> Optional[BlsResponse]:
+        """
+         Find a Bl by their 'number'
 
          Args:
-             flota_id: The flota id param to filter.
+             number: The Bl number param to filter.
 
          Returns:
-             Buque object filtered by 'name'.
+             Bl object filtered by 'number'.
          """
-        return await self._repo.get_by_id(flota_id)
-
-    # async def create_buque_if_not_exists(self, nombre: str) -> BuquesResponse:
-    #     return await self._repo.create_buque_if_not_exists(nombre)
-    #
-    # async def update_status(self, buque: Buques, estado: bool ) -> BuquesResponse:
-    #     return await self._repo.update_buque_estado(buque, estado)
+        return await self._repo.get_bls_no_bl(number)
+   

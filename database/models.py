@@ -37,41 +37,27 @@ AlmacenamientosMateriales = Table("almacenamientos_materiales", Base.metadata,
     Column("saldo", Numeric(10,2), nullable=False)
 )
 
-class Buques(Base):
-    __tablename__ = "buques"
-    id = Column(Integer, primary_key=True, index=True)
-    nombre = Column(String, unique=True, index=True)
-    estado = Column(Boolean)
-    transacciones = relationship("Transacciones", backref="Buques")
 
 class Bls(Base):
     __tablename__ = "bls"
     id = Column(Integer, primary_key=True, index=True)
-    flota_id = Column(Integer, ForeignKey("flotas.id"))
+    viaje_id = Column(String, ForeignKey("viajes.id"))
     material_id = Column(Integer, ForeignKey("materiales.id"))
     no_bl = Column(String)
     peso_bl = Column(Numeric(10, 2))
 
     # Define relationships
-    flota = relationship("Flotas", backref=backref("bls"))  # If you need to access Flotas from BL
+    viaje = relationship("Viajes", backref=backref("bls"))  # If you need to access Viajes from BL
     material = relationship("Materiales", backref=backref("bls")) # If you need to access Materiales from BL
 
     __table_args__ = (
-        UniqueConstraint('flota_id', 'material_id', 'no_bl', name='uk_bls'),
+        UniqueConstraint('viaje_id', 'material_id', 'no_bl', name='uk_bls'),
     )
-
-
-class Camiones(Base):
-    __tablename__ = "camiones"
-    id = Column(Integer, primary_key=True, index=True)
-    placa = Column(String(6), unique=True, index=True)
-    puntos = Column(Integer, nullable=True)
-    transacciones = relationship("Transacciones", backref="Camiones")
 
 class Clientes(Base):
     __tablename__ = "clientes"
     id = Column(Integer, primary_key=True, index=True)
-    tipo_idetificacion = Column(Integer, nullable=False)
+    tipo_idetificacion = Column(String(10), nullable=False)
     num_identificacion = Column(Integer, nullable=False)
     razon_social = Column(String(100), nullable=False)
     primer_nombre = Column(String(30))
@@ -86,12 +72,26 @@ class Flotas(Base):
     id = Column(Integer, primary_key=True, index=True)
     tipo = Column(String(6))
     referencia = Column(String(300), unique=True, index=True)
-    consecutivo = Column(Double, nullable=False)
-    peso = Column(Numeric(10,2), nullable=False)
+    puntos = Column(Integer, nullable=True)
+    estado = Column(Boolean)
+
+
+
+class Viajes(Base):
+    __tablename__ = "viajes"
+    id = Column(Integer, primary_key=True, index=True)
+    flota_id = Column(Integer,nullable=False)
+    puerto_id = Column(String(300), unique=True, index=True)
+    peso_meta = Column(Numeric(10,2), nullable=False)
+    peso_real = Column(Numeric(10,2), nullable=False, default=0)
     fecha_llegada = Column(DateTime(timezone=False), nullable=True)
     fecha_salida = Column(DateTime(timezone=False), nullable=True)
     material_id = Column(Integer,nullable=True)
+    viaje_origen = Column(String(300),nullable=True)
     despacho_directo = Column(Boolean, nullable=True)
+    transacciones = relationship("Transacciones", backref="Viajes")
+
+
 
 class Materiales(Base):
     __tablename__ = "materiales"
@@ -112,7 +112,7 @@ class Roles(Base):
     id = Column(Integer, primary_key=True, index=True)
     nombre = Column(String, unique=True, index=True)
     estado = Column(Boolean)
-    usuarios = relationship("Usuarios", backref="Roles")
+    usuarios = relationship("Usuarios", back_populates ="rol")
     permisos = relationship('Permisos', secondary='roles_permisos', back_populates='roles')
 
 
@@ -125,8 +125,7 @@ class Permisos(Base):
     __tablename__ = "permisos"
     id = Column(Integer, Identity(), primary_key=True, index=True)
     nombre = Column(String)
-    roles = relationship("Roles", secondary="roles_permisos", back_populates="permisos"
-)
+    roles = relationship("Roles", secondary="roles_permisos", back_populates="permisos")
 
 class Usuarios(Base):
     __tablename__ = "usuarios"
@@ -138,7 +137,7 @@ class Usuarios(Base):
     clave = Column(String(200), nullable=False)
     fecha_modificado = Column(TIMESTAMP, server_default=func.now(), onupdate=func.now())
     rol_id = Column(Integer, ForeignKey('roles.id'), nullable=False)
-    rol = relationship("Roles", backref="Usuarios")
+    rol = relationship("Roles", back_populates ="usuarios")
     recuperacion = Column(String(300), nullable=True)
     foto = Column(String, nullable=True)
     estado = Column(Boolean, nullable=False)
@@ -157,8 +156,7 @@ class Transacciones(Base):
     destino_id = Column(Integer,nullable=True)
     estado = Column(String(12), nullable=False)
     leido = Column(Boolean, nullable=False)
-    buque_id = Column(Integer(), ForeignKey('buques.id'))
-    camion_id = Column(Integer(), ForeignKey('camiones.id'))
+    viaje_id = Column(Integer(), ForeignKey('viajes.id'))
     pit = Column(Integer, nullable=True)
     movimientos = relationship("Movimientos", backref="Transacciones")
     pesadas = relationship("Pesadas", backref="Transacciones")
@@ -204,3 +202,21 @@ class VFlotas(Base):
     material= Column(String(300), nullable=True)
     estado = Column(Boolean, nullable=True)
     despacho_directo = Column(Boolean, nullable=True)
+
+
+class VViajes(Base):
+    __tablename__ = "v_viajes"
+    id = Column(Integer, primary_key=True, index=True)
+    flota_id = Column(Integer)
+    referencia = Column(String)
+    tipo = Column(String)
+    puerto_id = Column(Integer)
+    peso_meta = Column(Numeric(10,2), nullable=False)
+    peso_real = Column(Numeric(10,2), nullable=False)
+    fecha_llegada = Column(Date)
+    fecha_salida = Column(Date)
+    material_id = Column(Integer)
+    material = Column(String)
+    viaje_origen = Column(String)
+    despacho_directo = Column(Boolean)
+    estado = Column(Boolean)

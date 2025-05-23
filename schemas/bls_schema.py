@@ -1,31 +1,62 @@
+from pydantic import Field, ConfigDict
+from schemas.base_schema import BaseSchema
 from decimal import Decimal
 from typing import Optional
 
-from pydantic import BaseModel, Field
-
-class BlsResponse(BaseModel):
+class BlsResponse(BaseSchema):
     id: int
-    flota_id : int
+    viaje_id : int
     material_id : int
+    cliente_id: int
     no_bl: str
-    peso: Decimal
+    peso_bl: Decimal
 
-    class Config:
-        from_attributes  = True
+    model_config = ConfigDict(from_attributes=True)
 
-class BlsCreate(BaseModel):
-    id: int
-    flota_id: int
+class BlsCreate(BaseSchema):
+    viaje_id: int
     material_id: int
+    cliente_id: int
     no_bl: str = Field(..., max_length=100)
-    peso: Decimal = Field(..., max_digits=10, decimal_places=2)
+    peso_bl: Decimal = Field(..., max_digits=10, decimal_places=2)
 
     class Config:
         json_schema_extra = {
             "example": {
                 "flota_id": 24330,
-                "material": "TORTA SOYA USA",
+                "material": "1",
+                "cliente_id" : "1",
+                "no_bl": "SSF010448001",
+                "peso": 50478.00,
+            }
+        }
+
+
+class BlsUpdate(BaseSchema):
+    viaje_id: int
+    material_id: int
+    cliente_id: int
+    no_bl: str = Field(..., max_length=100)
+    peso_bl: Decimal = Field(..., max_digits=10, decimal_places=2)
+
+
+class BlsExtCreate(BaseSchema):
+    puerto_id: str
+    viaje_id: Optional[int] = None
+    material_name: Optional[str] = None
+    material_id: Optional[int] = None
+    cliente_name: Optional[str] = None
+    cliente_id: Optional[int] = None
+    no_bl: str = Field(..., max_length=100)
+    peso_bl: Decimal = Field(..., max_digits=10, decimal_places=2)
+
+    class Config:
+        json_schema_extra = {
+            "example": {
+                "puerto_id": "VOY2024001",
+                "material_name": "TORTA SOYA USA",
+                "cliente_name": "CUSTOMER COMPANY NAME",
                 "no_bl": "SSF034576272",
-                "peso": 15462.00,
+                "peso_bl": 462000.00,
             }
         }

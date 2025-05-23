@@ -1,9 +1,13 @@
-from typing import List, Optional
+from typing import Optional
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select,func
+from sqlalchemy import select
+from sqlalchemy.orm.exc import NoResultFound
+
+from core.exceptions.entity_exceptions import EntityNotFoundException
 from repositories.base_repository import IRepository
-from schemas.flotas_schema import FlotasResponse, FlotaCreate, FlotaUpdate, FlotasActResponse
-from database.models import Flotas, Buques, VFlotas
+from schemas.flotas_schema import FlotasResponse, FlotaCreate, FlotaUpdate
+from database.models import Flotas
+
 
 class FlotasRepository(IRepository[Flotas, FlotasResponse]):
     db: AsyncSession
@@ -12,48 +16,7 @@ class FlotasRepository(IRepository[Flotas, FlotasResponse]):
         self.db = db
         super().__init__(model, schema, db)
 
-    async def get_buques_activos(self) -> List[FlotasActResponse]:
-        """
-                Shows buques which estado = True
-
-                Returns:
-                    A list of Buques objects matching the filter.
-                """
-        query = (
-            select(VFlotas)
-            .where(VFlotas.tipo == 'buque')
-            .where(VFlotas.estado == True)
-        )
-        result = await self.db.execute(query)
-        flotas = result.scalars().all()
-
-        if not flotas:
-            return None
-
-        return [FlotasActResponse.model_validate(flota) for flota in flotas]
-
-    async def get_camiones_activos(self) -> List[FlotasActResponse]:
-        """
-                Shows camiones which estado = True
-
-                Returns:
-                    A list of camiones objects matching the filter.
-                """
-        query = (
-            select(VFlotas)
-            .where(VFlotas.tipo == 'camion')
-        )
-        result = await self.db.execute(query)
-        flotas = result.scalars().all()
-
-        if not flotas:
-            return None
-
-        return [FlotasActResponse.model_validate(flota) for flota in flotas]
-
-    async def create_flota_by_integrador(self, flota_create: FlotaCreate) -> FlotasResponse:
-        db_obj = Flotas(**flota_create.model_dump())
-        self.db.add(db_obj)
-        await self.db.commit()
-        await self.db.refresh(db_obj)
-        return self.schema.model_validate(db_obj)
+    async def get_flota_by_ref(self, ref: str) -> Optional[Flotas]:
+        stmt = select(self.model).filter(self.model.referencia == ref)
+        result = await self.db.execute(stmt)
+        return result.scalar_one_or_none()
