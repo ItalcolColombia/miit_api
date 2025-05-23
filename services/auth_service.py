@@ -77,30 +77,8 @@ class AuthService:
             )
             #return None  # Handle errors gracefully
 
-    # def _create_access_token(self, user: UsuarioResponse) -> str:
-    #     try:
-    #         expires_delta = timedelta(minutes=settings.JWT_ACCESS_TOKEN_EXPIRE_MINUTES)
-    #         expire = datetime.utcnow() + expires_delta
-            
-    #         to_encode = {
-    #             "sub": str(user.id),
-    #             "exp": expire,
-    #             "username": user.nick_name
-    #         }
-            
-    #         return jwt.encode(
-    #             to_encode,
-    #             settings.JWT_SECRET_KEY,
-    #             algorithm=settings.JWT_ALGORITHM
-    #         )
-    #     except Exception as e:
-    #         print(e)
-    #         raise HTTPException(
-    #             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-    #             detail="Token creation failed"
-    #         )
 
-    def __verify_email(self, email: str) -> UsuariosResponse | None:
+    def __verify_email(self, email: str) -> Optional[UsuariosResponse]:
         """
         Private method responsible for checking if an email exists in the database.
 
