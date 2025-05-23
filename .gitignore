@@ -1,1 +1,54 @@
+Un archivo .gitignore para un proyecto FastAPI en Python es fundamental para mantener tu repositorio limpio y evitar que se suban archivos innecesarios o sensibles. Aquí te presento un .gitignore recomendado que cubre los casos más comunes:
+Fragmento de código
+
+# Python
+# Archivos de caché y bytecode
+*.pyc
+__pycache__/
+.pytest_cache/
+.mypy_cache/
+.pytype/
+.ipynb_checkpoints/
+
+# Entornos virtuales
+# ignora los entornos virtuales, ya que cada desarrollador debe crear el suyo
+.venv/
+venv/
+env/
+/bin/
+/include/
+/lib/
+/share/
+/local/
+
+# Archivos de paquetes de Python
+*.egg-info/
+.eggs/
+dist/
+build/
+
+# Credenciales y archivos de configuración sensibles
+# ¡IMPORTANTE! NUNCA subas credenciales directamente.
+# Utiliza variables de entorno o archivos .env que estén ignorados.
 .env
+.env.*
+*.env
+
+# Archivos de datos o logs generados localmente
+*.log
+*.sqlite3
+*.db
+!db.sqlite3  # Si usas SQLite y quieres rastrear el archivo, descomenta esta línea y ajústala
+
+# IDEs (si utilizas alguno en particular)
+# VS Code
+.vscode/
+# PyCharm
+.idea/
+
+# macOS
+.DS_Store
+
+# Windows
+Thumbs.db
+ehthumbs.db
