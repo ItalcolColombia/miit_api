@@ -31,6 +31,7 @@ class LoggerUtil:
 
         self.__api_name = Settings().API_NAME
         self.__api_log_level = Settings().API_LOG_LEVEL
+        self.__app_log_dir = Settings().APP_LOG_DIR
 
         self.__valid_log_levels = [
             "DEBUG",
@@ -42,7 +43,8 @@ class LoggerUtil:
 
         # Directory and path for the log file
         _project_root = os.path.abspath(os.path.dirname(__file__))
-        _log_dir = os.path.join(_project_root, "/logs")
+        #_log_dir = os.path.join(_project_root, "/logs")
+        _log_dir = self.__app_log_dir
         os.makedirs(_log_dir, exist_ok=True)
 
         _log_file_name = f"{self.__api_name}.log"
@@ -126,6 +128,7 @@ class LoggerUtil:
 
         Args:
             message (str): The message to be logged.
+            exc_info (bool): The boolean value to pass trace exception.
 
         Returns:
             None

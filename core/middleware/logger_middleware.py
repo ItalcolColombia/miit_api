@@ -4,7 +4,7 @@ import time
 from http import HTTPStatus
 
 from starlette.middleware.base import BaseHTTPMiddleware
-from starlette.responses import Response
+from starlette.responses import Response, JSONResponse
 
 from utils.logger_util import LoggerUtil
 
@@ -65,10 +65,16 @@ class LoggerMiddleware(BaseHTTPMiddleware):
 
             return response
 
-        except Exception as error:
-            error_message = (
-                f"Error processing request {method} {url}: {str(error)}"
-            )
-            log.error(error_message)
 
-            raise error
+        except Exception as e:
+            import traceback
+            tb = "".join(traceback.format_exception(type(e), e, e.__traceback__))
+
+            #log.error(f"Error processing request {method} {url}: {str(e)}", exc_info=True)
+
+            log.error(f"Middleware caught exception: {e}\n{tb}")
+
+            return JSONResponse(
+                status_code=500,
+                content={"detail": "Internal Server Error"},
+            )
