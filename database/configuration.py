@@ -1,6 +1,5 @@
 # /src/infrastructure/database/database_util.py
-
-
+from typing import Optional
 from core.settings import get_settings
 from core.enums.database_enum import DatabaseTypeEnum
 
@@ -66,7 +65,7 @@ class DatabaseConfigurationUtil:
             print(message)
             return self.__get_db_config(self.__db_type_default)
 
-    def check_database_type(self, db_type: str | None) -> str:
+    def check_database_type(self, db_type:  Optional[str] = None) -> str:
         """
         Method responsible for validating and retrieving the correct database type.
 

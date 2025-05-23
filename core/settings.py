@@ -11,6 +11,7 @@ class Settings(BaseSettings):
     API_PORT: int
     API_VERSION: str
     API_LOG_LEVEL: str
+    APP_LOG_DIR: str = "/var/www/metalteco/log/app_logs"
     API_USER_ADMINISTRATOR: str
     API_PASSWORD_ADMINISTRATOR: str
 

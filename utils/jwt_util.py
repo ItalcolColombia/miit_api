@@ -1,6 +1,6 @@
 
 from datetime import datetime, timedelta, timezone
-
+from typing import Optional
 import jwt
 from fastapi import Depends, HTTPException, Request, status
 from fastapi.security import HTTPBearer,HTTPAuthorizationCredentials
@@ -53,7 +53,7 @@ class JWTUtil:
 
     @staticmethod
     def create_token(
-        data: dict, expires_delta: timedelta | None = None
+        data: dict, expires_delta: Optional[timedelta] = None
     ) -> str:
         """
         Static method responsible for creating a JWT access token.
