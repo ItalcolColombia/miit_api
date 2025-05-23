@@ -52,17 +52,9 @@ app = FastAPI(
     default_response_class=JSONResponse
  )
 
-
-#Cargar estaticos
-
-#app.mount("/static", StaticFiles(directory="static"), name="static")
-
-
 # Logger Setup
 
 log = LoggerUtil()
-
-
 
 #Exceptions Handlers
 app.add_exception_handler(HTTPException, ExceptionHandler.http_exception_handler)  # type: ignore
@@ -70,11 +62,6 @@ app.add_exception_handler(RequestValidationError, ExceptionHandler.json_decode_e
 
 
 # Middlewares
-app.add_middleware(LoggerMiddleware)
-app.add_middleware(GZipMiddleware, minimum_size=1000)
-app.add_middleware(SessionMiddleware, secret_key=SECRET_KEY)
-app.add_middleware(ProcessTimeHeaderMiddleware)
-
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -82,6 +69,12 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+app.add_middleware(SessionMiddleware, secret_key=SECRET_KEY)
+app.add_middleware(GZipMiddleware, minimum_size=1000)
+app.add_middleware(LoggerMiddleware)
+app.add_middleware(ProcessTimeHeaderMiddleware)
+
+
 
 # Rutas
 app.include_router(v1_routers, prefix="/api/" + API_VERSION_STR)
@@ -94,15 +87,6 @@ add_pagination(app)
 async def root():
     return JSONResponse({'service': app.title, 'version': API_VERSION_STR, 'env': API_STAGE})
 
-
-# @app.get("/docs", include_in_schema=False)
-# async def custom_swagger_ui_html():
-#     return get_swagger_ui_html(
-#         openapi_url=app.openapi_url,
-#         title= "MIIT API - Swagger UI",
-#         swagger_favicon_url="/static/favicon.png",  # Ruta a tu favicon
-#     )
-
 @app.on_event("startup")
 async def startup_event():
     """
@@ -114,8 +98,8 @@ async def startup_event():
     # On Startup Message
     MessageUtil().on_startup()
 
-    # Check ENV variables
-    DotEnvUtil().check_dot_env()
+    # # Check ENV variables
+    # DotEnvUtil().check_dot_env()
 
     # Check Database Connection
     await DatabaseUtil().check_connection()
