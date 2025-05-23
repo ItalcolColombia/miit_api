@@ -1,0 +1,16 @@
+asyncpg
+fastapi
+fastapi-pagination
+pip
+SQLAlchemy
+starlette
+pydantic-settings
+PyJWT
+passlib
+colorlog
+pydantic
+python-dotenv
+uvicorn
+bcrypt
+cryptography
+itsdangerous
