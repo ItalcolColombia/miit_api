@@ -1,5 +1,3 @@
-Un archivo .gitignore para un proyecto FastAPI en Python es fundamental para mantener tu repositorio limpio y evitar que se suban archivos innecesarios o sensibles. Aquí te presento un .gitignore recomendado que cubre los casos más comunes:
-Fragmento de código
 
 # Python
 # Archivos de caché y bytecode
