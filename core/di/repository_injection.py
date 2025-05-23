@@ -4,20 +4,22 @@ from .database_injection import get_db
 from database.models import (
     Usuarios,
     Flotas,
+    Bls,
+    Clientes,
     Materiales,
-    Buques,
-    Camiones,
     Almacenamientos,
     Movimientos,
     Pesadas,
-    Transacciones
+    Transacciones,
+    Viajes
 )
 
 # Repositories
 from repositories.almacenamientos_repository import AlmacenamientosRepository
-from repositories.buques_repository import BuquesRepository
-from repositories.camiones_repository import CamionesRepository
+from repositories.bls_repository import BlsRepository
+from repositories.clientes_repository import ClientesRepository
 from repositories.flotas_repository import FlotasRepository
+from repositories.viajes_repository import ViajesRepository
 from repositories.materiales_repository import MaterialesRepository
 from repositories.movimientos_repository import MovimientosRepository
 from  repositories.pesadas_repository import PesadasRepository
@@ -26,9 +28,10 @@ from repositories.usuarios_repository import UsuariosRepository
 
 # Schemas
 from schemas.almacenamientos_schema import  AlmacenamientoResponse
-from schemas.buques_schema import BuquesResponse
-from schemas.camiones_schema import CamionResponse
+from schemas.bls_schema import BlsResponse
+from schemas.clientes_schema import ClientesResponse
 from schemas.flotas_schema import FlotasResponse
+from schemas.viajes_schema import ViajesResponse
 from schemas.materiales_schema import MaterialesResponse
 from schemas.movimientos_schema import MovimientosResponse
 from schemas.pesadas_schema import PesadaResponse
@@ -41,25 +44,31 @@ async def get_user_repository(
 ) -> UsuariosRepository:
     return UsuariosRepository(Usuarios, UsuariosResponse, session)
 
-async def get_flotas_repository(
+async def get_viajes_repository(
     session: AsyncSession = Depends(get_db)
-) -> FlotasRepository:
-    return FlotasRepository(Flotas, FlotasResponse, session)
+) -> ViajesRepository:
+    return ViajesRepository(Viajes, ViajesResponse, session)
 
 async def get_alm_repository(
     session: AsyncSession = Depends(get_db)
 ) -> AlmacenamientosRepository:
     return AlmacenamientosRepository(Almacenamientos, AlmacenamientoResponse, session)
 
-async def get_buques_repository(
+async def get_flotas_repository(
         session: AsyncSession = Depends(get_db)
-) -> BuquesRepository:
-    return BuquesRepository(Buques, BuquesResponse, session)
+) -> FlotasRepository:
+    return FlotasRepository(Flotas, FlotasResponse, session)
 
-async def get_camiones_repository(
+
+async def get_bls_repository(
         session: AsyncSession = Depends(get_db)
-) -> CamionesRepository:
-    return CamionesRepository(Camiones, CamionResponse, session)
+) -> BlsRepository:
+    return BlsRepository(Bls, BlsResponse, session)
+
+async def get_clientes_repository(
+        session: AsyncSession = Depends(get_db)
+) -> ClientesRepository:
+    return ClientesRepository(Clientes, ClientesResponse, session)
 
 async def get_materiales_repository(
     session: AsyncSession = Depends(get_db)

@@ -3,9 +3,10 @@ from typing import Annotated
 
 # Repositories
 from repositories.almacenamientos_repository import AlmacenamientosRepository
-from repositories.buques_repository import BuquesRepository
-from repositories.camiones_repository import CamionesRepository
+from repositories.bls_repository import BlsRepository
+from repositories.clientes_repository import ClientesRepository
 from repositories.flotas_repository import FlotasRepository
+from repositories.viajes_repository import ViajesRepository
 from repositories.materiales_repository import MaterialesRepository
 from repositories.movimientos_repository import MovimientosRepository
 from repositories.pesadas_repository import PesadasRepository
@@ -15,9 +16,10 @@ from repositories.usuarios_repository import UsuariosRepository
 # Services
 from services.auth_service import AuthService
 from services.almacenamientos_service import AlmacenamientosService
-from services.buques_service import BuquesService
-from services.camiones_service import CamionesService
+from services.bls_service import BlsService
+from services.clientes_service import ClientesService
 from services.flotas_service import FlotasService
+from services.viajes_service import ViajesService
 from services.materiales_service import MaterialesService
 from services.movimientos_service import MovimientosService
 from services.pesadas_service import PesadasService
@@ -27,9 +29,10 @@ from services.usuarios_service import UsuariosService
 # InjectionRepo
 from .repository_injection import (
     get_user_repository,
+    get_bls_repository,
+    get_clientes_repository,
+    get_viajes_repository,
     get_flotas_repository,
-    get_buques_repository,
-    get_camiones_repository,
     get_alm_repository,
     get_materiales_repository,
     get_movimientos_repository,
@@ -47,32 +50,40 @@ async def get_alm_service(
 ) -> AlmacenamientosService:
     return AlmacenamientosService(alm_repository)
 
-async def get_buques_service(
-    buques_repository: BuquesRepository = Depends(get_buques_repository),
-) -> BuquesService:
-    return BuquesService(buques_repository)
+async def get_flotas_service(
+    flotas_repository: FlotasRepository = Depends(get_flotas_repository)
+) -> FlotasService:
+    return FlotasService(flotas_repository)
 
-async def get_camiones_service(
-    camiones_repository: CamionesRepository = Depends(get_camiones_repository),
-) -> CamionesService:
-    return CamionesService(camiones_repository)
+async def get_bls_service(
+    bls_repository: BlsRepository = Depends(get_bls_repository)
+) -> BlsService:
+    return BlsService(bls_repository)
+
+
+async def get_clientes_service(
+    clientes_repository: ClientesRepository = Depends(get_clientes_repository),
+) -> ClientesService:
+    return ClientesService(clientes_repository)
 
 async def get_mat_service(
     materiales_repository: MaterialesRepository = Depends(get_materiales_repository)
 ) -> MaterialesService:
     return MaterialesService(materiales_repository)
 
-async def get_flotas_service(
-    flotas_repository: Annotated[FlotasRepository, Depends(get_flotas_repository)],
+async def get_viajes_service(
+    viajes_repository: Annotated[ViajesRepository, Depends(get_viajes_repository)],
     materiales_service: Annotated[MaterialesService, Depends(get_mat_service)],
-    buques_service: Annotated[BuquesService, Depends(get_buques_service)],
-    camiones_service: Annotated[CamionesService, Depends(get_camiones_service)],
-) -> FlotasService:
-    return FlotasService(
-        flotas_repository=flotas_repository,
+    bls_service: Annotated[BlsService, Depends(get_bls_service)],
+    clientes_service: Annotated[ClientesService, Depends(get_clientes_service)],
+    flotas_service: Annotated[FlotasService, Depends(get_flotas_service)],
+) -> ViajesService:
+    return ViajesService(
+        viajes_repository=viajes_repository,
         mat_service=materiales_service,
-        buque_service=buques_service,
-        camion_service=camiones_service
+        flotas_service=flotas_service,
+        bl_service=bls_service,
+        client_service=clientes_service,
     )
 
 async def get_mov_service(

@@ -2,8 +2,8 @@ from typing import List
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi_pagination import Page, add_pagination, paginate, Params
-from core.di.service_injection import get_flotas_service, get_mat_service, get_alm_service, get_mov_service, \
-    get_pesadas_service, get_transacciones_service
+from core.di.service_injection import get_viajes_service, get_mat_service, get_alm_service, get_mov_service, \
+    get_pesadas_service, get_transacciones_service, get_flotas_service
 
 from schemas.almacenamientos_schema import AlmacenamientoResponse
 from schemas.materiales_schema import MaterialesResponse
@@ -13,14 +13,15 @@ from schemas.transacciones_schema import TransaccionResponse
 from services.almacenamientos_service import AlmacenamientosService
 from services.auth_service import AuthService
 from services.flotas_service import FlotasService
+from services.viajes_service import ViajesService
 from services.movimientos_service import MovimientosService
 from services.materiales_service import MaterialesService
 from services.transacciones_service import TransaccionesService
 from services.pesadas_service import PesadasService
 from utils.response_util import ResponseUtil
-from utils.schema_util import ErrorResponse, ValidationErrorResponse
-from schemas.flotas_schema import (
-    FlotasActResponse
+from utils.schema_util import CreateResponse, ErrorResponse, ValidationErrorResponse, UpdateResponse
+from schemas.viajes_schema import (
+    ViajesActResponse
 )
 
 response_json = ResponseUtil().json_response
@@ -30,16 +31,16 @@ router = APIRouter(prefix="/scada", tags=["Automatizador"], dependencies=[Depend
 
 # @router.get("/flotas_listado/", response_model=List[FlotaResponse])
 # async def list_flotas(
-#     flotas_service: FlotasService = Depends(get_flotas_service),
+#     viajes_service: FlotasService = Depends(get_viajes_service),
 #     current_user: UsuarioResponse = Depends(get_current_user)
 # ):
-#     all_flotas = await flotas_service.get_all_flotas()
+#     all_flotas = await viajes_service.get_all_flotas()
 #     return all_flotas
 #
 # @router.post("/", response_model=FlotaResponse, status_code=status.HTTP_201_CREATED)
 # async def create_flota(
 #     flota: FlotaCreate,
-#     service: FlotasService = Depends(get_flotas_service),
+#     service: FlotasService = Depends(get_viajes_service),
 #     current_user: UsuarioResponse = Depends(get_current_user)
 # ):
 #     created_flota = await service.create_flota(flota)
@@ -57,22 +58,57 @@ async def get_almacenamientos_listado(
 @router.get("/buques-listado/",
             summary="Obtener listado de buques habilitados para recibo",
             description="Este listado se actualiza cuando PBCU confirma el atraco del buque al puerto.",
-            response_model=List[FlotasActResponse])
+            response_model=List[ViajesActResponse])
 async def get_buques_listado(
-    flotas_service: FlotasService = Depends(get_flotas_service)):
-    flotas = await flotas_service.get_buques_activos()
+    viajes_service: ViajesService = Depends(get_viajes_service)):
+    flotas = await viajes_service.get_buques_activos()
     return flotas
 
 
 @router.get("/camiones-listado/",
             summary="Obtener listado de camiones registrados para despacho",
             description="Este listado se actualiza cuando PBCU confirma la llegada del camión al puerto.",
-            response_model=Page[FlotasActResponse])
+            response_model=Page[ViajesActResponse])
 async def get_camiones_listado(
-        flotas_service: FlotasService = Depends(get_flotas_service),
+        viajes_service: ViajesService = Depends(get_viajes_service),
         params: Params = Depends()):
-    flotas = await flotas_service.get_all_flotas()
+    flotas = await viajes_service.get_camiones_activos()
     return paginate(flotas, params)
+
+
+@router.put("/camion-ajuste/{ref}",
+            status_code=status.HTTP_200_OK,
+            summary="Modificar puntos camion",
+            description="Evento realizado por automatización de acuerdo a parametros de pits de despacho.",
+            response_model=UpdateResponse,
+            responses={
+                status.HTTP_400_BAD_REQUEST: {"model": ErrorResponse},  # Use CustomErrorResponse
+                status.HTTP_422_UNPROCESSABLE_ENTITY: {"model": ValidationErrorResponse},
+                # Use ValidationErrorResponse
+            })
+async def points_camion(
+        ref: str,
+        points: int,
+        service: FlotasService = Depends(get_flotas_service)):
+    try:
+
+        await service.chg_points(ref, points)
+        return response_json(
+            status_code=status.HTTP_200_OK,
+            message=f"puntos actualizados",
+        )
+
+    except HTTPException as http_exc:
+        return response_json(
+            status_code=http_exc.status_code,
+            message=http_exc.detail
+        )
+
+    except Exception as e:
+        return response_json(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            message=str(e)
+        )
 
 @router.get("/materiales-listado/",
             summary="Obtener listado de materiales",
@@ -166,7 +202,7 @@ async def get_trans_listado(
 # @router.get("/{flota_id}", response_model=FlotaResponse)
 # async def get_flota(
 #     flota_id: int,
-#     service: FlotasService = Depends(get_flotas_service),
+#     service: FlotasService = Depends(get_viajes_service),
 #     current_user: UsuarioResponse = Depends(get_current_user)
 # ):
 #     flota = await service.get_flota(flota_id)
@@ -181,7 +217,7 @@ async def get_trans_listado(
 # async def update_flota(
 #     flota_id: int,
 #     flota: FlotaUpdate,
-#     service: FlotasService = Depends(get_flotas_service),
+#     service: FlotasService = Depends(get_viajes_service),
 #     current_user: UsuarioResponse = Depends(get_current_user)
 # ):
 #     updated_flota = await service.update_flota(flota_id, flota)
@@ -195,7 +231,7 @@ async def get_trans_listado(
 # @router.delete("/{flota_id}", status_code=status.HTTP_204_NO_CONTENT)
 # async def delete_flota(
 #     flota_id: int,
-#     service: FlotasService = Depends(get_flotas_service),
+#     service: FlotasService = Depends(get_viajes_service),
 #     current_user: UsuarioResponse = Depends(get_current_user)
 # ):
 #     deleted_flota = await service.delete_flota(flota_id)
