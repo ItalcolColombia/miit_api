@@ -1,0 +1,76 @@
+
+services:
+  api:
+    build:
+          context: .
+          dockerfile: Dockerfile
+    container_name: api
+    ports:
+      - "8443:8443"
+    environment:
+      API_NAME: ${API_NAME}
+      API_HOST: ${API_HOST}
+      API_PORT: ${API_PORT}
+      API_V1_STR: ${API_V1_STR}
+      API_VERSION: ${API_VERSION}
+      API_LOG_LEVEL: ${API_LOG_LEVEL}
+      DB_TYPE: ${DB_TYPE}
+      DB_NAME: ${DB_NAME}
+      DB_HOST: bdc
+      DB_PORT: ${DB_PORT}
+      DB_USER: ${DB_USER}
+      DB_PASSWORD: ${DB_PASSWORD}
+      JWT_SECRET_KEY: ${JWT_SECRET_KEY}
+      JWT_ALGORITHM: ${JWT_ALGORITHM}
+      JWT_ACCESS_TOKEN_EXPIRE_MINUTES: ${JWT_ACCESS_TOKEN_EXPIRE_MINUTES}
+      JWT_REFRESH_TOKEN_EXPIRE_DAYS: ${JWT_REFRESH_TOKEN_EXPIRE_DAYS}
+      JWT_AUDIENCE: ${JWT_AUDIENCE}
+      JWT_ISSUER: ${JWT_ISSUER}
+      ENCRYPTION_KEY: ${ENCRYPTION_KEY}
+
+    volumes:
+      - ./logs:/var/www/metalsoft/log/miit_api
+    #  - ./certs/turbograneles_wildcard_cer.crt:/etc/pki/ssl/certs/server.crt
+    #  - ./certs/turbograneles_wildcard.key:/etc/pki/ssl/private/server.key
+    depends_on:
+      - bdc
+    restart: always
+
+  bdc:
+    image: postgres:17
+    container_name: bdc
+    environment:
+      POSTGRES_DB: ${DB_NAME}
+      POSTGRES_USER: ${DB_USER}
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    volumes:
+      - bdc_data:/var/lib/postgresql/data
+    ports:
+      - "5517:5432"
+    restart: always
+
+
+  pgadmin:
+    image: dpage/pgadmin4
+    container_name: pgadmin
+    ports:
+      - "5050:80"
+    environment:
+      PGADMIN_DEFAULT_EMAIL: ${PGADMIN_DEFAULT_EMAIL}
+      PGADMIN_DEFAULT_PASSWORD: ${PGADMIN_DEFAULT_PASSWORD}
+      PGADMIN_LISTEN_PORT: ${PGADMIN_LISTEN_PORT}
+    volumes:
+      - pgadmin_data:/var/lib/pgadmin
+    depends_on:
+      - bdc
+    restart: always
+
+# Definición de volúmenes para persistencia de datos
+volumes:
+  bdc_data:
+  pgadmin_data:
