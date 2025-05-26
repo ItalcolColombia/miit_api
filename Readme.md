@@ -1,105 +1,111 @@
-# Servicio Interconsulta MIIT - Pto Antioquia
+# 🚢 Servicio Interconsulta MIIT - Puerto Antioquia
 
-API para la intercomunicación entre los stackholder y el repositorio central en **Puerto Antiquia, Urabá**.
+API Rest desarrollada en FastAPI para la intercomunicación entre los interesados y el repositorio central de MIIT en **Puerto Antioquia**,
+construida con principios de arquitectura limpia y prácticas modernas. Este proyecto fue desarrollado como respuesta a las interrogantes
+detectadas en el flujo de información ahondado en la propuesta de un sistema integrador de información para el puerto.
 
-## Uso
+---
 
-Para hacer uso de este repositorio realice los siguientes pasos:
+## 🌟 Características
 
-* Clonar el repositorio remoto:
+### Principales Funcionalidades
+- 🧱 **Desarrollo**: Principios de arquitectura limpia, patrón de repositorio y capa de servicios.
+- 🔐 **Encriptación**: Claves de seguridad hasheadas mediante algoritmo SHA-256.
+- 🔑 **Seguridad Integrada**: Autenticación y autorización de peticiones con **OAuth2** y **JWT**.
+- 🧪 **Testeo**: Pruebas unitarias realizadas con Pytest.
+- 📄 **Documentación Automática**: Disponible mediante **Swagger UI** y **ReDoc**.
+- 🐳 **Contenerización**: Incluye archivos para realizar despliegue con **Docker Compose**.
+
+### Herramientas y librerias
+- ⚡ **[FastAPI](https://fastapi.tiangolo.com)**: Construcción ágil de APIs con alto rendimiento y listas para producción.
+- 🧰 **[SQLModel](https://sqlmodel.tiangolo.com)**: Manejo de las interacciónes con la base de datos (ORM).
+- 🔍 **[Pydantic](https://docs.pydantic.dev)**: Permite establecer el modelo de entrada y de respuesta (Schema).  
+- 💾 **[PostgreSQL](https://www.postgresql.org)**: Sistema de base de datos relacional robusta y escalable.
+---
+
+## 🚀 Requisitos
+
+- Python 3.13 o superior
+- (Opcional) Docker y Docker Compose
+
+---
+
+## ⚙️ Configuración del proyecto
+
+### 1. Clonar el repositorio
 
 ```bash
-git clone https://github.com/jadapache/miit_api
-```
-
-Características
-Desarrollada con FastAPI, un framework moderno y de alto rendimiento para construir APIs con Python.
-
-Estructura modular que incluye componentes como api/v1, core, database, repositories, schemas, services, utils y tests.
-
-Implementación de autenticación y autorización utilizando estándares como OAuth2 y JWT.
-
-Documentación automática de la API mediante Swagger UI y ReDoc.
-
-Preparada para despliegue en contenedores Docker, facilitando su implementación en diferentes entornos.
-GitHub
-+1
-fastapi.tiangolo.com
-+1
-fastapi.tiangolo.com
-Codecademy
-+1
-fastapi.tiangolo.com
-+1
-
-Requisitos
-Python 3.8 o superior.
-
-Docker y Docker Compose (opcional, para despliegue en contenedores).
-
-Instalación
-Clonar el repositorio
-bash
-Copiar
-Editar
 git clone https://github.com/jadapache/miit_api.git
 cd miit_api
-Crear y activar un entorno virtual
-bash
-Copiar
-Editar
+```
+
+### 2. Crear y activar un entorno virtual
+
+```bash
 python -m venv venv
 source venv/bin/activate  # En Windows: venv\Scripts\activate
-Instalar las dependencias
-bash
-Copiar
-Editar
+```
+
+### 3. Instalar dependencias
+
+```bash
 pip install -r requirements.txt
-Ejecución del proyecto
-Usando Uvicorn
-bash
-Copiar
-Editar
+```
+
+---
+
+## ▶️ Ejecución del Proyecto
+
+### 🖥️ 1. Ejecutar localmente con Uvicorn
+
+```bash
 uvicorn main:app --reload
-La aplicación estará disponible en http://127.0.0.1:8000/.
-fastapi.tiangolo.com
+```
 
-Usando Docker
-bash
-Copiar
-Editar
+La API estará disponible en: http://localhost:8443/
+
+### 🌐 2. Ejecutar en un contenedor
+
+```bash
 docker-compose up --build
-Esto levantará la aplicación junto con sus servicios dependientes definidos en docker-compose.yml.
+```
 
-Documentación de la API
-Swagger UI: http://127.0.0.1:8000/docs
+Esto desplegará la api junto con los servicios definidos en `docker-compose.yml`.
 
-ReDoc: http://127.0.0.1:8000/redoc
-fastapi.tiangolo.com
+---
 
-Estas interfaces proporcionan una documentación interactiva de los endpoints disponibles en la API.
+## 📚 Documentación de la API
 
-Contribuciones
-Las contribuciones son bienvenidas. Si deseas colaborar, por favor sigue los siguientes pasos:
+La documentación automática generada de la API puede ser encontrada en:
 
-Haz un fork del repositorio.
+- **Swagger UI**: [http://host:8443/docs](http://host:8443/docs)
+- **ReDoc**: [http://host:8443/redoc](http://host:8443/redoc)
 
-Crea una nueva rama (git checkout -b feature/nueva-funcionalidad).
+---
 
-Realiza tus cambios y haz commit de los mismos (git commit -am 'Agrega nueva funcionalidad').
+## 🤝 Contribuciones
 
-Haz push a la rama (git push origin feature/nueva-funcionalidad).
+¡Las contribuciones son bienvenidas! Abrir un issue para reportar un bug
+  o seguir estos pasos antes de enviar una Pull Request:
 
-Abre un Pull Request.
-fastapi.tiangolo.com
-+8
-testdriven.io
-+8
-fastapi.tiangolo.com
-+8
+1. Realizar **fork** del repositorio.
+2. Crear una nueva rama:  
+   `git checkout -b feature/nueva-funcionalidad`
+3. Efectuar los cambios y hacer commit:  
+   `git commit -am 'Agrega nueva funcionalidad'`
+4. Hacer push a tu rama:  
+   `git push origin feature/nueva-funcionalidad`
+5. Enviar **Pull Request**.
 
-Licencia
-Este proyecto está licenciado bajo la Licencia MIT. Consulta el archivo LICENSE para más detalles.
+---
 
-Contacto
-Para más información o consultas, por favor contacta a jadapache.
+## 📝 Licencia
+
+Este proyecto está licenciado bajo la [Licencia MIT](LICENSE).
+
+---
+
+## 📬 Contacto
+
+Para mayor información o consultas, contactar a:  
+**[@jadapache](https://github.com/jadapache)**
