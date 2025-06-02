@@ -6,7 +6,6 @@ SQLAlchemy
 starlette
 pydantic-settings
 PyJWT
-passlib
 colorlog
 pydantic
 python-dotenv

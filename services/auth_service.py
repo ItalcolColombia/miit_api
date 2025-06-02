@@ -10,7 +10,6 @@ from core.exceptions.auth_exception import InvalidCredentialsException
 from utils.jwt_util import JWTUtil
 from typing import Annotated
 from utils.logger_util import LoggerUtil
-import bcrypt 
 
 log = LoggerUtil()
 
