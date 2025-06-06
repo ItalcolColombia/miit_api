@@ -14,6 +14,8 @@ services:
       API_V1_STR: ${API_V1_STR}
       API_VERSION: ${API_VERSION}
       API_LOG_LEVEL: ${API_LOG_LEVEL}
+      API_USER_ADMINISTRATOR: ${API_USER_ADMINISTRATOR}
+      API_PASSWORD_ADMINISTRATOR: ${API_PASSWORD_ADMINISTRATOR}
       DB_TYPE: ${DB_TYPE}
       DB_NAME: ${DB_NAME}
       DB_HOST: bdc
@@ -30,8 +32,6 @@ services:
 
     volumes:
       - ./logs:/var/www/metalsoft/log/miit_api
-    #  - ./certs/turbograneles_wildcard_cer.crt:/etc/pki/ssl/certs/server.crt
-    #  - ./certs/turbograneles_wildcard.key:/etc/pki/ssl/private/server.key
     depends_on:
       - bdc
     restart: always

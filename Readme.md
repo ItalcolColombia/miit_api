@@ -32,21 +32,25 @@ detectadas en el flujo de información ahondado en la propuesta de un sistema in
 
 ## ⚙️ Configuración del proyecto
 
-### 1. Clonar el repositorio
+### 1. Clonar o descargar el repositorio
 
 ```bash
 git clone https://github.com/jadapache/miit_api.git
 cd miit_api
 ```
 
-### 2. Crear y activar un entorno virtual
+### 2. Definir las variables de entorno
+- Copiar `.env.dist` y renombrar como `.env`
+- Remplazar texto de variables con valores por defecto
+
+### 3. Crear y activar un entorno virtual
 
 ```bash
 python -m venv venv
 source venv/bin/activate  # En Windows: venv\Scripts\activate
 ```
 
-### 3. Instalar dependencias
+### 4. Instalar dependencias
 
 ```bash
 pip install -r requirements.txt
