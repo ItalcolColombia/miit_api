@@ -28,7 +28,6 @@ build/
 # ¡IMPORTANTE! NUNCA subas credenciales directamente.
 # Utiliza variables de entorno o archivos .env que estén ignorados.
 .env
-.env.*
 *.env
 
 # Archivos de datos o logs generados localmente
