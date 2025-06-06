@@ -1,14 +1,6 @@
 from datetime import datetime
-from passlib.context import CryptContext
-from passlib.hash import bcrypt
 import random
-
-# Create a CryptContext for password hashing
-pwd_context = CryptContext(
-    schemes=["bcrypt"],
-    deprecated="auto",
-    bcrypt__rounds=12
-)
+import bcrypt
 
 class AnyUtils:
 
@@ -64,20 +56,22 @@ class AnyUtils:
         return date_time_now + hex_value
 
     @staticmethod
-    def generate_password_hash(password: str) -> str:
+    def generate_password_hash(plain_password: str) -> str:
         """
         Static method responsible for hashing a password.
 
         This method hashes a given password using the PBKDF2-SHA256 algorithm.
 
         Args:
-            password (str): The plain-text password to hash.
+            plain_password (str): The plain-text password to hash.
 
         Returns:
             str: The hashed password.
         """
-
-        return pwd_context.hash(password)
+        salt = bcrypt.gensalt()
+        hashed = bcrypt.hashpw(plain_password.encode('utf-8'), salt)
+        return hashed.decode('utf-8')
+        #return pwd_context.hash(password)
 
     @staticmethod
     def check_password_hash(plain_password: str, hashed_password: str) -> bool:
@@ -94,6 +88,7 @@ class AnyUtils:
             bool: True if the passwords match, otherwise False.
         """
         try:
-            return pwd_context.verify(plain_password, hashed_password)
+            return bcrypt.checkpw(plain_password.encode('utf-8'), hashed_password.encode('utf-8'))
+            #return pwd_context.verify(plain_password, hashed_password)
         except ValueError as ve:
             raise ValueError(f"Password verification failed: {ve}")
