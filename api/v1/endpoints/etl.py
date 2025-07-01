@@ -1,6 +1,6 @@
-from typing import List
+from typing import List, Optional
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status, Query
 from fastapi_pagination import Page, Params
 from fastapi_pagination.ext.sqlalchemy import paginate
 from core.di.service_injection import get_viajes_service, get_mat_service, get_alm_service, get_mov_service, \
@@ -28,25 +28,6 @@ from schemas.viajes_schema import (
 response_json = ResponseUtil().json_response
 router = APIRouter(prefix="/scada", tags=["Automatizador"], dependencies=[Depends(AuthService.get_current_user)]) #
 
-
-
-# @router.get("/flotas_listado/", response_model=List[FlotaResponse])
-# async def list_flotas(
-#     viajes_service: FlotasService = Depends(get_viajes_service),
-#     current_user: UsuarioResponse = Depends(get_current_user)
-# ):
-#     all_flotas = await viajes_service.get_all_flotas()
-#     return all_flotas
-#
-# @router.post("/", response_model=FlotaResponse, status_code=status.HTTP_201_CREATED)
-# async def create_flota(
-#     flota: FlotaCreate,
-#     service: FlotasService = Depends(get_viajes_service),
-#     current_user: UsuarioResponse = Depends(get_current_user)
-# ):
-#     created_flota = await service.create_flota(flota)
-#     return created_flota
-
 @router.get("/almacenamientos-listado/",
             summary="Obtener listado de almacenamientos",
             description="",
@@ -67,17 +48,17 @@ async def get_buques_listado(
 
 
 @router.get("/camiones-listado/",
-            summary="Obtener listado de camiones registrados para despacho",
+            summary="Obtener listado paginado de camiones con filtro opcional por transacción",
             description="Este listado se actualiza cuando PBCU confirma la llegada del camión al puerto.",
             response_model=Page[ViajesActResponse])
 async def get_camiones_listado(
-        viajes_service: ViajesService = Depends(get_viajes_service),
-        params: Params = Depends()):
-    flotas = await viajes_service.get_camiones_activos()
-    return paginate(flotas, params)
+    viajes_service: ViajesService = Depends(get_viajes_service)
+):
+        flotas = await viajes_service.get_camiones_activos()
+        return flotas
 
 
-@router.put("/camion-ajuste/{ref}",
+@router.put("/camion-ajuste/{referencia}",
             status_code=status.HTTP_200_OK,
             summary="Modificar puntos camion",
             description="Evento realizado por automatización de acuerdo a parametros de pits de despacho.",
@@ -113,34 +94,23 @@ async def points_camion(
 
 @router.get("/materiales-listado/",
             summary="Obtener listado de materiales",
-            description="",
+            description="Método de consulta de materiales empleados en el puerto",
             response_model=List[MaterialesResponse])
 async def get_materiales_listado(
     mat_service: MaterialesService = Depends(get_mat_service)):
     return  await mat_service.get_all_mat()
 
 
-# @router.get("/movimientos-listado/",
-#             summary="Obtener listado páginado de movimientos",
-#             description="",
-#             response_model=List[MovimientosResponse])
-# async def get_movs_listado(
-#     skip: int = 0,
-#     limit: int = 20,
-#     mov_service: MovimientosService = Depends(get_mov_service)):
-#     return  await mov_service.get_paginated_mov(skip, limit)
-
-
-@router.get("/movimientos-listado/",
-            summary="Obtener listado páginado de movimientos",
-            description="",
+@router.get("/movimientos-listado/{transaccion_id}",
+            summary="Obtener listado paginado de movimientos con filtro opcional por transacción",
+            description="Retorna movimientos en modo páginado, filtradas opcionalmente por un id de transacción específico",
             response_model=Page[MovimientosResponse])
 async def get_movs_listado(
     mov_service: MovimientosService = Depends(get_mov_service),
-    params: Params = Depends()):
-    movimientos = await  mov_service.get_all_mov()
-    return paginate(movimientos, params)
-
+    tran_id: Optional[int] = Query(None, description="Id de Transacción específico a buscar")
+):
+    movimientos = await mov_service.get_pag_mov(tran_id)
+    return movimientos
 
 
 
@@ -148,7 +118,7 @@ async def get_movs_listado(
              status_code=status.HTTP_201_CREATED,
              summary="Registrar pesada",
              description="Evento para registrar la información de una pesada.",
-             response_model=PesadaCreate,
+             response_model=CreateResponse,
              responses={
                  status.HTTP_400_BAD_REQUEST: {"model": ErrorResponse},
                  status.HTTP_422_UNPROCESSABLE_ENTITY: {"model": ValidationErrorResponse},
@@ -158,12 +128,12 @@ async def create_pesada(
     service: PesadasService = Depends(get_pesadas_service),
 ):
     try:
-        db_pesada = await service.create_pesada(pesada.model_dump())
+        await service.create_pesada_if_not_exists(pesada)
         return response_json(
             status_code=status.HTTP_201_CREATED,
-            message="Registro de pesada exitoso",
-            data={"id": db_pesada.id}
+            message=f"registro exitoso",
         )
+
     except HTTPException as http_exc:
         return response_json(
             status_code=http_exc.status_code,
@@ -176,9 +146,9 @@ async def create_pesada(
         )
 
 
-@router.get("/pesada-obtener/{transaccion_id}",
-    summary="Obtener pesadas de una transacción específica",
-    description="Devuelve listado paginado de pesadas asociadas a una transacción",
+@router.get("/pesadas-listado/{transaccion_id}",
+    summary="Obtener listado paginado de pesadas con filtro opcional por transacción",
+    description="Retorna pesadas en modo páginado, filtradas opcionalmente por un id de transacción específico",
     response_model=Page[PesadaResponse]
 )
 async def get_pesadas_listado(
@@ -189,8 +159,8 @@ async def get_pesadas_listado(
     return paginate(pesadas, params)
 
 @router.get("/transacciones-listado/",
-            summary="Obtener listado páginado de transacciones",
-            description="",
+            summary="Obtener listado paginado de transacciones con filtro opcional",
+            description="Retorna transacciones en modo páginado, filtradas opcionalmente por un id de transacción específico",
             response_model=List[TransaccionResponse])
 async def get_trans_listado(
     skip: int = 0,

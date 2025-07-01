@@ -1,5 +1,6 @@
 from datetime import datetime
 from decimal import Decimal
+from fastapi_pagination import Page
 from typing import List, Optional
 from core.exceptions.base_exception import BaseException
 from repositories.viajes_repository import ViajesRepository
@@ -61,7 +62,7 @@ class ViajesService:
     async def get_buques_activos(self) -> List[ViajesActResponse]:
         return await self._repo.get_buques_disponibles()
 
-    async def get_camiones_activos(self) -> List[ViajesActResponse]:
+    async def get_camiones_activos(self) -> Page[ViajesActResponse]:
         return await self._repo.get_camiones_disponibles()
 
     async def create_buque_nuevo(self, viaje_create: ViajeBuqueExtCreate) -> ViajesResponse:

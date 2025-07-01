@@ -1,4 +1,5 @@
 from typing import List, Optional
+from fastapi_pagination import Page
 from schemas.movimientos_schema import MovimientosResponse, MovimientosCreate, MovimientosUpdate
 from repositories.movimientos_repository import MovimientosRepository
 
@@ -23,5 +24,5 @@ class MovimientosService:
     async def get_all_mov(self) -> List[MovimientosResponse]:
         return await self._repo.get_all()
 
-    async def get_paginated_mov(self, skip_number: int, limit_number: int):
-        return await self._repo.get_all_paginated(skip=skip_number, limit=limit_number)
+    async def get_pag_mov(self, transaccion_id: Optional[int] = None) -> Page[MovimientosResponse]:
+        return await self._repo.get_movimientos_paginados(transaccion_id)
