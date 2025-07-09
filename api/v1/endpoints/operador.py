@@ -26,7 +26,7 @@ response_json = ResponseUtil().json_response
 router = APIRouter(prefix="/integrador", tags=["Integrador"])
 
 
-@router.post("/buque-registro",
+@router.post("/buque-registro/",
              status_code=status.HTTP_201_CREATED,
              summary="Registrar nuevo buque",
              description="Evento efectuado por el operador posterior al anuncio de nueva visita obtenida a traves de la interfaz de PBCU.",
@@ -59,7 +59,7 @@ async def create_buque(
         )
 
 
-@router.post("/buque-carga",
+@router.post("/buque-carga/",
              status_code=status.HTTP_201_CREATED,
              summary="Registrar carga de buque",
              description="Evento efectuado por el operador con la información obtenida a traves de la interfaz de PBCU.",
@@ -90,7 +90,7 @@ async def set_load(
 
 
     except Exception as e:
-        log.error(f"Error al procesar petición de registro BL: {e}", exc_info=True)
+        log.error(f"Error al procesar petición de registro BL: {e}")
         return response_json(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             message=str(e)
@@ -106,7 +106,7 @@ async def set_load(
                 status.HTTP_400_BAD_REQUEST: {"model": ErrorResponse},  # Use CustomErrorResponse
                 status.HTTP_422_UNPROCESSABLE_ENTITY: {"model": ValidationErrorResponse},
             })
-async def status_buque(
+async def buque_in(
         puerto_id: str,
         service: ViajesService = Depends(get_viajes_service)):
     try:
@@ -129,7 +129,7 @@ async def status_buque(
             message=str(e)
         )
 
-@router.post("/camion-registro",
+@router.post("/camion-registro/",
              status_code=status.HTTP_201_CREATED,
              summary="Registrar camión",
              description="Evento realizado por el operador con la cita de enturnamiento notificada a traves de la interfaz de PBCU.",

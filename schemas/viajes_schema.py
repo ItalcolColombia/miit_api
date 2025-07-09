@@ -23,6 +23,11 @@ class ViajesResponse(BaseSchema):
 class ViajesActResponse(ViajesResponse):
     estado: Optional[bool] = None
 
+
+class VViajesResponse(ViajesResponse):
+    referencia: str
+    estado: Optional[bool] = None
+
 class ViajeCreate(BaseSchema):
     flota_id: int
     puerto_id: str = Field(..., max_length=300)

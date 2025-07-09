@@ -26,8 +26,8 @@ class PesadaCreate(PesadaBase):
     class Config:
         json_schema_extra = {
             "example": {
-                "transaccion_id": 225124,
-                "consecutivo": 6,
+                "transaccion_id": 225123,
+                "consecutivo": 16,
                 "bascula_id": 1,
                 "fecha_hora": datetime(2024, 5, 17),
                 "peso_meta": 0.00,

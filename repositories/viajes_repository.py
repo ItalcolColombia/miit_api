@@ -4,7 +4,7 @@ from sqlalchemy import select,func
 from fastapi_pagination.ext.sqlalchemy import paginate
 from fastapi_pagination import Page
 from repositories.base_repository import IRepository
-from schemas.viajes_schema import ViajesResponse, ViajeCreate, ViajeUpdate, ViajesActResponse
+from schemas.viajes_schema import ViajesResponse, ViajeCreate, ViajeUpdate, ViajesActResponse, VViajesResponse
 from database.models import Viajes, VViajes
 from sqlalchemy.orm.exc import NoResultFound
 from utils.logger_util import LoggerUtil
@@ -19,12 +19,12 @@ class ViajesRepository(IRepository[Viajes, ViajesResponse]):
         self.db = db
         super().__init__(model, schema, db)
 
-    async def get_buques_disponibles(self) -> List[ViajesActResponse]:
+    async def get_buques_disponibles(self) -> List[ViajesActResponse] | None:
         """
                 Filter buques which estado = True
 
                 Returns:
-                    A list of Buques objects matching the filter.
+                    A list of Buques objects matching the filter, otherwise, returns a null.
                 """
         query = (
             select(VViajes)
@@ -39,23 +39,6 @@ class ViajesRepository(IRepository[Viajes, ViajesResponse]):
 
         return [ViajesActResponse.model_validate(viaje) for viaje in viajes]
 
-    async def get_camiones_disponibles(self) -> Page[ViajesActResponse]:
-        """
-                Shows camiones which fecha_salida is null
-
-                Returns:
-                    A page of camiones objects matching the filter.
-                """
-        query = (
-            select(VViajes)
-            .where(VViajes.tipo == 'camion')
-            .where(VViajes.fecha_salida.is_(None))
-        )
-        paginated_result = await paginate(self.db, query)
-
-        paginated_result.items = [ViajesActResponse.model_validate(item) for item in paginated_result.items]
-
-        return paginated_result
 
 
     async def check_puerto_id(self, puerto_id: str) -> Optional[ViajesResponse]:

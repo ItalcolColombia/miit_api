@@ -1,6 +1,8 @@
 from datetime import datetime
 from decimal import Decimal
-from fastapi_pagination import Page
+from fastapi_pagination import Page, Params
+from sqlalchemy import select
+from database.models import VViajes
 from typing import List, Optional
 from core.exceptions.base_exception import BaseException
 from repositories.viajes_repository import ViajesRepository
@@ -10,7 +12,7 @@ from services.clientes_service import ClientesService
 from services.materiales_service import MaterialesService
 from services.flotas_service import FlotasService
 from schemas.viajes_schema import (
-    ViajesResponse, ViajeCreate, ViajeBuqueExtCreate, ViajeUpdate, ViajesActResponse, ViajeCamionExtCreate
+    ViajesResponse, ViajeCreate, ViajeBuqueExtCreate, ViajeUpdate, ViajesActResponse, ViajeCamionExtCreate,VViajesResponse
 )
 from schemas.flotas_schema import FlotasResponse, FlotaCreate
 from schemas.clientes_schema import ClientesResponse, ClienteCreate, ClienteUpdate
@@ -62,8 +64,21 @@ class ViajesService:
     async def get_buques_activos(self) -> List[ViajesActResponse]:
         return await self._repo.get_buques_disponibles()
 
-    async def get_camiones_activos(self) -> Page[ViajesActResponse]:
-        return await self._repo.get_camiones_disponibles()
+    async def get_pag_camiones_activos(self, truck_plate: Optional[str] = None, params: Params = Params()) -> Page[VViajesResponse]:
+        """
+              Get one or more camiones related to a truck_plate (optional).
+              Returns a page with filtered optionally by referencia camiones rows.
+              """
+        query = (
+            select(VViajes)
+            .where(VViajes.tipo == 'camion')
+            .where(VViajes.fecha_salida.is_(None))
+        )
+
+        if truck_plate is not None:
+            query = query.where(VViajes.referencia == truck_plate)
+
+        return await self._repo.get_all_paginated(query=query, params=params)
 
     async def create_buque_nuevo(self, viaje_create: ViajeBuqueExtCreate) -> ViajesResponse:
 
