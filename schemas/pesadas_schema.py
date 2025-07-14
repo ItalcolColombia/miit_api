@@ -13,6 +13,7 @@ class PesadaBase(BaseModel):
     peso_vuelo: Optional[Decimal] = None
     peso_fino: Optional[Decimal] = None
 
+
 class PesadaCreate(PesadaBase):
     transaccion_id: Optional[int] = None
     consecutivo: Optional[float] = None
@@ -49,6 +50,20 @@ class PesadaUpdate(PesadaCreate):
 
 class PesadaResponse(PesadaBase):
     id: int
+
+    class Config:
+        from_attributes = True
+
+
+class VPesadasAcumResponse(BaseModel):
+    referencia: str
+    consecutivo: int
+    transaccion: int
+    pit: int
+    material: str
+    peso: Decimal = Field(..., max_digits=10, decimal_places=2)
+    fecha: datetime
+    puerto_id: Optional[str] = None
 
     class Config:
         from_attributes = True

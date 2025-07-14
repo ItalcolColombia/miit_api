@@ -204,15 +204,14 @@ class ViajesService:
             raise BaseException(f"El material '{bl_input.material_name}' no existe")
 
         # Obtiene el ID del cliente
-        cliente_id = await self.clientes_service.get_cliente_by_name(bl_input.cliente_name)
-        if cliente_id is None:
+        cliente_find = await self.clientes_service.get_cliente_by_name(bl_input.cliente_name)
+        if cliente_find is None:
             raise BaseException(f"El cliente '{bl_input.cliente_name}' no existe")
 
         # Prepara los datos para la creación
         bl_data = bl_input.model_dump(exclude={"material_name", "puerto_id", "cliente_name"})
         bl_data.update({
-            "flota_id": bl_input.flota_id,
-            "cliente_id": cliente_id,
+            "cliente_id": cliente_find.id,
             "material_id": material_id,
             "viaje_id": viaje.id,
         })
@@ -223,17 +222,8 @@ class ViajesService:
 
         # Retorna la entidad creada
         created_bl = await self.bls_service.get_bl_by_num(bl_input.no_bl)
-        return BlsResponse(**created_bl.__dict__)
+        print(type(created_bl))
+        return BlsResponse.model_validate(created_bl)
 
-    # async def set_buque_load(self, voyage: int, no_bl:str, customer:str, product: str, peso: float) -> FlotasResponse:
-    #     flota = await self._repo.get_by_id(voyage)
-    #     if not flota:
-    #         raise BaseException(f"Flota con id '{voyage}' no encontrada")
-    #
-    #     flota_buque = await self.flotas_service.get_flota_by_ref(flota.referencia)
-    #     if not flota_buque:
-    #         raise BaseException(f"Flota con ref '{flota.referencia}' no existe")
-    #
-    #     updated_buque = await self.flotas_service.update_status(flota_buque, True)
-    #     return updated_buque
+
 

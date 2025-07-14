@@ -41,14 +41,15 @@ AlmacenamientosMateriales = Table("almacenamientos_materiales", Base.metadata,
 class Bls(Base):
     __tablename__ = "bls"
     id = Column(Integer, primary_key=True, index=True)
-    viaje_id = Column(String, ForeignKey("viajes.id"))
+    viaje_id = Column(Integer, ForeignKey("viajes.id"))
     material_id = Column(Integer, ForeignKey("materiales.id"))
+    cliente_id = Column(Integer, ForeignKey("clientes.id"), nullable=False)
     no_bl = Column(String)
     peso_bl = Column(Numeric(10, 2))
 
     # Define relationships
-    viaje = relationship("Viajes", backref=backref("bls"))  # If you need to access Viajes from BL
-    material = relationship("Materiales", backref=backref("bls")) # If you need to access Materiales from BL
+    viaje = relationship("Viajes", backref=backref("bls"))
+    material = relationship("Materiales", backref=backref("bls")) 
 
     __table_args__ = (
         UniqueConstraint('viaje_id', 'material_id', 'no_bl', name='uk_bls'),
@@ -220,3 +221,14 @@ class VViajes(Base):
     viaje_origen = Column(String)
     despacho_directo = Column(Boolean)
     estado = Column(Boolean)
+
+class VPesadasAcumulado(Base):
+    __tablename__ = "v_pesadas_acumulado"
+    puerto_id = Column(String)
+    referencia = Column(String)
+    consecutivo = Column(Integer)
+    transaccion = Column(Integer,  primary_key=True, index=True)
+    pit = Column(Integer)
+    material = Column(String)
+    peso = Column(Numeric(10,2), nullable=False)
+    fecha = Column(DateTime)

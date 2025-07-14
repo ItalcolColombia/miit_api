@@ -40,7 +40,7 @@ class IRepository(Generic[ModelType, SchemaType]):
 
 
 
-    
+
     async def find_many(self, **kwargs) -> List[SchemaType]:
         try:
             query = select(self.model)

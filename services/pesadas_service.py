@@ -2,8 +2,8 @@ from typing import List, Optional
 from fastapi_pagination import Page, Params
 
 from sqlalchemy import select
-from database.models import Pesadas
-from schemas.pesadas_schema import PesadaResponse, PesadaCreate, PesadaUpdate
+from database.models import Pesadas, VPesadasAcumulado
+from schemas.pesadas_schema import PesadaResponse, PesadaCreate, PesadaUpdate, VPesadasAcumResponse
 from repositories.pesadas_repository import PesadasRepository
 
 from utils.logger_util import LoggerUtil
@@ -11,8 +11,8 @@ log = LoggerUtil()
 
 class PesadasService:
 
-    def __init__(self, mov_repository: PesadasRepository) -> None:
-        self._repo = mov_repository
+    def __init__(self, pesada_repository: PesadasRepository) -> None:
+        self._repo = pesada_repository
 
 
     async def create_pesada(self, pesada_data: PesadaCreate) -> PesadaResponse:
@@ -81,4 +81,9 @@ class PesadasService:
             log.error(f"Error al crear la pesada: {pesada_data.consecutivo} - {e}")
             raise
 
-
+    async def get_pesada_acumulada(self, puerto_id: [str]) -> VPesadasAcumResponse:
+        """
+             Get sum of pesadas related to a puerto_id.
+             Returns an object with filtered applied.
+             """
+        return await self._repo.get_sumatoria_pesadas(puerto_id)
