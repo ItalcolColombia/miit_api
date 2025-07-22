@@ -23,11 +23,11 @@ class BlsCreate(BaseSchema):
     class Config:
         json_schema_extra = {
             "example": {
-                "flota_id": 24330,
-                "material": "1",
+                "viaje_id": 24330,
+                "material_id": "1",
                 "cliente_id" : "1",
                 "no_bl": "SSF010448001",
-                "peso": 50478.00,
+                "peso_bl": 50478.00,
             }
         }
 

@@ -3,9 +3,12 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from typing import Optional, TypeVar, Generic, List
 from pydantic import BaseModel
 from sqlalchemy.future import select
+from fastapi_pagination.ext.sqlalchemy import paginate
+from fastapi_pagination import Page, Params
 from sqlalchemy.exc import NoResultFound
 from core.exceptions.entity_exceptions import EntityNotFoundException
 from utils.any_utils import AnyUtils
+
 ModelType = TypeVar("ModelType")
 SchemaType = TypeVar("SchemaType")
 
@@ -21,14 +24,23 @@ class IRepository(Generic[ModelType, SchemaType]):
         items = result.scalars().all()
         return [self.schema.model_validate(item) for item in items]
 
-    async def get_all_paginated(self, skip: int = 0,  limit: Optional[int] = None) -> List[SchemaType]:
-        query = select(self.model).offset(skip)
-        if limit:
-            query = query.limit(limit)
-        result = await self.db.execute(query)
-        items = result.scalars().all()
-        return [self.schema.model_validate(item) for item in items]
-    
+    async def get_all_paginated(self, query=None, params: Params = Params()) -> Page[SchemaType]:
+        """
+        Get paginated result based on query (optional)
+        if query is not supplied, then return all items paginated.
+        """
+        if query is None:
+            query = select(self.model)
+
+        paginated_result = await paginate(self.db, query, params)
+
+        paginated_result.items = [self.schema.model_validate(item) for item in paginated_result.items]
+
+        return paginated_result
+
+
+
+
     async def find_many(self, **kwargs) -> List[SchemaType]:
         try:
             query = select(self.model)

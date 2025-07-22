@@ -16,8 +16,16 @@ class UsuariosService:
             raise EntityAlreadyRegisteredException('nick_name')
         
     async def get_username(self, username: str) -> UsuariosResponse | None:
-        return await self._repo.get_by_username(username)
-    
+        user= await self._repo.get_by_username(username)
+
+        if not user:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Usuario no encontrado."
+            )
+
+        return {"message": f"Login exitoso : {user.nick_name}"}
+
     async def get_user(self, usr_id: int) -> Optional[UsuariosResponse]:
         return await self._repo.get_by_id(usr_id)
 

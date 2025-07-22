@@ -1,6 +1,6 @@
-from typing import List
+from typing import List, Optional
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status, Query
 from fastapi_pagination import Page, Params
 from fastapi_pagination.ext.sqlalchemy import paginate
 from core.di.service_injection import get_viajes_service, get_mat_service, get_alm_service, get_mov_service, \
@@ -10,7 +10,8 @@ from schemas.almacenamientos_schema import AlmacenamientoResponse
 from schemas.materiales_schema import MaterialesResponse
 from schemas.movimientos_schema import MovimientosResponse
 from schemas.pesadas_schema import PesadaResponse, PesadaCreate
-from schemas.transacciones_schema import TransaccionResponse
+from schemas.transacciones_schema import TransaccionResponse, TransaccionCreate
+from schemas.viajes_schema import ViajesActResponse, VViajesResponse
 from services.almacenamientos_service import AlmacenamientosService
 from services.auth_service import AuthService
 from services.flotas_service import FlotasService
@@ -21,31 +22,10 @@ from services.transacciones_service import TransaccionesService
 from services.pesadas_service import PesadasService
 from utils.response_util import ResponseUtil
 from utils.schema_util import CreateResponse, ErrorResponse, ValidationErrorResponse, UpdateResponse
-from schemas.viajes_schema import (
-    ViajesActResponse
-)
+
 
 response_json = ResponseUtil().json_response
 router = APIRouter(prefix="/scada", tags=["Automatizador"], dependencies=[Depends(AuthService.get_current_user)]) #
-
-
-
-# @router.get("/flotas_listado/", response_model=List[FlotaResponse])
-# async def list_flotas(
-#     viajes_service: FlotasService = Depends(get_viajes_service),
-#     current_user: UsuarioResponse = Depends(get_current_user)
-# ):
-#     all_flotas = await viajes_service.get_all_flotas()
-#     return all_flotas
-#
-# @router.post("/", response_model=FlotaResponse, status_code=status.HTTP_201_CREATED)
-# async def create_flota(
-#     flota: FlotaCreate,
-#     service: FlotasService = Depends(get_viajes_service),
-#     current_user: UsuarioResponse = Depends(get_current_user)
-# ):
-#     created_flota = await service.create_flota(flota)
-#     return created_flota
 
 @router.get("/almacenamientos-listado/",
             summary="Obtener listado de almacenamientos",
@@ -66,34 +46,32 @@ async def get_buques_listado(
     return flotas
 
 
-@router.get("/camiones-listado/",
-            summary="Obtener listado de camiones registrados para despacho",
-            description="Este listado se actualiza cuando PBCU confirma la llegada del camión al puerto.",
-            response_model=Page[ViajesActResponse])
-async def get_camiones_listado(
-        viajes_service: ViajesService = Depends(get_viajes_service),
-        params: Params = Depends()):
-    flotas = await viajes_service.get_camiones_activos()
-    return paginate(flotas, params)
+@router.get("/camiones-listado/{placa}",
+            summary="Obtener listado paginado de camiones con filtro opcional por placa",
+            description="Retorna camiones en modo páginado, filtradas opcionalmente por placa específica",
+            response_model=Page[VViajesResponse])
+async def get_camiones_paginado(
+    viajes_service: ViajesService = Depends(get_viajes_service),
+    truck_plate: Optional[str] = Query(None, description="Placa específica a buscar")
+):
+    return await viajes_service.get_pag_camiones_activos(truck_plate)
 
-
-@router.put("/camion-ajuste/{ref}",
+@router.put("/camion-ajuste/{placa}",
             status_code=status.HTTP_200_OK,
             summary="Modificar puntos camion",
             description="Evento realizado por automatización de acuerdo a parametros de pits de despacho.",
             response_model=UpdateResponse,
             responses={
-                status.HTTP_400_BAD_REQUEST: {"model": ErrorResponse},  # Use CustomErrorResponse
+                status.HTTP_400_BAD_REQUEST: {"model": ErrorResponse},
                 status.HTTP_422_UNPROCESSABLE_ENTITY: {"model": ValidationErrorResponse},
-                # Use ValidationErrorResponse
             })
-async def points_camion(
-        ref: str,
+async def set_points_camion(
+        truck_plate: str,
         points: int,
         service: FlotasService = Depends(get_flotas_service)):
     try:
 
-        await service.chg_points(ref, points)
+        await service.chg_points(truck_plate, points)
         return response_json(
             status_code=status.HTTP_200_OK,
             message=f"puntos actualizados",
@@ -108,47 +86,36 @@ async def points_camion(
     except Exception as e:
         return response_json(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            message=str(e)
+            message=f"Error interno: {e}"
         )
+
 
 @router.get("/materiales-listado/",
             summary="Obtener listado de materiales",
-            description="",
+            description="Método de consulta de materiales empleados en el puerto",
             response_model=List[MaterialesResponse])
 async def get_materiales_listado(
     mat_service: MaterialesService = Depends(get_mat_service)):
     return  await mat_service.get_all_mat()
 
 
-# @router.get("/movimientos-listado/",
-#             summary="Obtener listado páginado de movimientos",
-#             description="",
-#             response_model=List[MovimientosResponse])
-# async def get_movs_listado(
-#     skip: int = 0,
-#     limit: int = 20,
-#     mov_service: MovimientosService = Depends(get_mov_service)):
-#     return  await mov_service.get_paginated_mov(skip, limit)
-
-
-@router.get("/movimientos-listado/",
-            summary="Obtener listado páginado de movimientos",
-            description="",
+@router.get("/movimientos-listado/{transaccion_id}",
+            summary="Obtener listado paginado de movimientos con filtro opcional por transacción",
+            description="Retorna movimientos en modo páginado, filtradas opcionalmente por un id de transacción específico",
             response_model=Page[MovimientosResponse])
 async def get_movs_listado(
     mov_service: MovimientosService = Depends(get_mov_service),
-    params: Params = Depends()):
-    movimientos = await  mov_service.get_all_mov()
-    return paginate(movimientos, params)
+    tran_id: Optional[int] = Query(None, description="Id de Transacción específico a buscar")
+):
+    movimientos = await mov_service.get_pag_movimientos(tran_id)
+    return movimientos
 
 
-
-
-@router.post("/pesada-registro",
+@router.post("/pesada-registro/",
              status_code=status.HTTP_201_CREATED,
              summary="Registrar pesada",
              description="Evento para registrar la información de una pesada.",
-             response_model=PesadaCreate,
+             response_model=CreateResponse,
              responses={
                  status.HTTP_400_BAD_REQUEST: {"model": ErrorResponse},
                  status.HTTP_422_UNPROCESSABLE_ENTITY: {"model": ValidationErrorResponse},
@@ -158,12 +125,19 @@ async def create_pesada(
     service: PesadasService = Depends(get_pesadas_service),
 ):
     try:
-        db_pesada = await service.create_pesada(pesada.model_dump())
-        return response_json(
-            status_code=status.HTTP_201_CREATED,
-            message="Registro de pesada exitoso",
-            data={"id": db_pesada.id}
-        )
+        pesada_result, was_created = await service.create_pesada_if_not_exists(pesada)
+
+        if was_created:
+            return response_json(
+                status_code=status.HTTP_201_CREATED,
+                message="registro exitoso."
+            )
+        else:
+            return response_json(
+                status_code=status.HTTP_200_OK,
+                message="registro fallído, la pesada ya existe."
+            )
+
     except HTTPException as http_exc:
         return response_json(
             status_code=http_exc.status_code,
@@ -172,72 +146,102 @@ async def create_pesada(
     except Exception as e:
         return response_json(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            message=str(e)
+            message=f"Error interno: {e}"
         )
 
 
-@router.get("/pesada-obtener/{transaccion_id}",
-    summary="Obtener pesadas de una transacción específica",
-    description="Devuelve listado paginado de pesadas asociadas a una transacción",
+@router.get("/pesadas-listado/{transaccion_id}",
+    summary="Obtener listado paginado de pesadas con filtro opcional por transacción",
+    description="Retorna pesadas en modo páginado, filtradas opcionalmente por un id de transacción específico",
     response_model=Page[PesadaResponse]
 )
 async def get_pesadas_listado(
-    transaccion_id: int,
     pesada_service: PesadasService = Depends(get_pesadas_service),
-    params: Params = Depends()):
-    pesadas = await pesada_service.get_pesada_by_idtrans(transaccion_id)
-    return paginate(pesadas, params)
-
-@router.get("/transacciones-listado/",
-            summary="Obtener listado páginado de transacciones",
-            description="",
-            response_model=List[TransaccionResponse])
-async def get_trans_listado(
-    skip: int = 0,
-    limit: int = 20,
-    tran_service: TransaccionesService = Depends(get_transacciones_service),
+    tran_id: Optional[int] = Query(None, description="Id de Transacción específico a buscar")
 ):
-    return  await tran_service.get_paginated_transacciones(skip, limit)
+    return await pesada_service.get_pag_pesadas(tran_id)
 
 
-# @router.get("/{flota_id}", response_model=FlotaResponse)
-# async def get_flota(
-#     flota_id: int,
-#     service: FlotasService = Depends(get_viajes_service),
-#     current_user: UsuarioResponse = Depends(get_current_user)
-# ):
-#     flota = await service.get_flota(flota_id)
-#     if not flota:
-#         raise HTTPException(
-#             status_code=status.HTTP_404_NOT_FOUND,
-#             detail="Flota not found"
-#         )
-#     return flota
-#
-# @router.put("/{flota_id}", response_model=FlotaResponse)
-# async def update_flota(
-#     flota_id: int,
-#     flota: FlotaUpdate,
-#     service: FlotasService = Depends(get_viajes_service),
-#     current_user: UsuarioResponse = Depends(get_current_user)
-# ):
-#     updated_flota = await service.update_flota(flota_id, flota)
-#     if not updated_flota:
-#         raise HTTPException(
-#             status_code=status.HTTP_404_NOT_FOUND,
-#             detail="Flota not found"
-#         )
-#     return updated_flota
-#
-# @router.delete("/{flota_id}", status_code=status.HTTP_204_NO_CONTENT)
-# async def delete_flota(
-#     flota_id: int,
-#     service: FlotasService = Depends(get_viajes_service),
-#     current_user: UsuarioResponse = Depends(get_current_user)
-# ):
-#     deleted_flota = await service.delete_flota(flota_id)
-#     if not deleted_flota:
-#         raise HTTPException(
-#             status_code=status.HTTP_404_NOT_FOUND,
-#             detail="Flota not found"
-#         )
+
+@router.get("/transacciones-listado/{transaccion_id}",
+            summary="Obtener listado paginado de transacciones con filtro opcional",
+            description="Retorna transacciones en modo páginado, filtradas opcionalmente por un id de transacción específico",
+            response_model=Page[TransaccionResponse])
+async def get_trans_listado(
+    tran_service: TransaccionesService = Depends(get_transacciones_service),
+    tran_id: Optional[int] = Query(None, description="Id de Transacción específico a buscar")
+
+):
+    return  await tran_service.get_pag_transacciones(tran_id)
+
+
+@router.post("/transacciones-registro/",
+             status_code=status.HTTP_201_CREATED,
+             summary="Registrar nueva transacción",
+             description="Evento para registrar la información de una transacción.",
+             response_model=CreateResponse,
+             responses={
+                 status.HTTP_400_BAD_REQUEST: {"model": ErrorResponse},
+                 status.HTTP_422_UNPROCESSABLE_ENTITY: {"model": ValidationErrorResponse},
+             })
+async def create_transaccion(
+    transaccion: TransaccionCreate,
+    service: TransaccionesService = Depends(get_transacciones_service),
+):
+    try:
+        transaccion_result, was_created = await service.create_transaccion_if_not_exists(transaccion)
+
+        if was_created:
+            return response_json(
+                status_code=status.HTTP_201_CREATED,
+                message="registro exitoso."
+            )
+        else:
+            return response_json(
+                status_code=status.HTTP_200_OK,
+                message="registro fallído, la transacción ya existe."
+            )
+
+    except HTTPException as http_exc:
+        return response_json(
+            status_code=http_exc.status_code,
+            message=http_exc.detail
+        )
+    except Exception as e:
+        return response_json(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            message=f"Error interno: {e}"
+        )
+
+@router.put("/transaccion-finalizar/{transaccion_id}",
+            status_code=status.HTTP_200_OK,
+            summary="Modificar puntos camion",
+            description="Evento realizado por automatización de acuerdo a parametros de pits de despacho.",
+            response_model=UpdateResponse,
+            responses={
+                status.HTTP_400_BAD_REQUEST: {"model": ErrorResponse},
+                status.HTTP_422_UNPROCESSABLE_ENTITY: {"model": ValidationErrorResponse},
+            })
+async def set_points_camion(
+        tran_id: str,
+        points: int,
+        service: FlotasService = Depends(get_flotas_service)):
+    try:
+
+        await service.chg_points(tran_id, points)
+        return response_json(
+            status_code=status.HTTP_200_OK,
+            message=f"puntos actualizados",
+        )
+
+    except HTTPException as http_exc:
+        return response_json(
+            status_code=http_exc.status_code,
+            message=http_exc.detail
+        )
+
+    except Exception as e:
+        return response_json(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            message=f"Error interno: {e}"
+        )

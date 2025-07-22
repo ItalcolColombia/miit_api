@@ -12,16 +12,14 @@ class BlsService:
         self._repo = bls_repository
 
     async def create(self, bl: BlsCreate) -> BlsResponse:
-        bl_model = Bls(**bl.dict())
-        created_bl = await self._repo.create(bl_model)
-        log.info(f"BL creado con N°: {created_bl.no_bl}")
-        return BlsResponse.model_validate(created_bl)
+        creado = await self._repo.create(bl)
+        log.info(f"BL creado con N°: {bl.no_bl}")
+        return creado
 
     async def update(self, id: int, bl: BlsResponse) -> Optional[BlsResponse]:
-        bl_model = Bls(**bl.dict())
-        updated_bl = await self._repo.update(id, bl_model)
+        actualizado = await self._repo.update(id, bl)
         log.info(f"BL actualizado con ID: {id}")
-        return BlsResponse.model_validate(updated_bl)
+        return actualizado
 
     async def delete(self, id: int) -> bool:
         deleted = await self._repo.delete(id)

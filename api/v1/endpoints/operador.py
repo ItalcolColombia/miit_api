@@ -1,9 +1,12 @@
 from decimal import Decimal
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status, Query
 from datetime import datetime
+
+from schemas.pesadas_schema import PesadaResponse, VPesadasAcumResponse
 from utils.response_util import ResponseUtil
-from core.di.service_injection import get_viajes_service
+from core.di.service_injection import get_viajes_service, get_pesadas_service
 from services.viajes_service import ViajesService
+from services.pesadas_service import PesadasService
 #from api.v1.middleware.auth_middleware import get_current_user
 from utils.schema_util import CreateResponse, ErrorResponse, ValidationErrorResponse, UpdateResponse
 from schemas.viajes_schema import (
@@ -26,7 +29,7 @@ response_json = ResponseUtil().json_response
 router = APIRouter(prefix="/integrador", tags=["Integrador"])
 
 
-@router.post("/buque-registro",
+@router.post("/buque-registro/",
              status_code=status.HTTP_201_CREATED,
              summary="Registrar nuevo buque",
              description="Evento efectuado por el operador posterior al anuncio de nueva visita obtenida a traves de la interfaz de PBCU.",
@@ -59,7 +62,7 @@ async def create_buque(
         )
 
 
-@router.post("/buque-carga",
+@router.post("/buque-carga/",
              status_code=status.HTTP_201_CREATED,
              summary="Registrar carga de buque",
              description="Evento efectuado por el operador con la información obtenida a traves de la interfaz de PBCU.",
@@ -90,7 +93,7 @@ async def set_load(
 
 
     except Exception as e:
-        log.error(f"Error al procesar petición de registro BL: {e}", exc_info=True)
+        log.error(f"Error al procesar petición de registro BL: {e}")
         return response_json(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             message=str(e)
@@ -99,14 +102,14 @@ async def set_load(
 
 @router.put("/buque-arribo/{puerto_id}",
             status_code=status.HTTP_200_OK,
-            summary="Modificar estado de un buque",
+            summary="Modificar estado de un buque por arribo",
             description="Evento realizado por el operador post confirmación del arribo de la motonave a traves de la interfaz de PBCU.",
             response_model=UpdateResponse,
             responses={
                 status.HTTP_400_BAD_REQUEST: {"model": ErrorResponse},  # Use CustomErrorResponse
                 status.HTTP_422_UNPROCESSABLE_ENTITY: {"model": ValidationErrorResponse},
             })
-async def status_buque(
+async def buque_in(
         puerto_id: str,
         service: ViajesService = Depends(get_viajes_service)):
     try:
@@ -129,7 +132,39 @@ async def status_buque(
             message=str(e)
         )
 
-@router.post("/camion-registro",
+@router.put("/buque-finalizar/{puerto_id}",
+            status_code=status.HTTP_200_OK,
+            summary="Modificar estado de un buque por partida",
+            description="Evento realizado por el operador post confirmación de la finalización de la motonave a traves de la interfaz de PBCU.",
+            response_model=UpdateResponse,
+            responses={
+                status.HTTP_400_BAD_REQUEST: {"model": ErrorResponse},  # Use CustomErrorResponse
+                status.HTTP_422_UNPROCESSABLE_ENTITY: {"model": ValidationErrorResponse},
+            })
+async def buque_out(
+        puerto_id: str,
+        service: ViajesService = Depends(get_viajes_service)):
+    try:
+
+        await service.chg_estado_buque(puerto_id, False)
+        return response_json(
+            status_code=status.HTTP_200_OK,
+            message=f"estado actualizado",
+        )
+
+    except HTTPException as http_exc:
+        return response_json(
+            status_code=http_exc.status_code,
+            message=http_exc.detail
+        )
+
+    except Exception as e:
+        return response_json(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            message=str(e)
+        )
+
+@router.post("/camion-registro/",
              status_code=status.HTTP_201_CREATED,
              summary="Registrar camión",
              description="Evento realizado por el operador con la cita de enturnamiento notificada a traves de la interfaz de PBCU.",
@@ -162,7 +197,7 @@ async def create_camion(
         )
 @router.put("/camion-ingreso/{puerto_id}",
             status_code=status.HTTP_200_OK,
-            summary="Modificar cita del camion",
+            summary="Modificar cita del camion para actualizar ingreso",
             description="Evento realizado por el operador post confirmación del ingreso del camión a báscula a traves de la interfaz de PBCU.",
             response_model=UpdateResponse,
             responses={
@@ -195,7 +230,7 @@ async def in_camion(
 
 @router.put("/camion-egreso/{puerto_id}",
             status_code=status.HTTP_200_OK,
-            summary="Modificar cita del camion",
+            summary="Modificar cita del camion para actualizar el egreso",
             description="Evento realizado por el operador post confirmación del egreso del camión a báscula a traves de la interfaz de PBCU.",
             response_model=UpdateResponse,
             responses={
@@ -227,3 +262,35 @@ async def out_camion(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             message=str(e)
         )
+
+@router.post("/pesadas-parciales/{puerto_id}",
+             status_code=status.HTTP_200_OK,
+             summary="Obtener acumulado de pesadas",
+             description="Evento realizado por el operador post petición de consulta recibida a traves de la interfaz de PBCU.",
+             response_model=VPesadasAcumResponse,
+             responses={
+                 status.HTTP_400_BAD_REQUEST: {"model": ErrorResponse},  # Use CustomErrorResponse
+                 status.HTTP_422_UNPROCESSABLE_ENTITY: {"model": ValidationErrorResponse},
+                 status.HTTP_404_NOT_FOUND: {"model": ErrorResponse},
+             })
+async def get_acum_pesadas(
+        service: PesadasService = Depends(get_pesadas_service),
+        puerto_id: str = None):
+    try:
+        pesada = await service.get_pesada_acumulada(puerto_id)
+
+        if not pesada:
+            return response_json(
+                status_code=status.HTTP_404_NOT_FOUND,
+                message="No se encontraron registros"
+            )
+
+        return pesada
+
+    except Exception as e:
+        return response_json(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            message=str(e)
+        )
+
+
