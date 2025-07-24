@@ -9,6 +9,7 @@ from fastapi import Depends, HTTPException, Request, status
 from core.exceptions.auth_exception import InvalidCredentialsException
 from utils.jwt_util import JWTUtil
 from typing import Annotated
+from core.settings import Settings
 from utils.logger_util import LoggerUtil
 
 log = LoggerUtil()
@@ -20,32 +21,40 @@ class AuthService:
 
     async def login(self, username: str, password: str) -> Optional[str]:
 
-        user = await self._user_repo.get_by_username(username)
-        if not user or not self._verify_password(password, user.clave):
-            log.info(
-                    f"Creenciales invalidas {username}!"
-                )
-            raise InvalidCredentialsException("Creenciales invalidas")
+        # Validación para superusuario
+        if username != Settings().API_USER_ADMINISTRATOR:
+            user = await self._user_repo.get_by_username(username)
+            if not user or not self._verify_password(password, user.clave):
+                log.info(f"Credenciales inválidas para {username}!")
+                raise InvalidCredentialsException("Credenciales inválidas")
 
-        if not user.estado:
-            raise HTTPException(status_code=400, detail='Usuario inactivo')
+            if not user.estado:
+                raise HTTPException(status_code=400, detail='Usuario inactivo')
 
+            return self.create_token(sub=user.nick_name, email=user.email, fullname=user.full_name, role=user.rol_nombre,is_active=user.estado)
+        else:
+            if not self._verify_password(password, Settings().API_PASSWORD_ADMINISTRATOR):
+                raise InvalidCredentialsException("Credenciales inválidas para superadmin")
+
+            return self.create_token(sub='superadmin', email='admin@metalteco.com', fullname='SysAdmin', role='SuperAdministrador', is_active=True)
+
+    @staticmethod
+    def create_token(sub: str, email: Optional[str], fullname: str, role:  Optional[str], is_active: bool) -> Optional[str]:
 
         try:
             token_data = {
-            'sub': user.nick_name,
-            'email': user.email,
-            'fullname': user.full_name,
-            "role" : user.rol_nombre,
-            'is_active': user.estado
+                'sub': sub,
+                'email': email,
+                'fullname': fullname,
+                'role': role,
+                'is_active': is_active
             }
-
-            access_token = JWTUtil.create_token(token_data)
-            return access_token
+            return JWTUtil.create_token(token_data)
         except Exception as e:
+            log.error(f"Error formando token: {e}")
             raise HTTPException(
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                detail="Creación de token fallída"
+                detail="Creación de token fallida"
             )
 
     async def refresh_token(self, refresh_token: str) -> Optional[str]:
@@ -66,8 +75,8 @@ class AuthService:
             "role" : user.rol_nombre,
             'is_active': user.estado
             }
-            refresh_token = JWTUtil.create_refresh_token(token_data)
-            return refresh_token
+
+            return JWTUtil.create_refresh_token(token_data)
         except Exception as e:
             log.error(f"Error refreshing token: {e}")
             raise HTTPException(
@@ -127,21 +136,23 @@ s
         user = await user_repository.get_by_username(username)
         if user is None:
             raise InvalidCredentialsException
+
+        if not user.estado:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Usuario inactivo. Contacte al administrador."
+            )
         return user
 
-    async def get_current_active_user(
-            self: Usuarios = Depends(get_current_user)
-    ) -> Usuarios:
-        if not self.is_active:
+    async def get_current_admin_user(self: Usuarios = Depends(get_current_user)):
+        if self.rol_id != 1:
             raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Inactive user"
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="No tienes permisos de administrador"
             )
         return self
 
-    async def get_current_super_user(
-            self: Usuarios = Depends(get_current_user)
-    ) -> Usuarios:
+    async def get_current_super_user(self: Usuarios = Depends(get_current_user)) -> Usuarios:
         if not self.rol_id == 4:
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,

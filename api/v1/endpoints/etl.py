@@ -2,7 +2,6 @@ from typing import List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, status, Query
 from fastapi_pagination import Page, Params
-from fastapi_pagination.ext.sqlalchemy import paginate
 from core.di.service_injection import get_viajes_service, get_mat_service, get_alm_service, get_mov_service, \
     get_pesadas_service, get_transacciones_service, get_flotas_service
 
