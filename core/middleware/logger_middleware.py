@@ -24,8 +24,7 @@ class LoggerMiddleware(BaseHTTPMiddleware):
         None
     """
 
-    @staticmethod
-    async def dispatch(request, call_next) -> Response:
+    async def dispatch(self, request, call_next) -> Response:
         """
         Public asynchronous method responsible for logging HTTP requests and responses.
 

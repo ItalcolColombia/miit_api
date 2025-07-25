@@ -44,13 +44,18 @@ class ErrorResponse(BaseResponse):
         }
 
 class ValidationErrorResponse(BaseResponse):
+    details: Optional[List[str]]
+
+
     class Config:
         validate_by_name = True
         json_schema_extra = {
             "example": {
                 "status_code": "422",
-                "status_name": "Entidad no procesable",
-                "message": "Errror de validación",
-                "data": [{"loc": ["body", "field_name"], "msg": "Field required", "type": "value_error.missing"}],
+                "status_name": "Unprocessable Content",
+                "message": "Errrr de validacion",
+                "details": [
+                    "Id: Field required",
+                ],
             }
         }

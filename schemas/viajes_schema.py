@@ -59,7 +59,7 @@ class ViajeBuqueExtCreate(BaseModel):
     tipo: str = Field(..., max_length=6)
     referencia: str = Field(..., max_length=300)
     puerto_id: str = Field(..., max_length=300)
-    peso_meta: Decimal = Field(..., max_digits=10, decimal_places=2)
+    peso_meta: Optional[Decimal] = 0
     fecha_llegada: Optional[datetime] = None
     fecha_salida: Optional[datetime] = None
     estado: Optional[bool] = None
@@ -72,7 +72,7 @@ class ViajeBuqueExtCreate(BaseModel):
 
     @field_validator('peso_meta')
     def peso_positivo(cls, value):
-        if value <= 0:
+        if value < 0:
             raise ValueError("Peso debe ser positivo")
         return value
 
@@ -100,7 +100,7 @@ class ViajeCamionExtCreate(BaseModel):
     material_name: Optional[str] = None
     viaje_origen: Optional[str] = None
     despacho_directo: Optional[bool] = None
-    puntos: int
+    puntos: Optional[int] = 1
 
     @field_validator('material_name')
     def material_name_not_empty(cls, value):
@@ -137,8 +137,7 @@ class ViajeCamionExtCreate(BaseModel):
                 "fecha_salida": "2025-04-29T14:30:00",
                 "material_name": "MAIZ USA",
                 "viaje_origen": "VOY2024044",
-                "despacho_directo": True,
-                "puntos": 6
+                "despacho_directo": True
             }
         }
 
