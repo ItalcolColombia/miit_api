@@ -3,11 +3,11 @@ from fastapi import APIRouter, Depends, HTTPException, status, Query
 from datetime import datetime
 
 from schemas.pesadas_schema import PesadaResponse, VPesadasAcumResponse
+from services.auth_service import AuthService
 from utils.response_util import ResponseUtil
 from core.di.service_injection import get_viajes_service, get_pesadas_service
 from services.viajes_service import ViajesService
 from services.pesadas_service import PesadasService
-#from api.v1.middleware.auth_middleware import get_current_user
 from utils.schema_util import CreateResponse, ErrorResponse, ValidationErrorResponse, UpdateResponse
 from schemas.viajes_schema import (
     ViajesResponse,
@@ -25,8 +25,8 @@ log = LoggerUtil()
 
 
 
-response_json = ResponseUtil().json_response
-router = APIRouter(prefix="/integrador", tags=["Integrador"])
+response_json = ResponseUtil.json_response
+router = APIRouter(prefix="/integrador", tags=["Integrador"], dependencies=[Depends(AuthService.get_current_user)])
 
 
 @router.post("/buque-registro/",
@@ -43,20 +43,27 @@ async def create_buque(
         service: ViajesService = Depends(get_viajes_service)):
     try:
 
-        await service.create_buque_nuevo(flota)
-        return response_json(
+        buque = await service.create_buque_nuevo(flota)
+        if buque:
+            raise HTTPException(
+                status_code=400,
+                detail="The user with this email already exists in the system.",
+            )
+
+
+        return ResponseUtil.json_response(
             status_code=status.HTTP_201_CREATED,
             message=f"registro exitoso",
         )
 
     except HTTPException as http_exc:
-        return response_json(
+        return ResponseUtil.json_response(
             status_code=http_exc.status_code,
             message=http_exc.detail
         )
 
     except Exception as e:
-        return response_json(
+        return ResponseUtil.json_response(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             message=str(e)
         )
@@ -106,7 +113,7 @@ async def set_load(
             description="Evento realizado por el operador post confirmación del arribo de la motonave a traves de la interfaz de PBCU.",
             response_model=UpdateResponse,
             responses={
-                status.HTTP_400_BAD_REQUEST: {"model": ErrorResponse},  # Use CustomErrorResponse
+                status.HTTP_400_BAD_REQUEST: {"model": ErrorResponse},
                 status.HTTP_422_UNPROCESSABLE_ENTITY: {"model": ValidationErrorResponse},
             })
 async def buque_in(
@@ -138,7 +145,7 @@ async def buque_in(
             description="Evento realizado por el operador post confirmación de la finalización de la motonave a traves de la interfaz de PBCU.",
             response_model=UpdateResponse,
             responses={
-                status.HTTP_400_BAD_REQUEST: {"model": ErrorResponse},  # Use CustomErrorResponse
+                status.HTTP_400_BAD_REQUEST: {"model": ErrorResponse},
                 status.HTTP_422_UNPROCESSABLE_ENTITY: {"model": ValidationErrorResponse},
             })
 async def buque_out(
@@ -170,7 +177,7 @@ async def buque_out(
              description="Evento realizado por el operador con la cita de enturnamiento notificada a traves de la interfaz de PBCU.",
              response_model=CreateResponse,
              responses={
-                 status.HTTP_400_BAD_REQUEST: {"model": ErrorResponse},  # Use CustomErrorResponse
+                 status.HTTP_400_BAD_REQUEST: {"model": ErrorResponse},
                  status.HTTP_422_UNPROCESSABLE_ENTITY: {"model": ValidationErrorResponse},
              })
 async def create_camion(

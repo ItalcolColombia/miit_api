@@ -75,3 +75,43 @@ class ExceptionHandler:
                         "message": "Invalid JSON format. Ensure the request body is correctly formatted.",
                     },
                 )
+        # Si no es del tipo invalid json se asume que es error de validación
+        return await ExceptionHandler.validation_error_handler(request, exc)
+
+    @staticmethod
+    async def validation_error_handler(
+            request: Request,
+            exc: RequestValidationError,
+    ) -> JSONResponse | None:
+        """
+               Static asynchronous method responsible for handling validation errors in the request body.
+
+               This method intercepts `RequestValidationError` caused by missing fields,
+               type errors, or constraints in the request data, and returns a structured JSON response
+               detailing the validation issues for each field.
+
+               Args:
+                   request (Request): The incoming HTTP request that triggered the exception.
+                   exc (RequestValidationError): The exception instance containing validation errors.
+
+               Returns:
+                   JSONResponse | None: A JSON response containing the error details.
+        """
+        status_code = status.HTTP_422_UNPROCESSABLE_ENTITY
+
+        error_messages = []
+        for error in exc.errors():
+            field = error["loc"][-1]
+            message = error["msg"]
+            error_messages.append(f"{field.capitalize()}: {message}")
+
+        return JSONResponse(
+            status_code=status_code,
+            content={
+                "status_code": str(status_code),
+                "status_name": HTTPStatus(status_code).phrase,
+                "message": "Error de validación",
+                "details": error_messages
+            },
+        )
+
