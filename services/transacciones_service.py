@@ -3,7 +3,7 @@ from typing import List, Optional
 from fastapi_pagination import Page, Params
 from sqlalchemy import select
 
-from core.exceptions.entity_exceptions import EntityNotFoundException
+from core.exceptions.entity_exceptions import EntityNotFoundException, EntityAlreadyRegisteredException
 from database.models import Transacciones
 from schemas.movimientos_schema import MovimientosCreate, MovimientosResponse
 from schemas.transacciones_schema import TransaccionResponse, TransaccionCreate, TransaccionUpdate
@@ -45,7 +45,7 @@ class TransaccionesService:
 
         return await self._repo.get_all_paginated(query=query, params=params)
 
-    async def create_transaccion_if_not_exists(self, tran_data: TransaccionCreate) -> tuple[TransaccionResponse, bool]:
+    async def create_transaccion_if_not_exists(self, tran_data: TransaccionCreate) -> TransaccionResponse:
         """
                Check if a Transacción with same Viaje ID already exists. If not, create a new one.
 
@@ -53,87 +53,72 @@ class TransaccionesService:
                    tran_data: The data set in the schema of Transacción object.
 
                Returns:
-                   A tuple with the existing or newly created Transacción and a boolean (True if it was created, False if it already existed).
+                   An existing or newly created Transacción.
            """
-        try:
-            # Intentar encontrar una transacción existente por el id de referencia de un viaje
-            tran_existente = await self._repo.find_one(
-                viaje_id=tran_data.viaje_id
-            )
+        # 1. Validar si transacción ya existe
+        if await self._repo.find_one(viaje_id=tran_data.viaje_id):
+            raise EntityAlreadyRegisteredException(f"Ya existe una transacción del viaje '{tran_data.viaje_id}'")
 
-            if tran_existente:
-                log.info(f"Transacción ya existente con ID: {tran_existente.id}, "
-                         f"Viaje ID: {tran_existente.viaje_id}")
-                return tran_existente, False
-            else:
-                tran_nueva = await self._repo.create(tran_data)
-                log.info(f"Se creó nueva transacción con ID: {tran_nueva.id}, "
-                         f"Viaje ID: {tran_nueva.viaje_id}")
-                return tran_nueva, True
-        except Exception as e:
-            log.error(f"Error al crear transacción "
-                      f"Viaje ID: {tran_data.viaje_id} - {e}")
-            raise
+        # 2. Se crea transacción si esta no existe en la BD
+        tran_nueva = await self._repo.create(tran_data)
+        return tran_nueva
 
-    # async def transaccion_finalizar(self, tran_id: int) -> tuple[TransaccionResponse, MovimientosResponse]:
-    #     """
-    #                   Updates the current 'estado' for an active Transaction.
-    #
-    #                   This method updates the 'estado' value of a Transaction in the database.
-    #                   Also creates the corresponding 'movimiento' of the transaction.
-    #
-    #                   Args:
-    #                       tran_id: The transaction register whose 'estado' will change.
-    #
-    #                   Returns:
-    #                       The transaction object after it have been finished.
-    #
-    #                   Raises:
-    #                       Exception: If an error occurs during the operation.
-    #     """
-    #     async with self._repo.db.begin():  # Inicia una transacción de base de datos
-    #
-    #         # 1. Obtener la transacción y validar su estado
-    #         existing_transaccion = await self._repo.get_by_id(tran_id)
-    #         if not existing_transaccion:
-    #             log.warning(f"Finalizar Transacción Fallida: Transacción {tran_id} no encontrada.")
-    #             raise BaseException(f"La transacción con ID '{tran_id}' no fue encontrada.")
-    #
-    #         if existing_transaccion.estado != "Activa":
-    #             log.warning(
-    #                 f"Finalizar Transacción Fallida: Transacción {tran_id} no está en estado 'Activa' (estado actual: {existing_transaccion.estado}).")
-    #             raise BaseException(
-    #                 f"La transacción no pudo finalizar porque su estado actual es '{existing_transaccion.estado}'. Solo las transacciones 'Activa' pueden finalizarse.")
-    #
-    #         log.info(f"Transacción {tran_id} validada como 'Activa'. Procediendo a finalizar.")
-    #
-    #         # 2. Se prepara los datos para actualizar la transacción
-    #         transaccion_update_data = TransaccionUpdate(
-    #             estado="Finalizada",
-    #             fecha_fin=datetime.now()
-    #         )
-    #
-    #         # 3. Se actualiza la transacción en la base de datos
-    #         updated_transaccion = await self._repo.update(
-    #             tran_id,
-    #             transaccion_update_data
-    #         )
-    #
-    #         # Verificación de seguridad, aunque si get_by_id encontró, update debería funcionar
-    #         if not updated_transaccion:
-    #             log.error(f"Fallo inesperado al actualizar la transacción {tran_id} a 'Finalizada'.")
-    #             raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-    #                                 detail="Error interno al actualizar la transacción.")
-    #
-    #         log.info(f"Transacción {transaccion_id} actualizada a 'Finalizada'.")
-    #
-    #         # 4. Preparar y crear el movimiento asociado
-    #         movimiento_data.transaccion_id = transaccion_id
-    #
-    #
-    #         new_movimiento = await self.movimiento_service.create_movimiento(movimiento_data)
-    #         log.info(f"Movimiento creado exitosamente para transacción {transaccion_id} con ID: {new_movimiento.id}.")
-    #
-    #         # 5. Retornar los resultados
-    #         return updated_transaccion, new_movimiento
-    #
+    async def transaccion_finalizar(self, tran_id: int) -> TransaccionResponse:
+        """
+              Updates the current 'estado' for an active Transaction.
+
+              This method updates the 'estado' value of a Transaction in the database.
+              Also creates the corresponding 'movimiento' of the transaction.
+
+              Args:
+                  tran_id: The transaction register whose 'estado' will change.
+
+              Returns:
+                  The transaction object after it have been finished.
+
+              Raises:
+                  Exception: If an error occurs during the operation.
+        """
+        # 1. Obtener la transacción y validar su estado
+
+        tran = await self._repo.get_by_id(tran_id)
+        if tran is None:
+            raise EntityNotFoundException(f"La transacción con ID '{tran_id}' no fue encontrada.")
+
+        if tran.estado != "Activa":
+            raise BaseException(f"La transacción no pudo finalizar porque su estado es '{tran.estado}'. Solo las transacciones 'Activa' pueden finalizarse.")
+
+        # 2. Se prepara los datos para actualizar la transacción
+        transaccion_update_data = TransaccionUpdate(estado="Finalizada", fecha_fin=datetime.now())
+
+        # 3. Se actualiza la transacción en la base de datos
+        updated_transaccion = await self._repo.update(
+            tran_id,
+            transaccion_update_data
+        )
+
+        # # 4. Verificación de update
+        # if not updated_transaccion:
+        #     raise BaseException(f"Error al actualizar la transacción")
+        #
+        # #5. Se consulta saldo anterior
+        #
+        # # 5. Preparar y crear el movimiento asociado
+        # movimiento_data = MovimientosCreate(
+        #     transaccion_id= tran_id,
+        #     almacenamiento_id=tran.origen_id,
+        #     material_id=tran.material_id,
+        #     tipo='Entrada',
+        #     accion='Automático',
+        #     peso=tran.peso,
+        #     saldo_anterior=
+        #     saldo_nuevo=
+        #
+        # )
+        #
+        #
+        # new_movimiento = await self.movimiento_service.create_movimiento(movimiento_data)
+
+        # 5. Retornar los resultados
+        return updated_transaccion
+

@@ -146,13 +146,13 @@ class JWTUtil:
             )
             return payload
         except ExpiredSignatureError:
-            raise UnauthorizedToken("Token expired!")
+            raise UnauthorizedToken("El token ha expirado.")
         except InvalidTokenError:
-            raise UnauthorizedToken("Invalid token!")
+            raise UnauthorizedToken("El token es inválido.")
         except InvalidKeyError:
-            raise UnauthorizedToken("Invalid signing key!")
+            raise UnauthorizedToken("La clave de firma es inválida.")
         except Exception as e:
-            log.error(f"Unexpected error in verify_token: {e}")
+            log.error(f"Error inesperado al validar token: {e}")
             raise HTTPException(
                 status_code=500, detail=f"JWT decoding error: {str(e)}"
             )
