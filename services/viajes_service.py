@@ -122,12 +122,12 @@ class ViajesService:
         # 3. Obtener flota (ya creada o existente)
         flota = await self.flotas_service.get_flota_by_ref(ref=viaje_create.referencia)
         if not flota:
-            raise EntityNotFoundException(f"No se pudo obtener flota con tipo '{viaje_create.tipo}' y ref '{viaje_create.referencia}'",0)
+            raise EntityNotFoundException(f"No se pudo obtener flota con tipo '{viaje_create.tipo}' y ref '{viaje_create.referencia}'")
 
         # 4. Se obtiene material_id basado en el nombre del material
         material_id = await self.mat_service.get_mat_by_name(viaje_create.material_name)
         if material_id is None:
-            raise EntityNotFoundException(f"Material '{viaje_create.material_name}' no existe",0)
+            raise EntityNotFoundException(f"Material '{viaje_create.material_name}' no existe")
 
         # 5. Se ajusta el schema al requerido
         viaje_data = viaje_create.model_dump(exclude={"referencia","puntos"})
@@ -147,11 +147,11 @@ class ViajesService:
     async def chg_estado_buque(self, puerto_id: str, estado: bool) -> FlotasResponse:
         viaje = await self.get_viaje_by_puerto_id(puerto_id)
         if not viaje:
-            raise EntityNotFoundException(f"Viaje con puerto_id: '{puerto_id}' no existe",0)
+            raise EntityNotFoundException(f"Viaje con puerto_id: '{puerto_id}' no existe")
 
         flota = await self.flotas_service.get_flota(viaje.flota_id)
         if not flota:
-            raise EntityNotFoundException(f"Flota con id '{viaje.flota_id}' no existe",0)
+            raise EntityNotFoundException(f"Flota con id '{viaje.flota_id}' no existe")
 
         updated_buque = await self.flotas_service.update_status(flota, estado)
         return updated_buque
@@ -159,13 +159,13 @@ class ViajesService:
     async def chg_camion_ingreso(self, puerto_id: str, fecha: datetime) -> ViajesResponse:
         viaje = await self.get_viaje_by_puerto_id(puerto_id)
         if not viaje:
-            raise EntityNotFoundException(f"Viaje con puerto_id: '{puerto_id}' no existe",0)
+            raise EntityNotFoundException(f"Viaje con puerto_id: '{puerto_id}' no existe")
 
         flota = await self.flotas_service.get_flota(viaje.flota_id)
         if not flota:
-            raise EntityNotFoundException(f"Flota con id '{viaje.flota_id}' no existe",0)
+            raise EntityNotFoundException(f"Flota con id '{viaje.flota_id}' no existe")
         elif flota.tipo != "camion":
-            raise EntityNotFoundException(f"La flota es del tipo  '{flota.tipo}' diferente al tipo esperado 'camion'",0)
+            raise EntityNotFoundException(f"La flota es del tipo  '{flota.tipo}' diferente al tipo esperado 'camion'")
 
         update_data = ViajeUpdate(fecha_llegada=fecha)
         updated = await self._repo.update(viaje.id, update_data)
@@ -175,13 +175,13 @@ class ViajesService:
     async def chg_camion_salida(self, puerto_id: str, fecha: datetime, peso:Decimal) -> ViajesResponse:
         viaje = await self.get_viaje_by_puerto_id(puerto_id)
         if not viaje:
-            raise EntityNotFoundException(f"Viaje con puerto_id: '{puerto_id}' no existe",0)
+            raise EntityNotFoundException(f"Viaje con puerto_id: '{puerto_id}' no existe")
 
         flota = await self.flotas_service.get_flota(viaje.flota_id)
         if not flota:
-            raise EntityNotFoundException(f"Flota con id '{viaje.flota_id}' no existe",0)
+            raise EntityNotFoundException(f"Flota con id '{viaje.flota_id}' no existe")
         elif flota.tipo != "camion":
-            raise EntityNotFoundException(f"La flota es del tipo  '{flota.tipo}' diferente al tipo esperado 'camion'",0)
+            raise EntityNotFoundException(f"La flota es del tipo  '{flota.tipo}' diferente al tipo esperado 'camion'")
 
         update_data = ViajeUpdate(fecha_salida=fecha, peso_real=peso)
         updated = await self._repo.update(viaje.id, update_data)
@@ -192,22 +192,22 @@ class ViajesService:
         # Verifica que el viaje asociado exista
         viaje = await self.get_viaje_by_puerto_id(bl_input.puerto_id)
         if not viaje:
-            raise EntityNotFoundException(f"No existe un viaje con puerto_id='{bl_input.puerto_id}'",0)
+            raise EntityNotFoundException(f"No existe un viaje con puerto_id='{bl_input.puerto_id}'")
 
         # Verifica que no exista un BL con el mismo número
         existing_bl = await self.bls_service.get_bl_by_num(bl_input.no_bl)
         if existing_bl:
-            raise EntityNotFoundException(f"El número de BL '{bl_input.no_bl}' ya fue registrado",0)
+            raise EntityAlreadyRegisteredException(f"El número de BL '{bl_input.no_bl}' ya fue registrado")
 
         # Obtiene el ID del material
         material_id = await self.mat_service.get_mat_by_name(bl_input.material_name)
         if material_id is None:
-            raise EntityNotFoundException(f"El material '{bl_input.material_name}' no existe",0)
+            raise EntityNotFoundException(f"El material '{bl_input.material_name}' no existe")
 
         # Obtiene el ID del cliente
         cliente_find = await self.clientes_service.get_cliente_by_name(bl_input.cliente_name)
         if cliente_find is None:
-            raise EntityNotFoundException(f"El cliente '{bl_input.cliente_name}' no existe",0)
+            raise EntityNotFoundException(f"El cliente '{bl_input.cliente_name}' no existe")
 
         # Prepara los datos para la creación
         bl_data = bl_input.model_dump(exclude={"material_name", "puerto_id", "cliente_name"})
@@ -223,7 +223,6 @@ class ViajesService:
 
         # Retorna la entidad creada
         created_bl = await self.bls_service.get_bl_by_num(bl_input.no_bl)
-        print(type(created_bl))
         return BlsResponse.model_validate(created_bl)
 
 

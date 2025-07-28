@@ -41,29 +41,25 @@ router = APIRouter(prefix="/integrador", tags=["Integrador"], dependencies=[Depe
 async def create_buque(
         flota: ViajeBuqueExtCreate,
         service: ViajesService = Depends(get_viajes_service)):
+    log.info(f"Payload recibido: Buque {flota}")
     try:
-
-        buque = await service.create_buque_nuevo(flota)
-        if buque:
-            raise HTTPException(
-                status_code=400,
-                detail="The user with this email already exists in the system.",
-            )
-
-
-        return ResponseUtil.json_response(
+        await service.create_buque_nuevo(flota)
+        log.info(f"Buque {flota.puerto_id} registrado")
+        return response_json(
             status_code=status.HTTP_201_CREATED,
             message=f"registro exitoso",
         )
 
     except HTTPException as http_exc:
-        return ResponseUtil.json_response(
+        log.error(f"Buque {flota.puerto_id} no registrado: {http_exc.detail}")
+        return response_json(
             status_code=http_exc.status_code,
             message=http_exc.detail
         )
 
     except Exception as e:
-        return ResponseUtil.json_response(
+        log.error(f"Error al procesar petición de registro de Buque {flota.puerto_id}: {e}")
+        return response_json(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             message=str(e)
         )
@@ -83,24 +79,22 @@ async def set_load(
         service: ViajesService = Depends(get_viajes_service)):
     log.info(f"Payload recibido: {bl}")
     try:
-
-        log.info("Iniciando creación de carga de buque")
         await service.create_buque_load(bl)
-        log.info("Carga de buque completada")
+        log.info(f"BL {bl.no_bl} de buque {bl.puerto_id} registrado")
         return response_json(
             status_code=status.HTTP_201_CREATED,
             message=f"registro exitoso",
         )
 
     except HTTPException as http_exc:
+        log.error(f"BL {bl.no_bl} de buque {bl.puerto_id} no registrado: {http_exc.detail}")
         return response_json(
             status_code=http_exc.status_code,
             message=http_exc.detail
         )
 
-
     except Exception as e:
-        log.error(f"Error al procesar petición de registro BL: {e}")
+        log.error(f"Error al procesar petición de registro BL {bl.no_bl} de buque {bl.puerto_id}: {e}")
         return response_json(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             message=str(e)
@@ -119,21 +113,24 @@ async def set_load(
 async def buque_in(
         puerto_id: str,
         service: ViajesService = Depends(get_viajes_service)):
+    log.info(f"Payload recibido: Flota {puerto_id} - Arribo")
     try:
-
         await service.chg_estado_buque(puerto_id, True)
+        log.info(f"Arribo de buque {puerto_id} marcado exitosamente.")
         return response_json(
             status_code=status.HTTP_200_OK,
             message=f"estado actualizado",
         )
 
     except HTTPException as http_exc:
+        log.error(f"El arribo de buque {puerto_id} no pudo marcarse: {http_exc.detail}")
         return response_json(
             status_code=http_exc.status_code,
             message=http_exc.detail
         )
 
     except Exception as e:
+        log.error(f"Error al procesar marcado de arribo de buque {puerto_id}: {e}")
         return response_json(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             message=str(e)
@@ -151,21 +148,25 @@ async def buque_in(
 async def buque_out(
         puerto_id: str,
         service: ViajesService = Depends(get_viajes_service)):
+    log.info(f"Payload recibido: Flota {puerto_id} - Partida")
     try:
 
         await service.chg_estado_buque(puerto_id, False)
+        log.info(f"La Partida de buque {puerto_id} marcada exitosamente.")
         return response_json(
             status_code=status.HTTP_200_OK,
             message=f"estado actualizado",
         )
 
     except HTTPException as http_exc:
+        log.error(f"La partida de buque {puerto_id} no pudo marcarse: {http_exc.detail}")
         return response_json(
             status_code=http_exc.status_code,
             message=http_exc.detail
         )
 
     except Exception as e:
+        log.error(f"Error al procesar marcado de partida de buque {puerto_id}: {e}")
         return response_json(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             message=str(e)
@@ -181,23 +182,27 @@ async def buque_out(
                  status.HTTP_422_UNPROCESSABLE_ENTITY: {"model": ValidationErrorResponse},
              })
 async def create_camion(
-        camion: ViajeCamionExtCreate,
+        flota: ViajeCamionExtCreate,
         service: ViajesService = Depends(get_viajes_service)):
+    log.info(f"Payload recibido: Flota {flota}")
     try:
 
-        await service.create_camion_nuevo(camion)
+        await service.create_camion_nuevo(flota)
+        log.info(f"Flota {flota.puerto_id} registrada")
         return response_json(
             status_code=status.HTTP_201_CREATED,
             message=f"registro exitoso",
         )
 
     except HTTPException as http_exc:
+        log.error(f"Flota {flota.puerto_id} no registrada: {http_exc.detail}")
         return response_json(
             status_code=http_exc.status_code,
             message=http_exc.detail
         )
 
     except Exception as e:
+        log.error(f"Error al procesar petición de registro de Flota {flota.puerto_id}: {e}")
         return response_json(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             message=str(e)
@@ -208,28 +213,32 @@ async def create_camion(
             description="Evento realizado por el operador post confirmación del ingreso del camión a báscula a traves de la interfaz de PBCU.",
             response_model=UpdateResponse,
             responses={
-                status.HTTP_400_BAD_REQUEST: {"model": ErrorResponse},  # Use CustomErrorResponse
+                status.HTTP_400_BAD_REQUEST: {"model": ErrorResponse},
                 status.HTTP_422_UNPROCESSABLE_ENTITY: {"model": ValidationErrorResponse},
             })
 async def in_camion(
         puerto_id: str,
         fecha_ingreso: datetime,
         service: ViajesService = Depends(get_viajes_service)):
+    log.info(f"Payload recibido: Flota {puerto_id} - Ingreso ")
     try:
 
         await service.chg_camion_ingreso(puerto_id, fecha_ingreso)
+        log.info(f"Ingreso de flota {puerto_id} marcada exitosamente.")
         return response_json(
             status_code=status.HTTP_200_OK,
             message=f"Registró de cita de camión actualizada exitosamente",
         )
 
     except HTTPException as http_exc:
+        log.error(f"El ingreso de flota {puerto_id} no pudo marcarse: {http_exc.detail}")
         return response_json(
             status_code=http_exc.status_code,
             message=http_exc.detail
         )
 
     except Exception as e:
+        log.error(f"Error al procesar marcado de ingreso de Flota {puerto_id}: {e}")
         return response_json(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             message=str(e)
@@ -241,30 +250,33 @@ async def in_camion(
             description="Evento realizado por el operador post confirmación del egreso del camión a báscula a traves de la interfaz de PBCU.",
             response_model=UpdateResponse,
             responses={
-                status.HTTP_400_BAD_REQUEST: {"model": ErrorResponse},  # Use CustomErrorResponse
+                status.HTTP_400_BAD_REQUEST: {"model": ErrorResponse},
                 status.HTTP_422_UNPROCESSABLE_ENTITY: {"model": ValidationErrorResponse},
-                # Use ValidationErrorResponse
             })
 async def out_camion(
         puerto_id: str,
         fecha_salida: datetime,
         peso_real: Decimal,
         service: ViajesService = Depends(get_viajes_service)):
+    log.info(f"Payload recibido: Camion {puerto_id} - Salida")
     try:
 
         await service.chg_camion_salida(puerto_id, fecha_salida, peso_real)
+        log.info(f"Salida de camion {puerto_id} marcada exitosamente.")
         return response_json(
             status_code=status.HTTP_200_OK,
             message=f"Registro cita camión actualizada exitosamente",
         )
 
     except HTTPException as http_exc:
+        log.error(f"La salida de camion {puerto_id} no pudo marcarse: {http_exc.detail}")
         return response_json(
             status_code=http_exc.status_code,
             message=http_exc.detail
         )
 
     except Exception as e:
+        log.error(f"Error al procesar marcado de salida de camion {puerto_id}: {e}")
         return response_json(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             message=str(e)
@@ -284,17 +296,22 @@ async def get_acum_pesadas(
         service: PesadasService = Depends(get_pesadas_service),
         puerto_id: str = None):
     try:
-        pesada = await service.get_pesada_acumulada(puerto_id)
+        await service.get_pesada_acumulada(puerto_id)
+        log.info(f"Consulta de pesadas para flota {puerto_id} realizada exitosamente.")
+        return response_json(
+            status_code=status.HTTP_200_OK,
+            message=f"estado actualizado",
+        )
 
-        if not pesada:
-            return response_json(
-                status_code=status.HTTP_404_NOT_FOUND,
-                message="No se encontraron registros"
-            )
-
-        return pesada
+    except HTTPException as http_exc:
+        log.error(f"Consulta de flota {puerto_id} no pudo realizarse: {http_exc.detail}")
+        return response_json(
+            status_code=http_exc.status_code,
+            message=http_exc.detail
+        )
 
     except Exception as e:
+        log.error(f"Error al consultar pesadas de flota {puerto_id}: {e}")
         return response_json(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             message=str(e)

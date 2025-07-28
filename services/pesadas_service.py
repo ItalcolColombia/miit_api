@@ -2,6 +2,8 @@ from typing import List, Optional
 from fastapi_pagination import Page, Params
 
 from sqlalchemy import select
+
+from core.exceptions.entity_exceptions import EntityNotFoundException, EntityAlreadyRegisteredException
 from database.models import Pesadas, VPesadasAcumulado
 from schemas.pesadas_schema import PesadaResponse, PesadaCreate, PesadaUpdate, VPesadasAcumResponse
 from repositories.pesadas_repository import PesadasRepository
@@ -52,7 +54,7 @@ class PesadasService:
         pesadas = await self._repo.get_all()
         return [PesadaResponse.model_validate(p) for p in pesadas]
 
-    async def create_pesada_if_not_exists(self, pesada_data: PesadaCreate) -> tuple[PesadaResponse, bool]:
+    async def create_pesada_if_not_exists(self, pesada_data: PesadaCreate) -> PesadaResponse:
         """
                Check if a Pesada with same consec already exists. If not, create a new one.
 
@@ -60,30 +62,27 @@ class PesadasService:
                    pesada_data: The data set in the schema of Pesada object.
 
                Returns:
-                   A tuple with the existing or newly created Pesada and a boolean (True if it was created, False if it already existed).
+                   An existing or newly created Pesada.
        """
-        try:
 
-         pesada_existente = await self._repo.find_one(
-                transaccion_id=pesada_data.transaccion_id,
-                consecutivo=pesada_data.consecutivo
-        )
+        # 1. Validar si transacción ya existe
+        if await self._repo.find_one(transaccion_id=pesada_data.transaccion_id,
+                                     consecutivo=pesada_data.consecutivo
+        ):
+            raise EntityAlreadyRegisteredException(f"En la transacción {pesada_data.transaccion_id} ya existe una pesada con ese consecutivo '{pesada_data.consecutivo}'")
 
-         if pesada_existente:
-             log.info(f"Pesada ya existente con consecutivo "
-                      f": {pesada_existente.consecutivo}")
-             return pesada_existente, False
-         else:
-             pesada_nueva = await self._repo.create(pesada_data)
-             log.info(f"Se creó flota: {pesada_nueva.transaccion_id} {pesada_nueva.consecutivo}")
-             return pesada_nueva, True
-        except Exception as e:
-            log.error(f"Error al crear la pesada: {pesada_data.consecutivo} - {e}")
-            raise
+        # 2. Se crea transacción si esta no existe en la BD
+        pesada_nueva = await self._repo.create(pesada_data)
+        return pesada_nueva
 
     async def get_pesada_acumulada(self, puerto_id: [str]) -> VPesadasAcumResponse:
         """
              Get sum of pesadas related to a puerto_id.
              Returns an object with filtered applied.
              """
-        return await self._repo.get_sumatoria_pesadas(puerto_id)
+        pesada = await self._repo.get_sumatoria_pesadas(puerto_id)
+
+        if pesada is None:
+            raise EntityNotFoundException(f"No se encontraron registros de pesadas para la flota '{puerto_id}'")
+
+        return pesada

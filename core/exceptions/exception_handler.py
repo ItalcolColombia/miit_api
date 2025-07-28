@@ -5,6 +5,7 @@ from http import HTTPStatus
 from fastapi import HTTPException, Request, status
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
+from starlette.exceptions import HTTPException as StarletteHTTPException
 
 
 class ExceptionHandler:
@@ -20,13 +21,15 @@ class ExceptionHandler:
 
     @staticmethod
     async def http_exception_handler(
-        request: Request, exc: HTTPException
+        request: Request,  exc: StarletteHTTPException
     ) -> JSONResponse | None:
         """
         Static asynchronous method responsible for handling generic HTTP exceptions.
 
         This method intercepts `HTTPException` errors raised in FastAPI and returns
-        a structured JSON response with relevant status codes and messages.
+        a structured JSON response with relevant status codes and messages. Therefore,
+        if the exception is a 404 error, it provides a custom message indicating
+        that the requested resource was not found.
 
         Args:
             request (Request): The incoming HTTP request that triggered the exception.
@@ -36,6 +39,16 @@ class ExceptionHandler:
             JSONResponse | None: A JSON response containing the error details.
         """
 
+        if exc.status_code == 404:
+            return JSONResponse(
+                status_code=404,
+                content={
+                    "status_code": str(exc.status_code),
+                    "status_name": HTTPStatus(exc.status_code).phrase,
+                    "message": "El endpoint solicitado no exite o la URL es incorrecta",
+                },
+            )
+        # Otros HTTPException se devuelven tal cual o personalizados
         return JSONResponse(
             status_code=exc.status_code,
             content={
@@ -72,7 +85,7 @@ class ExceptionHandler:
                     content={
                         "status_code": str(status_code),
                         "status_name": HTTPStatus(status_code).phrase,
-                        "message": "Invalid JSON format. Ensure the request body is correctly formatted.",
+                        "message": "No se puede procesar la solicitud debido a un formato incorrecto.",
                     },
                 )
         # Si no es del tipo invalid json se asume que es error de validación

@@ -171,7 +171,7 @@ class Movimientos(Base):
     tipo = Column(String(50), nullable=False)
     accion = Column(String(50), nullable=False)
     observacion = Column(String(50), nullable=True)
-    fecha_hora = Column(DateTime(timezone=False), nullable=False)
+    fecha_hora = Column(DateTime(timezone=False), nullable=False, default=func.now())
     peso = Column(Numeric(10,2), nullable=False)
     saldo_anterior = Column(Numeric(10,2), nullable=False)
     saldo_nuevo = Column(Numeric(10,2), nullable=True)

@@ -5,6 +5,7 @@ from fastapi import FastAPI, HTTPException
 from fastapi.exceptions import RequestValidationError
 from starlette.middleware.cors import CORSMiddleware
 from starlette.middleware.sessions import SessionMiddleware
+from starlette.exceptions import HTTPException as StarletteHTTPException
 from fastapi.middleware.gzip import GZipMiddleware
 from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
@@ -57,8 +58,8 @@ app = FastAPI(
 log = LoggerUtil()
 
 #Exceptions Handlers
-app.add_exception_handler(HTTPException, ExceptionHandler.http_exception_handler)  # type: ignore
-app.add_exception_handler(RequestValidationError, ExceptionHandler.json_decode_error_handler)  # type: ignore
+app.add_exception_handler(StarletteHTTPException , ExceptionHandler.http_exception_handler)
+app.add_exception_handler(RequestValidationError, ExceptionHandler.json_decode_error_handler)
 
 
 # Middlewares
