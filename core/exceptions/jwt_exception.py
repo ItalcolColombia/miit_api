@@ -2,10 +2,10 @@
 
 from fastapi import status
 
-from core.exceptions.base_exception import BaseException
+from core.exceptions.base_exception import BasedException
 
 
-class UnauthorizedToken(BaseException):
+class UnauthorizedToken(BasedException):
     """
     Class responsible for handling exceptions related to unauthorized tokens.
 

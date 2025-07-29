@@ -1,6 +1,6 @@
-from core.exceptions.base_exception import BaseException
+from core.exceptions.base_exception import BasedException
 
-class EntityAlreadyRegisteredException(BaseException):
+class EntityAlreadyRegisteredException(BasedException):
     """
        Class responsible for handling exceptions when an entity is not found.
 
@@ -18,7 +18,7 @@ class EntityAlreadyRegisteredException(BaseException):
         )
 
 
-class EntityNotFoundException(BaseException):
+class EntityNotFoundException(BasedException):
     """
       Class responsible for handling exceptions when an entity is not found.
 

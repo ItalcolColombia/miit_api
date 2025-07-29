@@ -1,10 +1,10 @@
 
 from fastapi import status
 
-from core.exceptions.base_exception import BaseException
+from core.exceptions.base_exception import BasedException
 
 
-class DatabaseConnectionException(BaseException):
+class DatabaseConnectionException(BasedException):
     """
     Class responsible for handling database connection failures.
 
@@ -35,7 +35,7 @@ class DatabaseConnectionException(BaseException):
         )
 
 
-class DatabaseInvalidConfigurationException(BaseException):
+class DatabaseInvalidConfigurationException(BasedException):
     """
     Class responsible for handling invalid or missing database configurations.
 
