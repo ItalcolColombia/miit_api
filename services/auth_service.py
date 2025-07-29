@@ -6,11 +6,11 @@ from database.models import Usuarios
 from utils.jwt_util import JWTUtil, JWTBearer
 from utils.any_utils import AnyUtils
 from repositories.usuarios_repository import UsuariosRepository
-from schemas.usuarios_schema import UsuariosResponse, Token
-from fastapi import Depends, HTTPException, Request, status
+from schemas.usuarios_schema import UsuariosResponse
+from fastapi import Depends, status
 from core.exceptions.auth_exception import InvalidCredentialsException, InvalidTokenCredentialsException
 from typing import Annotated
-from core.settings import Settings
+from core.settings import get_settings
 
 from utils.logger_util import LoggerUtil
 log = LoggerUtil()
@@ -36,7 +36,7 @@ class AuthService:
             BasedException: For other unexpected errors.
         """
         try:
-            if username != Settings.API_USER_ADMINISTRATOR:
+            if username != get_settings().API_USER_ADMINISTRATOR:
                 user = await self._user_repo.get_by_username(username)
                 if not user or not self._verify_password(password, user.clave):
                     log.info(f"Credenciales inválidas para {username}!")
@@ -56,7 +56,7 @@ class AuthService:
                     is_active=user.estado
                 )
             else:
-                if not self._verify_password(password, Settings.API_PASSWORD_ADMINISTRATOR):
+                if not self._verify_password(password, get_settings.API_PASSWORD_ADMINISTRATOR):
                     raise InvalidCredentialsException("Credenciales inválidas para superadmin")
 
                 return self.create_token(
@@ -73,7 +73,7 @@ class AuthService:
         except Exception as e:
             log.error(f"Error durante el login: {e}")
             raise BasedException(
-                message="Error inesperado durante la autenticación",
+                message=f"Error inesperado durante la autenticación {str(e)}",
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
 

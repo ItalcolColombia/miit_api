@@ -2,15 +2,15 @@ from cryptography.fernet import Fernet, InvalidToken
 from starlette import status
 
 from core.exceptions.base_exception import BasedException
-from core.utils.encryption_process import EncryptionProcess
-from core.settings import Settings
+from core.contracts import encryption
+from core.settings import get_settings
 from utils.logger_util import LoggerUtil
 
-
-SALT = Settings.ENCRYPTION_KEY
+SALT = get_settings().ENCRYPTION_KEY
 log = LoggerUtil()
 
-class EncryptionService(EncryptionProcess):
+
+class EncryptionService:
     def __init__(self):
         self.cipher = Fernet(SALT.encode())
 

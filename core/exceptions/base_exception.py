@@ -12,7 +12,7 @@ class BasedException(HTTPException):
 
     Class Args:
         message (str): The error message describing the exception.
-        status_code (int): The HTTP status code associated with the exception (default: 400 Bad Request).
+        status_code (int): The HTTP status code associated with the exception.
 
     """
 

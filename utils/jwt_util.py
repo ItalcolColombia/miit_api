@@ -11,23 +11,44 @@ from jwt.exceptions import (
     InvalidTokenError,
 )
 
-from core.settings import Settings
+from core.exceptions.base_exception import BasedException
+from core.settings import get_settings
 from core.exceptions.jwt_exception import UnauthorizedToken
 from utils.logger_util import LoggerUtil
 
 log = LoggerUtil()
 
-# Env variables Setup
-JWT_ACCESS_TOKEN_EXPIRE_MINUTES = Settings().JWT_ACCESS_TOKEN_EXPIRE_MINUTES
-JWT_REFRESH_TOKEN_EXPIRE_DAYS = Settings().JWT_REFRESH_TOKEN_EXPIRE_DAYS
-JWT_SECRET_KEY = Settings().JWT_SECRET_KEY
-JWT_ALGORITHM = Settings().JWT_ALGORITHM
-JWT_ISSUER = Settings().JWT_ISSUER
-JWT_AUDIENCE = Settings().JWT_AUDIENCE
+JWT_ACCESS_TOKEN_EXPIRE_MINUTES = get_settings().JWT_ACCESS_TOKEN_EXPIRE_MINUTES
+JWT_REFRESH_TOKEN_EXPIRE_DAYS = get_settings().JWT_REFRESH_TOKEN_EXPIRE_DAYS
+JWT_SECRET_KEY = get_settings().JWT_SECRET_KEY
+JWT_ALGORITHM = get_settings().JWT_ALGORITHM
+JWT_ISSUER = get_settings().JWT_ISSUER
+JWT_AUDIENCE = get_settings().JWT_AUDIENCE
 
 class JWTBearer(HTTPBearer):
     def __init__(self, auto_error: bool = True):
-        super(JWTBearer, self).__init__(scheme_name="JWT-Auth", description="Enter JWT token",  auto_error=auto_error)
+        """
+                Initialize the JWTBearer security scheme.
+
+                Args:
+                    auto_error (bool): If True, automatically raises HTTPException on authentication errors.
+                        Defaults to True.
+
+                Raises:
+                    BasedException: If initialization fails due to unexpected errors.
+                """
+        try:
+            super(JWTBearer, self).__init__(
+                scheme_name="JWT-Auth",
+                description="Enter JWT token",
+                auto_error=auto_error
+            )
+        except Exception as e:
+            log.error(f"Error al inicializar jwt_util: {e}")
+            raise BasedException(
+                message=f"Error inesperado en jwt_util: {str(e)}",
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
 
     async def __call__(self, request: Request):
         credentials: HTTPAuthorizationCredentials = await super(JWTBearer, self).__call__(request)
@@ -82,10 +103,10 @@ class JWTUtil:
             return encoded_jwt
         except Exception as e:
             # General exception handling
-            print(f"An error occurred while creating the token: {e}")
+            print(f"Ocurrió un error al crear el token: {e}")
             raise HTTPException(
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                detail="Token creation failed"
+                detail=f"Error al crear token"
             )
 
     @staticmethod
@@ -108,9 +129,9 @@ class JWTUtil:
                """
         to_encode = data.copy()
         if expires_delta:
-            expire = datetime.utcnow() + expires_delta
+            expire = datetime.now(timezone.utc) + expires_delta
         else:
-            expire = datetime.utcnow() + timedelta(days=JWT_REFRESH_TOKEN_EXPIRE_DAYS)
+            expire = datetime.now(timezone.utc) + timedelta(days=JWT_REFRESH_TOKEN_EXPIRE_DAYS)
         to_encode.update({"iat": int(datetime.now().timestamp()),
                           "exp": expire,
                           "aud": JWT_AUDIENCE,
@@ -152,7 +173,8 @@ class JWTUtil:
         except InvalidKeyError:
             raise UnauthorizedToken("La clave de firma es inválida.")
         except Exception as e:
-            log.error(f"Error inesperado al validar token: {e}")
+            log.error(f"Error al validar token: {e}")
             raise HTTPException(
-                status_code=500, detail=f"JWT decoding error: {str(e)}"
+                status_code=500,
+                detail=f"Error al validar el token: {str(e)}"
             )

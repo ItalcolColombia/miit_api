@@ -13,11 +13,11 @@ class DatabaseConnectionException(BasedException):
 
     Class Args:
         message (str): The error message describing the connection failure.
-        status_code (int): The HTTP status code associated with the exception (default: 401 Unauthorized).
+        status_code (int): The HTTP status code associated with the exception.
     """
 
     def __init__(
-        self, message: str, status_code: int = status.HTTP_401_UNAUTHORIZED
+        self, message: str, status_code: int = status.HTTP_502_BAD_GATEWAY
     ):
         """
         Constructor method for DatabaseConnectionException.
@@ -26,7 +26,7 @@ class DatabaseConnectionException(BasedException):
 
         Args:
             message (str): The error message describing the exception.
-            status_code (int, optional): The HTTP status code to return (default: 401 Unauthorized).
+            status_code (int, optional): The HTTP status code to return (default: 502 Bad Gateway).
         """
 
         super().__init__(
@@ -45,11 +45,11 @@ class DatabaseInvalidConfigurationException(BasedException):
 
     Class Args:
         message (str): The error message describing the configuration issue.
-        status_code (int): The HTTP status code associated with the exception (default: 404 Not Found).
+        status_code (int): The HTTP status code associated with the exception (default: 500 Internal Error).
     """
 
     def __init__(
-        self, message: str, status_code: int = status.HTTP_404_NOT_FOUND
+        self, message: str, status_code: int = status.HTTP_500_INTERNAL_SERVER_ERROR
     ):
         """
         Constructor method for DatabaseInvalidConfigurationException.

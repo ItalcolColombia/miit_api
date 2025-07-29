@@ -1,24 +1,19 @@
 from decimal import Decimal
-from fastapi import APIRouter, Depends, HTTPException, status, Query
+from fastapi import APIRouter, Depends, HTTPException, status
 from datetime import datetime
 
-from schemas.pesadas_schema import PesadaResponse, VPesadasAcumResponse
+from schemas.pesadas_schema import VPesadasAcumResponse
 from services.auth_service import AuthService
 from utils.response_util import ResponseUtil
 from core.di.service_injection import get_viajes_service, get_pesadas_service
 from services.viajes_service import ViajesService
 from services.pesadas_service import PesadasService
-from utils.schema_util import CreateResponse, ErrorResponse, ValidationErrorResponse, UpdateResponse
+from schemas.response_models import CreateResponse, ErrorResponse, ValidationErrorResponse, UpdateResponse
 from schemas.viajes_schema import (
-    ViajesResponse,
-    ViajeCreate,
     ViajeBuqueExtCreate,
-    ViajeCamionExtCreate,
-    FlotaExtLoadCreate,
-    ViajeUpdate,
-    ViajesActResponse
+    ViajeCamionExtCreate
 )
-from schemas.bls_schema import BlsExtCreate, BlsCreate
+from schemas.bls_schema import BlsExtCreate
 
 from utils.logger_util import LoggerUtil
 log = LoggerUtil()

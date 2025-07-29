@@ -5,7 +5,7 @@ from email.mime.multipart import MIMEMultipart
 from starlette import status
 
 from core.exceptions.base_exception import BasedException
-from core.entities.email import Email
+from core.contracts.email import Email
 
 from utils.logger_util import LoggerUtil
 log = LoggerUtil()

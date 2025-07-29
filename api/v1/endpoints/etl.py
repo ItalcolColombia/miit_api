@@ -1,7 +1,7 @@
 from typing import List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, status, Query
-from fastapi_pagination import Page, Params
+from fastapi_pagination import Page
 from core.di.service_injection import get_viajes_service, get_mat_service, get_alm_service, get_mov_service, \
     get_pesadas_service, get_transacciones_service, get_flotas_service
 
@@ -10,7 +10,7 @@ from schemas.materiales_schema import MaterialesResponse
 from schemas.movimientos_schema import MovimientosResponse
 from schemas.pesadas_schema import PesadaResponse, PesadaCreate
 from schemas.transacciones_schema import TransaccionResponse, TransaccionCreate
-from schemas.viajes_schema import ViajesActResponse, VViajesResponse
+from schemas.viajes_schema import VViajesResponse
 from services.almacenamientos_service import AlmacenamientosService
 from services.auth_service import AuthService
 from services.flotas_service import FlotasService
@@ -20,7 +20,7 @@ from services.materiales_service import MaterialesService
 from services.transacciones_service import TransaccionesService
 from services.pesadas_service import PesadasService
 from utils.response_util import ResponseUtil
-from utils.schema_util import CreateResponse, ErrorResponse, ValidationErrorResponse, UpdateResponse
+from schemas.response_models import CreateResponse, ErrorResponse, ValidationErrorResponse, UpdateResponse
 
 from utils.logger_util import LoggerUtil
 log = LoggerUtil()
