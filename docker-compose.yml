@@ -20,6 +20,10 @@ services:
       DB_PORT: ${DB_PORT}
       DB_USER: ${DB_USER}
       DB_PASSWORD: ${DB_PASSWORD}
+      SMTP_HOST: ${SMTP_HOST}
+      SMTP_PORT: ${SMTP_PORT}
+      SMTP_USER: ${SMTP_USER}
+      SMTP_PASSWORD: ${SMTP_PASSWORD}
       JWT_SECRET_KEY: ${JWT_SECRET_KEY}
       JWT_ALGORITHM: ${JWT_ALGORITHM}
       JWT_ACCESS_TOKEN_EXPIRE_MINUTES: ${JWT_ACCESS_TOKEN_EXPIRE_MINUTES}
@@ -27,6 +31,7 @@ services:
       JWT_AUDIENCE: ${JWT_AUDIENCE}
       JWT_ISSUER: ${JWT_ISSUER}
       ENCRYPTION_KEY: ${ENCRYPTION_KEY}
+
 
     volumes:
       - ./logs:/var/www/metalsoft/log/miit_api

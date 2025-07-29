@@ -68,6 +68,7 @@ RUN git clone https://oauth2:${ghp_TOKEN}@github.com/jadapache/miit.git . && \
 ENV API_NAME=MIIT_API \
     API_HOST=0.0.0.0 \
     API_PORT=8443
+    API_VERSION=0.0.1
 
 #Copia los archivos de la api al contenedor
 COPY . /var/www/metalsoft/miit_api

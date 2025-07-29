@@ -32,6 +32,12 @@ class Settings(BaseSettings):
     DB_PORT: str = "5432"
     DB_NAME: str = "PtoAntioquia_DW"
 
+    #Email Params
+    SMTP_HOST: str = "smtp.example.com"
+    SMTP_PORT: str = "587"
+    SMTP_USER: str = "usuario"
+    SMTP_PASSWORD: str = "clave"
+
     # JWT Params
     JWT_SECRET_KEY: str = "nS3-_u1K93UkTlg_RsGCPGLF8oPhFKN_h8z0G4LWSTk"
     JWT_ALGORITHM: str = "HS256"
