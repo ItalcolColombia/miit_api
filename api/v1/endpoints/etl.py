@@ -28,7 +28,7 @@ log = LoggerUtil()
 response_json = ResponseUtil().json_response
 router = APIRouter(prefix="/scada", tags=["Automatizador"], dependencies=[Depends(AuthService.get_current_user)]) #
 
-@router.get("/almacenamientos-listado/",
+@router.get("/almacenamientos-listado",
             summary="Obtener listado de almacenamientos",
             description="Retorna listado de los almacenamientos disponibles en el repositorio central",
             response_model=List[AlmacenamientoResponse],
@@ -58,7 +58,7 @@ async def get_almacenamientos_listado(
         )
 
 
-@router.get("/buques-listado/",
+@router.get("/buques-listado",
             summary="Obtener listado de buques habilitados para recibo",
             description="Este listado se actualiza cuando PBCU confirma el atraco del buque al puerto.",
             responses={
@@ -89,13 +89,13 @@ async def get_buques_listado(
 @router.put("/buque-finalizar/{puerto_id}",
             status_code=status.HTTP_200_OK,
             summary="Modificar estado de un buque por partida",
-            description="Evento realizado por el operador post confirmación de la finalización de la motonave a traves de la interfaz de PBCU.",
+            description="Evento realizado por la automatización en paralelo a confirmación del levante de carga de la motonave por PBCU.",
             response_model=UpdateResponse,
             responses={
                 status.HTTP_400_BAD_REQUEST: {"model": ErrorResponse},
                 status.HTTP_422_UNPROCESSABLE_ENTITY: {"model": ValidationErrorResponse},
             })
-async def buque_out(
+async def end_buque(
         puerto_id: str,
         service: ViajesService = Depends(get_viajes_service)):
     log.info(f"Payload recibido: Flota {puerto_id} - Partida")
@@ -122,7 +122,7 @@ async def buque_out(
             message=str(e)
         )
 
-@router.get("/camiones-listado/{placa}",
+@router.get("/camiones-listado",
             summary="Obtener listado paginado de camiones con filtro opcional por placa",
             description="Retorna camiones en modo páginado, filtradas opcionalmente por placa específica",
             response_model=Page[VViajesResponse],
@@ -154,10 +154,10 @@ async def get_camiones_paginado(
             message=str(e)
         )
 
-@router.put("/camion-ajuste/{placa}",
+@router.put("/camion-ajuste",
             status_code=status.HTTP_200_OK,
-            summary="Modificar puntos camion",
-            description="Evento realizado por automatización de acuerdo a parametros de pits de despacho.",
+            summary="Modificar el número de puntos de descargue de un camión ",
+            description="Evento realizado por la automatización de acuerdo a parámetros de pits de despacho.",
             response_model=UpdateResponse,
             responses={
                 status.HTTP_400_BAD_REQUEST: {"model": ErrorResponse},
@@ -191,9 +191,9 @@ async def set_points_camion(
             message=f"Error interno: {e}"
         )
 
-@router.get("/materiales-listado/",
+@router.get("/materiales-listado",
             summary="Obtener listado de materiales",
-            description="Método de consulta de materiales empleados en el puerto",
+            description="Método de consulta por la automatización para obtener listado de materiales empleados en el puerto",
             response_model=List[MaterialesResponse],
             responses={
                 status.HTTP_404_NOT_FOUND: {"model": ErrorResponse},
@@ -221,7 +221,7 @@ async def get_materiales_listado(
         )
 
 
-@router.get("/movimientos-listado/{transaccion_id}",
+@router.get("/movimientos-listado",
             summary="Obtener listado paginado de movimientos con filtro opcional por transacción",
             description="Retorna movimientos en modo páginado, filtradas opcionalmente por un id de transacción específico",
             response_model=Page[MovimientosResponse],
@@ -254,7 +254,7 @@ async def get_movs_listado(
         )
 
 
-@router.post("/pesada-registro/",
+@router.post("/pesada-registro",
              status_code=status.HTTP_201_CREATED,
              summary="Registrar pesada",
              description="Evento para registrar la información de una pesada.",
@@ -286,7 +286,7 @@ async def create_pesada(
             message=f"Error interno: {e}"
         )
 
-@router.get("/pesadas-listado/{transaccion_id}",
+@router.get("/pesadas-listado",
             summary="Obtener listado paginado de pesadas con filtro opcional por transacción",
             description="Retorna pesadas en modo páginado, filtradas opcionalmente por un id de transacción específico",
             response_model=Page[PesadaResponse],
@@ -318,7 +318,7 @@ async def get_pesadas_listado(
             message=str(e)
         )
 
-@router.get("/transacciones-listado/{transaccion_id}",
+@router.get("/transacciones-listado",
             summary="Obtener listado paginado de transacciones con filtro opcional",
             description="Retorna transacciones en modo páginado, filtradas opcionalmente por un id de transacción específico",
             response_model=Page[TransaccionResponse],
@@ -350,7 +350,7 @@ async def get_trans_listado(
             message=str(e)
         )
 
-@router.post("/transacciones-registro/",
+@router.post("/transacciones-registro",
              status_code=status.HTTP_201_CREATED,
              summary="Registrar nueva transacción",
              description="Evento para registrar la información de una transacción.",
@@ -385,36 +385,38 @@ async def create_transaccion(
             message=str(e)
         )
 
-@router.put("/transaccion-finalizar/{transaccion_id}",
+@router.put("/transaccion-finalizar/{tran_id}",
             status_code=status.HTTP_200_OK,
-            summary="Modificar puntos camion",
-            description="Evento realizado por automatización de acuerdo a parametros de pits de despacho.",
+            summary="Modifica el estado de una transacción en curso",
+            description="Evento realizado por la automatización cuando se detiene una ruta en proceso.",
             response_model=UpdateResponse,
             responses={
                 status.HTTP_400_BAD_REQUEST: {"model": ErrorResponse},
                 status.HTTP_422_UNPROCESSABLE_ENTITY: {"model": ValidationErrorResponse},
             })
-async def set_points_camion(
+async def end_transaction(
         tran_id: str,
-        points: int,
-        service: FlotasService = Depends(get_flotas_service)
-):
+        service: TransaccionesService = Depends(get_transacciones_service)):
+    log.info(f"Payload recibido: Transacción {tran_id} - Finalizar")
 
     try:
 
-        await service.chg_points(tran_id, points)
+        await service.transaccion_finalizar(tran_id)
+        log.info(f"La Transacción {tran_id} finalizada exitosamente.")
         return response_json(
             status_code=status.HTTP_200_OK,
-            message=f"puntos actualizados",
+            message=f"Transacción finalizada",
         )
 
     except HTTPException as http_exc:
+        log.error(f"La Transacción {tran_id} no pudo finalizarse: {http_exc.detail}")
         return response_json(
             status_code=http_exc.status_code,
             message=http_exc.detail
         )
 
     except Exception as e:
+        log.error(f"Error al procesar finalización de transacción {tran_id}: {e}")
         return response_json(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             message=f"Error interno: {e}"

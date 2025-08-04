@@ -24,7 +24,7 @@ response_json = ResponseUtil.json_response
 router = APIRouter(prefix="/integrador", tags=["Integrador"], dependencies=[Depends(AuthService.get_current_user)])
 
 
-@router.post("/buque-registro/",
+@router.post("/buque-registro",
              status_code=status.HTTP_201_CREATED,
              summary="Registrar nuevo buque",
              description="Evento efectuado por el operador posterior al anuncio de nueva visita obtenida a traves de la interfaz de PBCU.",
@@ -60,7 +60,7 @@ async def create_buque(
         )
 
 
-@router.post("/buque-carga/",
+@router.post("/buque-carga",
              status_code=status.HTTP_201_CREATED,
              summary="Registrar carga de buque",
              description="Evento efectuado por el operador con la información obtenida a traves de la interfaz de PBCU.",
@@ -131,7 +131,7 @@ async def buque_in(
             message=str(e)
         )
 
-@router.post("/camion-registro/",
+@router.post("/camion-registro",
              status_code=status.HTTP_201_CREATED,
              summary="Registrar camión",
              description="Evento realizado por el operador con la cita de enturnamiento notificada a traves de la interfaz de PBCU.",
@@ -241,26 +241,21 @@ async def out_camion(
             message=str(e)
         )
 
-@router.post("/pesadas-parciales/{puerto_id}",
-             status_code=status.HTTP_200_OK,
+@router.get("/pesadas-parciales/{puerto_id}",
              summary="Obtener acumulado de pesadas",
              description="Evento realizado por el operador post petición de consulta recibida a traves de la interfaz de PBCU.",
              response_model=VPesadasAcumResponse,
              responses={
-                 status.HTTP_400_BAD_REQUEST: {"model": ErrorResponse},  # Use CustomErrorResponse
-                 status.HTTP_422_UNPROCESSABLE_ENTITY: {"model": ValidationErrorResponse},
                  status.HTTP_404_NOT_FOUND: {"model": ErrorResponse},
+                 status.HTTP_500_INTERNAL_SERVER_ERROR: {"model": ErrorResponse},
              })
 async def get_acum_pesadas(
         service: PesadasService = Depends(get_pesadas_service),
         puerto_id: str = None):
     try:
-        await service.get_pesada_acumulada(puerto_id)
+        pesadas = await service.get_pesada_acumulada(puerto_id)
         log.info(f"Consulta de pesadas para flota {puerto_id} realizada exitosamente.")
-        return response_json(
-            status_code=status.HTTP_200_OK,
-            message=f"estado actualizado",
-        )
+        return pesadas
 
     except HTTPException as http_exc:
         log.error(f"Consulta de flota {puerto_id} no pudo realizarse: {http_exc.detail}")
