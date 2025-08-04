@@ -2,7 +2,9 @@ from datetime import datetime
 from typing import List, Optional
 from fastapi_pagination import Page, Params
 from sqlalchemy import select
+from starlette import status
 
+from core.exceptions.base_exception import BasedException
 from core.exceptions.entity_exceptions import EntityNotFoundException, EntityAlreadyRegisteredException
 from database.models import Transacciones
 from schemas.movimientos_schema import MovimientosCreate, MovimientosResponse
@@ -17,108 +19,243 @@ class TransaccionesService:
     def __init__(self, tran_repository: TransaccionesRepository) -> None:
         self._repo = tran_repository
 
-
     async def create_transaccion(self, tran: TransaccionCreate) -> TransaccionResponse:
-        return await self._repo.create(tran)
+        """
+        Create a new transaction in the database.
 
-    async def update_transaccion(self, id: int, tran: TransaccionUpdate) -> Optional[TransaccionResponse]:
-        return await self._repo.update(id, tran)
+        Args:
+            tran (TransaccionCreate): The data for the transaction to be created.
 
-    async def delete_transaccion(self, id: int) -> bool:
-        return await self._repo.delete(id)
+        Returns:
+            TransaccionResponse: The created transaction object.
 
-    async def get_transaccion(self, id: int) -> Optional[TransaccionResponse]:
-        return await self._repo.get_by_id(id)
+        Raises:
+            BasedException: For unexpected errors during the creation process.
+        """
+        try:
+            return await self._repo.create(tran)
+        except Exception as e:
+            log.error(f"Error al crear transacción: {e}")
+            raise BasedException(
+                message="Error inesperado al crear la transacción.",
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
+
+    async def update_transaccion(self, tran_id: int, tran: TransaccionUpdate) -> Optional[TransaccionResponse]:
+        """
+        Update an existing transaction in the database.
+
+        Args:
+            tran_id (int): The ID of the transaction to update.
+            tran (TransaccionUpdate): The updated transaction data.
+
+        Returns:
+            Optional[TransaccionResponse]: The updated transaction object, or None if not found.
+
+        Raises:
+            BasedException: For unexpected errors during the update process.
+        """
+        try:
+            return await self._repo.update(tran_id, tran)
+        except Exception as e:
+            log.error(f"Error al actualizar transacción con ID {tran_id}: {e}")
+            raise BasedException(
+                message="Error inesperado al actualizar la transacción.",
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
+
+    async def delete_transaccion(self, tran_id: int) -> bool:
+        """
+        Delete a transaction from the database.
+
+        Args:
+            tran_id (int): The ID of the transaction to delete.
+
+        Returns:
+            bool: True if the transaction was deleted, False otherwise.
+
+        Raises:
+            BasedException: For unexpected errors during the deletion process.
+        """
+        try:
+            return await self._repo.delete(tran_id)
+        except Exception as e:
+            log.error(f"Error al eliminar transacción con ID {tran_id}: {e}")
+            raise BasedException(
+                message="Error inesperado al eliminar la transacción.",
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
+
+    async def get_transaccion(self, tran_id: int) -> Optional[TransaccionResponse]:
+        """
+        Retrieve a transaction by its ID.
+
+        Args:
+            tran_id (int): The ID of the transaction to retrieve.
+
+        Returns:
+            Optional[TransaccionResponse]: The transaction object, or None if not found.
+
+        Raises:
+            BasedException: For unexpected errors during the retrieval process.
+        """
+        try:
+            return await self._repo.get_by_id(tran_id)
+        except Exception as e:
+            log.error(f"Error al obtener transacción con ID {tran_id}: {e}")
+            raise BasedException(
+                message="Error inesperado al obtener la transacción.",
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
 
     async def get_all_transacciones(self) -> List[TransaccionResponse]:
-        return await self._repo.get_all()
+        """
+        Retrieve all transactions from the database.
+
+        Returns:
+            List[TransaccionResponse]: A list of all transaction objects.
+
+        Raises:
+            BasedException: For unexpected errors during the retrieval process.
+        """
+        try:
+            return await self._repo.get_all()
+        except Exception as e:
+            log.error(f"Error al obtener todas las transacciones: {e}")
+            raise BasedException(
+                message="Error inesperado al obtener las transacciones.",
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
 
     async def get_pag_transacciones(self, tran_id: Optional[int] = None, params: Params = Params()) -> Page[TransaccionResponse]:
         """
-            Get one or more transacciones related to an id_transaccion (optional).
-            Returns a page with filtered optionally transaction ID pesadas.
-            """
-        query = select(Transacciones)
+        Retrieve paginated transactions, optionally filtered by transaction ID.
 
-        if tran_id is not None:
-            query = query.where(Transacciones.id == tran_id)
+        Args:
+            tran_id (Optional[int]): The ID of the transaction to filter by, if provided.
+            params (Params): Pagination parameters.
 
-        return await self._repo.get_all_paginated(query=query, params=params)
+        Returns:
+            Page[TransaccionResponse]: A paginated list of transaction objects.
+
+        Raises:
+            BasedException: For unexpected errors during the retrieval process.
+        """
+        try:
+            query = select(Transacciones)
+
+            if tran_id is not None:
+                query = query.where(Transacciones.id == tran_id)
+
+            return await self._repo.get_all_paginated(query=query, params=params)
+        except Exception as e:
+            log.error(f"Error al obtener transacciones paginadas con tran_id {tran_id}: {e}")
+            raise BasedException(
+                message="Error inesperado al obtener las transacciones paginadas.",
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
 
     async def create_transaccion_if_not_exists(self, tran_data: TransaccionCreate) -> TransaccionResponse:
         """
-               Check if a Transacción with same Viaje ID already exists. If not, create a new one.
+        Check if a transaction with the same Viaje ID already exists. If not, create a new one.
 
-               Args:
-                   tran_data: The data set in the schema of Transacción object.
+        Args:
+            tran_data (TransaccionCreate): The data for the transaction to be created.
 
-               Returns:
-                   An existing or newly created Transacción.
-           """
-        # 1. Validar si transacción ya existe
-        if await self._repo.find_one(viaje_id=tran_data.viaje_id):
-            raise EntityAlreadyRegisteredException(f"Ya existe una transacción del viaje '{tran_data.viaje_id}'")
+        Returns:
+            TransaccionResponse: The existing or newly created transaction object.
 
-        # 2. Se crea transacción si esta no existe en la BD
-        tran_nueva = await self._repo.create(tran_data)
-        return tran_nueva
+        Raises:
+            EntityAlreadyRegisteredException: If a transaction with the same Viaje ID already exists.
+            BasedException: For unexpected errors during the creation process.
+        """
+        try:
+            # 1. Validar si transacción ya existe
+            if await self._repo.find_one(viaje_id=tran_data.viaje_id):
+                raise EntityAlreadyRegisteredException(f"Ya existe una transacción del viaje '{tran_data.viaje_id}'")
+
+            # 2. Se crea transacción si esta no existe en la BD
+            tran_nueva = await self._repo.create(tran_data)
+            return tran_nueva
+        except EntityAlreadyRegisteredException as e:
+            raise e
+        except Exception as e:
+            log.error(f"Error al crear transacción para viaje_id {tran_data.viaje_id}: {e}")
+            raise BasedException(
+                message="Error inesperado al crear la transacción.",
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
 
     async def transaccion_finalizar(self, tran_id: int) -> TransaccionResponse:
         """
-              Updates the current 'estado' for an active Transaction.
+        Updates the 'estado' of an active transaction to 'Finalizada' and creates a corresponding movement.
 
-              This method updates the 'estado' value of a Transaction in the database.
-              Also creates the corresponding 'movimiento' of the transaction.
+        Args:
+            tran_id (int): The ID of the transaction to finalize.
 
-              Args:
-                  tran_id: The transaction register whose 'estado' will change.
+        Returns:
+            TransaccionResponse: The updated transaction object.
 
-              Returns:
-                  The transaction object after it have been finished.
-
-              Raises:
-                  Exception: If an error occurs during the operation.
+        Raises:
+            EntityNotFoundException: If the transaction with the given ID is not found.
+            BasedException: If the transaction is not in 'Activa' state or for unexpected errors.
         """
-        # 1. Obtener la transacción y validar su estado
+        try:
+            # 1. Obtener la transacción y validar su estado
+            tran = await self._repo.get_by_id(tran_id)
+            if tran is None:
+                raise EntityNotFoundException(f"La transacción con ID '{tran_id}' no fue encontrada.")
 
-        tran = await self._repo.get_by_id(tran_id)
-        if tran is None:
-            raise EntityNotFoundException(f"La transacción con ID '{tran_id}' no fue encontrada.")
+            if tran.estado != "Activa":
+                raise BasedException(
+                    message=f"La transacción no pudo finalizar porque su estado es '{tran.estado}'. Solo las transacciones 'Activa' pueden finalizarse.",
+                    status_code=status.HTTP_400_BAD_REQUEST
+                )
 
-        if tran.estado != "Activa":
-            raise BaseException(f"La transacción no pudo finalizar porque su estado es '{tran.estado}'. Solo las transacciones 'Activa' pueden finalizarse.")
+            # 2. Se prepara los datos para actualizar la transacción
 
-        # 2. Se prepara los datos para actualizar la transacción
-        transaccion_update_data = TransaccionUpdate(estado="Finalizada", fecha_fin=datetime.now())
+            update_fields = {
+                "estado": "Finalizada",
+                "fecha_fin": datetime.now()
+            }
+            update_data = TransaccionUpdate(**update_fields)
 
-        # 3. Se actualiza la transacción en la base de datos
-        updated_transaccion = await self._repo.update(
-            tran_id,
-            transaccion_update_data
-        )
+            # 3. Se actualiza la transacción en la base de datos
+            updated = await self._repo.update(tran_id, update_data)
 
-        # # 4. Verificación de update
-        # if not updated_transaccion:
-        #     raise BaseException(f"Error al actualizar la transacción")
-        #
-        # #5. Se consulta saldo anterior
-        #
-        # # 5. Preparar y crear el movimiento asociado
-        # movimiento_data = MovimientosCreate(
-        #     transaccion_id= tran_id,
-        #     almacenamiento_id=tran.origen_id,
-        #     material_id=tran.material_id,
-        #     tipo='Entrada',
-        #     accion='Automático',
-        #     peso=tran.peso,
-        #     saldo_anterior=
-        #     saldo_nuevo=
-        #
-        # )
-        #
-        #
-        # new_movimiento = await self.movimiento_service.create_movimiento(movimiento_data)
+            # # 4. Verificación de update
+            # if not updated_transaccion:
+            #     raise BasedException(f"Error al actualizar la transacción")
+            #
+            # #5. Se consulta saldo anterior
+            #
+            # # 5. Preparar y crear el movimiento asociado
+            # movimiento_data = MovimientosCreate(
+            #     transaccion_id= tran_id,
+            #     almacenamiento_id=tran.origen_id,
+            #     material_id=tran.material_id,
+            #     tipo='Entrada',
+            #     accion='Automático',
+            #     peso=tran.peso,
+            #     saldo_anterior=
+            #     saldo_nuevo=
+            #
+            # )
+            #
+            #
+            # new_movimiento = await self.movimiento_service.create_movimiento(movimiento_data)
 
-        # 5. Retornar los resultados
-        return updated_transaccion
+            # 5. Retornar los resultados
+            return updated
+        except EntityNotFoundException as e:
+            raise e
+        except BasedException as e:
+            raise e
+        except Exception as e:
+            log.error(f"Error al finalizar transacción con ID {tran_id}: {e}")
+            raise BasedException(
+                message="Error inesperado al finalizar la transacción.",
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
+
 

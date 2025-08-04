@@ -1,8 +1,10 @@
-# /src/utils/message_util.py
+from starlette import status
 
-from core.settings import Settings
+from core.exceptions.base_exception import BasedException
+from core.settings import get_settings
 
-
+from utils.logger_util import LoggerUtil
+log = LoggerUtil()
 
 class MessageUtil:
     """
@@ -13,6 +15,12 @@ class MessageUtil:
 
     Class Args:
         None
+
+    Attributes:
+        __api_name (str): The name of the API from settings.
+        __api_host (str): The host address of the API from settings.
+        __api_port (int): The port number of the API from settings.
+        __api_version (str): The version of the API from settings.
     """
 
     def __init__(self):
@@ -22,13 +30,22 @@ class MessageUtil:
         Initializes the utility by loading API configurations.
 
         Args:
-            None
+        None
+        Raises:
+            BasedException: If initialization fails due to invalid or missing configuration settings.
         """
-
-        self.__api_name = Settings().API_NAME
-        self.__api_host = Settings().API_HOST
-        self.__api_port = Settings().API_PORT
-        self.__api_version = Settings().API_V1_STR
+        try:
+            self.__api_name = get_settings().API_NAME
+            self.__api_host = get_settings().API_HOST
+            self.__api_port = get_settings().API_PORT
+            self.__api_version = get_settings().API_VERSION
+            self.__api_str_version = get_settings().API_V1_STR
+        except Exception as e:
+            log.error(f"Error en message_util: {e}")
+            raise BasedException(
+                message=f"Error en message_util: {e}",
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
 
     def on_startup(self):
         """
@@ -61,10 +78,10 @@ class MessageUtil:
         print("\n" + border)
         print(center_text(""))
         print(center_text(f"API: {self.__api_name}"))
-        print(center_text(f"Version: {self.__api_version}"))
+        print(center_text(f"Version: {self.__api_str_version} Release: {self.__api_version}"))
         print(
             center_text(
-                f"Running on: {self.__api_host}:{self.__api_port}/api/{self.__api_version}"
+                f"Running on: {self.__api_host}:{self.__api_port}/api/{self.__api_str_version}"
             )
         )
         print(center_text(""))

@@ -46,10 +46,23 @@ RUN python3.13 -m pip install --upgrade pip setuptools wheel
 # Establece el directorio de trabajo
 WORKDIR /var/www/metalsoft/miit_api
 
-#Clonar proyecto e instalar dependencias Python
-RUN git clone https://oauth2:${GHP_TOKEN}@github.com/jadapache/miit.git . && \
-    rm -rf .git && \
-    python3.13 -m pip install --no-cache-dir -r requirements.txt
+#Clonar y obtener proyecto
+RUN cd /var/www/metalsoft/work_dir
+RUN git clone https://oauth2:${ghp_TOKEN}@github.com/jadapache/miit.git . && \
+    rm -rf .git
+
+#Definir las variables de entorno
+ENV API_NAME=MIIT_API \
+    API_HOST=0.0.0.0 \
+    API_PORT=8443
+    API_VERSION=0.0.1
+
+#Copia los archivos de la api al contenedor
+COPY . /var/www/metalsoft/miit_api
+
+# Instalar dependencias de Python
+COPY requirements.txt .
+RUN python3.13 -m pip install --no-cache-dir -r requirements.txt
 
 # Crea el directorio de log
 RUN mkdir -p /var/www/metalsoft/log/miit_api && chmod -R 777 /var/www/metalsoft/log/miit_api

@@ -1,4 +1,4 @@
-# /src/utils/dot_env_util.py
+# /src/contracts/dot_env_util.py
 
 
 from dotenv import find_dotenv
@@ -22,7 +22,7 @@ class DotEnvUtil:
         Initializes the utility by locating the `.env` file path.
 
         Args:
-            None
+        None
         """
 
         self.__env_path = find_dotenv()
@@ -36,7 +36,7 @@ class DotEnvUtil:
         variables are being used.
 
         Args:
-            None
+        None
 
         Returns:
             None
@@ -45,8 +45,8 @@ class DotEnvUtil:
         additional_message = "ENV VARIABLES -> "
 
         if not self.__env_path:
-            message = f"\n\033[32m\033[1m{additional_message}The file .env is not loaded! ... running default env variables\033[0m"
+            message = f"\n\033[32m\033[1m{additional_message}The environment variables are not set! ... running with default env variables\033[0m"
             print(message)
         else:
-            message = f"\n\033[32m\033[1m{additional_message}The file .env is loaded!\033[0m"
+            message = f"\n\033[32m\033[1m{additional_message}The environment variables are set!\033[0m"
             print(message)

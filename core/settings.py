@@ -1,38 +1,53 @@
 from functools import lru_cache
-from typing import Optional
 from pydantic_settings import BaseSettings
 
 
 class Settings(BaseSettings):
-    #Api settings
-    API_NAME: str
-    API_V1_STR: str
-    API_HOST: str
-    API_PORT: int
-    API_VERSION: str
-    API_LOG_LEVEL: str
+    """
+      Configuration settings for the REST API.
+
+      This class defines environment variables and default settings for the API, database,
+      JWT authentication, email configuration, and additional variables. Settings are loaded
+      from a .env file with case-sensitive keys.
+
+    """
+    #API Params
+    API_NAME: str = "MIIT_API"
+    API_HOST: str = "0.0.0.0"
+    API_PORT: int = "8000"
+    API_V1_STR: str = "v1"
+    API_VERSION: str = "0.0.9"
+    API_LOG_LEVEL: str = "DEBUG"
     APP_LOG_DIR: str = "/var/www/metalteco/log/app_logs"
-    API_USER_ADMINISTRATOR: str
-    API_PASSWORD_ADMINISTRATOR: str
 
-    # Database settings
-    DB_TYPE: str
-    DB_USER: str
-    DB_PASSWORD: str
-    DB_HOST: str
-    DB_PORT: str
-    DB_NAME: str
+    # API 'SU' Params
+    API_USER_ADMINISTRATOR: str = "administrator"
+    API_PASSWORD_ADMINISTRATOR: str = "$2b$12$XZpenPj7tndIasZhG5FS9OP.fmKJlUs2pOPw3oH/SmYQ9q07A7o7C"
 
-    # JWT settings
-    JWT_SECRET_KEY: str
+    # Database Params
+    DB_TYPE: str = "PostgreSQL"
+    DB_USER: str = "postgres"
+    DB_PASSWORD: str = "M3t4l867s0ft"
+    DB_HOST: str = "localhost"
+    DB_PORT: str = "5432"
+    DB_NAME: str = "PtoAntioquia_DW"
+
+    #Email Params
+    SMTP_HOST: str = "smtp.example.com"
+    SMTP_PORT: str = "587"
+    SMTP_USER: str = "usuario"
+    SMTP_PASSWORD: str = "clave"
+
+    # JWT Params
+    JWT_SECRET_KEY: str = "nS3-_u1K93UkTlg_RsGCPGLF8oPhFKN_h8z0G4LWSTk"
     JWT_ALGORITHM: str = "HS256"
-    JWT_ACCESS_TOKEN_EXPIRE_MINUTES: int = 30
+    JWT_ACCESS_TOKEN_EXPIRE_MINUTES: int = 40
     JWT_REFRESH_TOKEN_EXPIRE_DAYS: int = 1
-    JWT_ISSUER: str = "MIIT"
+    JWT_ISSUER: str = "MIIT-API-Authentication"
     JWT_AUDIENCE: str = "MIIT-API"
 
-    #Aditional vars
-    ENCRYPTION_KEY:str
+    #Aditional Params
+    ENCRYPTION_KEY:str="5o5POG_5KxOpY3ztmwrKn6Y4kF16B4xoyEKHWoYERZw="
 
     class Config:
         env_file = ".env"
@@ -41,8 +56,5 @@ class Settings(BaseSettings):
 
 
 @lru_cache
-def get_settings() -> Settings:
+def get_settings():
     return Settings()
-
-
-settings = get_settings()

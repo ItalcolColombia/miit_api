@@ -3,7 +3,7 @@
 from fastapi import HTTPException, status
 
 
-class BaseException(HTTPException):
+class BasedException(HTTPException):
     """
     Class responsible for the base exception used in the application.
 
@@ -12,7 +12,7 @@ class BaseException(HTTPException):
 
     Class Args:
         message (str): The error message describing the exception.
-        status_code (int): The HTTP status code associated with the exception (default: 400 Bad Request).
+        status_code (int): The HTTP status code associated with the exception.
 
     """
 

@@ -22,7 +22,7 @@ class DatabaseConfigurationUtil:
         Initializes the database configuration with environment variables.
 
         Args:
-            None
+        None
         """
 
         self.__api_name = get_settings().API_NAME
@@ -42,7 +42,7 @@ class DatabaseConfigurationUtil:
         connection URL.
 
         Args:
-            None
+        None
 
         Returns:
             str: The database connection URL.

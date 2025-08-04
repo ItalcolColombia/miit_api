@@ -1,4 +1,4 @@
-# /src/utils/response_util.py
+# /src/contracts/response_util.py
 
 from http import HTTPStatus
 from typing import Optional, Dict, Union, Any
@@ -37,6 +37,9 @@ class ResponseUtil:
 
         Returns:
             JSONResponse: A formatted JSON response containing the specified status code, message, and data.
+            :param data:
+            :param message:
+            :param status_code:
             :param token:
         """
 

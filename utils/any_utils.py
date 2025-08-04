@@ -71,7 +71,6 @@ class AnyUtils:
         salt = bcrypt.gensalt()
         hashed = bcrypt.hashpw(plain_password.encode('utf-8'), salt)
         return hashed.decode('utf-8')
-        #return pwd_context.hash(password)
 
     @staticmethod
     def check_password_hash(plain_password: str, hashed_password: str) -> bool:
@@ -89,6 +88,5 @@ class AnyUtils:
         """
         try:
             return bcrypt.checkpw(plain_password.encode('utf-8'), hashed_password.encode('utf-8'))
-            #return pwd_context.verify(plain_password, hashed_password)
         except ValueError as ve:
             raise ValueError(f"Password verification failed: {ve}")
