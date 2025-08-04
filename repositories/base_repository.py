@@ -29,17 +29,15 @@ class IRepository(Generic[ModelType, SchemaType]):
         Get paginated result based on query (optional)
         if query is not supplied, then return all items paginated.
         """
-        if query is None:
-            query = select(self.model)
+        try:
+            if query is None:
+                query = select(self.model)
 
-        paginated_result = await paginate(self.db, query, params)
-
-        paginated_result.items = [self.schema.model_validate(item) for item in paginated_result.items]
-
-        return paginated_result
-
-
-
+            paginated_result = await paginate(self.db, query, params)
+            paginated_result.items = [self.schema.model_validate(item) for item in paginated_result.items]
+            return paginated_result
+        except AttributeError as e:
+            raise ValueError(f"Invalid attribute in filter: {e}")
 
     async def find_many(self, **kwargs) -> List[SchemaType]:
         try:

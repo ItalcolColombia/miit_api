@@ -24,7 +24,7 @@ response_json = ResponseUtil.json_response
 router = APIRouter(prefix="/integrador", tags=["Integrador"], dependencies=[Depends(AuthService.get_current_user)])
 
 
-@router.post("/buque-registro/",
+@router.post("/buque-registro",
              status_code=status.HTTP_201_CREATED,
              summary="Registrar nuevo buque",
              description="Evento efectuado por el operador posterior al anuncio de nueva visita obtenida a traves de la interfaz de PBCU.",
@@ -60,7 +60,7 @@ async def create_buque(
         )
 
 
-@router.post("/buque-carga/",
+@router.post("/buque-carga",
              status_code=status.HTTP_201_CREATED,
              summary="Registrar carga de buque",
              description="Evento efectuado por el operador con la información obtenida a traves de la interfaz de PBCU.",
@@ -131,43 +131,7 @@ async def buque_in(
             message=str(e)
         )
 
-@router.put("/buque-finalizar/{puerto_id}",
-            status_code=status.HTTP_200_OK,
-            summary="Modificar estado de un buque por partida",
-            description="Evento realizado por el operador post confirmación de la finalización de la motonave a traves de la interfaz de PBCU.",
-            response_model=UpdateResponse,
-            responses={
-                status.HTTP_400_BAD_REQUEST: {"model": ErrorResponse},
-                status.HTTP_422_UNPROCESSABLE_ENTITY: {"model": ValidationErrorResponse},
-            })
-async def buque_out(
-        puerto_id: str,
-        service: ViajesService = Depends(get_viajes_service)):
-    log.info(f"Payload recibido: Flota {puerto_id} - Partida")
-    try:
-
-        await service.chg_estado_buque(puerto_id, False)
-        log.info(f"La Partida de buque {puerto_id} marcada exitosamente.")
-        return response_json(
-            status_code=status.HTTP_200_OK,
-            message=f"estado actualizado",
-        )
-
-    except HTTPException as http_exc:
-        log.error(f"La partida de buque {puerto_id} no pudo marcarse: {http_exc.detail}")
-        return response_json(
-            status_code=http_exc.status_code,
-            message=http_exc.detail
-        )
-
-    except Exception as e:
-        log.error(f"Error al procesar marcado de partida de buque {puerto_id}: {e}")
-        return response_json(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            message=str(e)
-        )
-
-@router.post("/camion-registro/",
+@router.post("/camion-registro",
              status_code=status.HTTP_201_CREATED,
              summary="Registrar camión",
              description="Evento realizado por el operador con la cita de enturnamiento notificada a traves de la interfaz de PBCU.",
@@ -288,10 +252,10 @@ async def out_camion(
 async def get_acum_pesadas(
         service: PesadasService = Depends(get_pesadas_service),
         puerto_id: str = None):
-    if puerto_id is None:
-        log.info(f"Payload recibido: Obtener acumulado pesadas para puerto_id: {puerto_id}")
     try:
-        return await service.get_pesada_acumulada(puerto_id)
+        pesadas = await service.get_pesada_acumulada(puerto_id)
+        log.info(f"Consulta de pesadas para flota {puerto_id} realizada exitosamente.")
+        return pesadas
 
     except HTTPException as http_exc:
         log.error(f"Consulta de flota {puerto_id} no pudo realizarse: {http_exc.detail}")
