@@ -277,26 +277,21 @@ async def out_camion(
             message=str(e)
         )
 
-@router.post("/pesadas-parciales/{puerto_id}",
-             status_code=status.HTTP_200_OK,
+@router.get("/pesadas-parciales/{puerto_id}",
              summary="Obtener acumulado de pesadas",
              description="Evento realizado por el operador post petición de consulta recibida a traves de la interfaz de PBCU.",
              response_model=VPesadasAcumResponse,
              responses={
-                 status.HTTP_400_BAD_REQUEST: {"model": ErrorResponse},  # Use CustomErrorResponse
-                 status.HTTP_422_UNPROCESSABLE_ENTITY: {"model": ValidationErrorResponse},
                  status.HTTP_404_NOT_FOUND: {"model": ErrorResponse},
+                 status.HTTP_500_INTERNAL_SERVER_ERROR: {"model": ErrorResponse},
              })
 async def get_acum_pesadas(
         service: PesadasService = Depends(get_pesadas_service),
         puerto_id: str = None):
+    if puerto_id is None:
+        log.info(f"Payload recibido: Obtener acumulado pesadas para puerto_id: {puerto_id}")
     try:
-        await service.get_pesada_acumulada(puerto_id)
-        log.info(f"Consulta de pesadas para flota {puerto_id} realizada exitosamente.")
-        return response_json(
-            status_code=status.HTTP_200_OK,
-            message=f"estado actualizado",
-        )
+        return await service.get_pesada_acumulada(puerto_id)
 
     except HTTPException as http_exc:
         log.error(f"Consulta de flota {puerto_id} no pudo realizarse: {http_exc.detail}")
