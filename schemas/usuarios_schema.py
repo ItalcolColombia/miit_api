@@ -12,26 +12,12 @@ class UsuariosResponse(BaseSchema):
     email: str
     clave: str
     rol_id: int
-    rol_nombre: str  
     estado: bool = False
 
     class Config:
      from_attributes = True
 
-    @classmethod
-    def model_validate(cls, obj):
-        kwargs = {
-            "id": obj.id,
-            "nick_name": obj.nick_name,
-            "full_name": obj.full_name,
-            "cedula": obj.cedula,
-            "email": obj.email,
-            "clave": obj.clave,
-            "rol_id": obj.rol_id,
-            "rol_nombre": obj.rol.nombre if obj.rol else None,  
-            "estado": obj.estado
-        }
-        return cls(**kwargs)
+
 
 class UsuarioCreate(BaseSchema):
     nick_name: str = Field(..., min_length=5, max_length=10)
@@ -77,4 +63,30 @@ class Token(BaseSchema):
 class UserAuth(BaseSchema):
     nick_name: str = "admin"
     clave: str = "admin"
+
+class VUsuariosRolResponse(BaseModel):
+    nick_name: str
+    full_name: str
+    cedula: int
+    email: str
+    clave: str
+    fecha_modificado: Optional[datetime] = None
+    rol_id: int
+    rol: str
+    recuperacion: Optional[str]= None
+    estado: Optional[bool] = False
+    estado_rol: Optional[bool] = False
+
+    class Config:
+        from_attributes = True
+
+class VRolesPermResponse(BaseModel):
+    rol_id: int
+    rol: str
+    permiso_id: int
+    permiso: str
+
+    class Config:
+        from_attributes = True
+
 

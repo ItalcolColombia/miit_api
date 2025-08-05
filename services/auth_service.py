@@ -1,12 +1,13 @@
 from typing import Optional
 
 from core.di.repository_injection import get_user_repository
+from core.enums.user_role_enum import UserRoleEnum
 from core.exceptions.base_exception import BasedException
-from database.models import Usuarios
+from database.models import Usuarios, RolesPermisos
 from utils.jwt_util import JWTUtil, JWTBearer
 from utils.any_utils import AnyUtils
 from repositories.usuarios_repository import UsuariosRepository
-from schemas.usuarios_schema import UsuariosResponse
+from schemas.usuarios_schema import UsuariosResponse, VUsuariosRolResponse
 from fastapi import Depends, status
 from core.exceptions.auth_exception import InvalidCredentialsException, InvalidTokenCredentialsException
 from typing import Annotated
@@ -38,34 +39,27 @@ class AuthService:
         try:
             if username != get_settings().API_USER_ADMINISTRATOR:
                 user = await self._user_repo.get_by_username(username)
-                if not user or not self._verify_password(password, user.clave):
-                    log.info(f"Credenciales inválidas para {username}!")
-                    raise InvalidCredentialsException("Credenciales inválidas")
 
-                if not user.estado:
-                    raise InvalidTokenCredentialsException(
-                        message="Usuario inactivo",
-                        status_code=status.HTTP_403_FORBIDDEN
-                    )
-
-                return self.create_token(
-                    sub=user.nick_name,
-                    email=user.email,
-                    fullname=user.full_name,
-                    role=user.rol_nombre,
-                    is_active=user.estado
-                )
             else:
-                if not self._verify_password(password, get_settings.API_PASSWORD_ADMINISTRATOR):
-                    raise InvalidCredentialsException("Credenciales inválidas para superadmin")
+                user = AuthService.get_su()
 
-                return self.create_token(
-                    sub='superadmin',
-                    email='admin@metalteco.com',
-                    fullname='SysAdmin',
-                    role='SuperAdministrador',
-                    is_active=True
+            if not user or not self._verify_password(password, user.clave):
+                log.info(f"Credenciales inválidas para {username}!")
+                raise InvalidCredentialsException("Credenciales inválidas")
+
+            if not user.estado:
+                raise InvalidTokenCredentialsException(
+                    message="Usuario inactivo",
+                    status_code=status.HTTP_403_FORBIDDEN
                 )
+
+            return self.create_token(
+                sub=user.nick_name,
+                email=user.email,
+                fullname=user.full_name,
+                role=user.rol,
+                is_active=user.estado
+            )
         except InvalidCredentialsException as e:
             raise e
         except InvalidTokenCredentialsException as e:
@@ -111,44 +105,57 @@ class AuthService:
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
 
+
     async def refresh_token(self, refresh_token: str) -> Optional[str]:
         """
-        Refresh a JWT token using a provided refresh token.
+            Refresh a JWT token using a provided refresh token.
 
-        Args:
-            refresh_token (str): The refresh token to validate and use for generating a new token.
+            Args:
+                refresh_token (str): The refresh token to validate and use for generating a new token.
 
-        Returns:
-            Optional[str]: A new JWT token if refresh is successful, None otherwise.
+            Returns:
+                Optional[str]: A new JWT token if refresh is successful, None otherwise.
 
-        Raises:
-            BasedException: If token refresh fails.
+            Raises:
+                BasedException: If token refresh fails.
         """
         try:
+            # 1. Verificar y decodificar el token de refresco
             payload = JWTUtil.verify_token(refresh_token)
             if not payload:
                 log.info("Token de refresco inválido o expirado")
                 return None
 
             username = payload.get("sub")
-            user = await self._user_repo.get_by_username(username)
+
+            # 2. Obtener la información del usuario
+            if username != get_settings().API_USER_ADMINISTRATOR:
+                user = await self._user_repo.get_by_username(username)
+            else:
+                user = AuthService.get_su()
+
+            # 3. Si no se obtiene se retorna vacío
             if not user:
-                log.info(f"Usuario no encontrado para el token: {username}")
+                log.warning(f"No se encontró información del usuario para generar el token {username}")
                 return None
 
+            # 4. Se forma y crea el token
             token_data = {
                 'sub': user.nick_name,
                 'email': user.email,
                 'fullname': user.full_name,
-                'role': user.rol_nombre,
+                'role': user.rol,
                 'is_active': user.estado
             }
 
             return JWTUtil.create_refresh_token(token_data)
+
+        except InvalidTokenCredentialsException as e:
+            raise e
         except Exception as e:
-            log.error(f"Error refreshing token: {e}")
+            log.error(f"Error durante el refresco del token: {e}")
             raise BasedException(
-                message="Refrescado de token fallido",
+                message=f"Refresco del fallído {str(e)}",
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
 
@@ -227,19 +234,22 @@ class AuthService:
             if username is None:
                 raise InvalidTokenCredentialsException()
 
-            # 2. Buscar el usuario en la base de datos
-            user = await user_repository.get_by_username(username)
+            if username != get_settings().API_USER_ADMINISTRATOR:
+                # 2. Buscar el usuario en la base de datos
+                user = await user_repository.get_by_username(username)
 
-            # 3. Realizar validaciones al usuario
-            if user is None:
-                raise InvalidCredentialsException("Credenciales inválidas")
+                # 3. Realizar validaciones al usuario
+                if user is None:
+                    raise InvalidCredentialsException("Credenciales inválidas")
 
-            if not user.estado:
-                raise InvalidCredentialsException(
-                    message="Usuario inactivo. Contacte al administrador.",
-                    status_code=status.HTTP_403_FORBIDDEN
-                )
-            return user
+                if not user.estado:
+                    raise InvalidCredentialsException(
+                        message="Usuario inactivo. Contacte al administrador.",
+                        status_code=status.HTTP_403_FORBIDDEN
+                    )
+                return user
+            else:
+                return AuthService.get_su()
 
         except InvalidTokenCredentialsException as e:
             raise e
@@ -249,63 +259,123 @@ class AuthService:
             log.error(f"Error al validar usuario actual: {e}")
             raise InvalidTokenCredentialsException("Error inesperado al validar el token.")
 
-    async def get_current_super_user(self: Usuarios = Depends(get_current_user)) -> Usuarios:
+    @staticmethod
+    def get_su() -> VUsuariosRolResponse:
+        return VUsuariosRolResponse(
+            nick_name=get_settings().API_USER_ADMINISTRATOR,
+            full_name='SysAdmin',
+            cedula=99999999,
+            email='admin@metalteco.com',
+            clave=get_settings().API_PASSWORD_ADMINISTRATOR,
+            rol_id=99,
+            rol=UserRoleEnum.SUPER_ADMINISTRATOR,
+            recuperacion=None,
+            estado=True,
+            estado_rol=True
+        )
+
+    @staticmethod
+    def _check_rol(current_user: Usuarios, roles: list[str]):
+      """
+      Validate if the authenticated user has one of the required roles.
+
+       Args:
+           current_user (Usuarios): The authenticated user object.
+           roles (list[str]): List with role names required to access to the endpoint.
+
+       Raises:
+           BasedException: If the user does not have the required roles or an unexpected error occurs.
+      """
+      try:
+        if current_user.rol not in roles:
+            raise BasedException(
+                message="Acceso denegado, rol no autorizado para este recurso.",
+                status_code=status.HTTP_403_FORBIDDEN
+            )
+      except BasedException as e:
+        raise e
+      except Exception as e:
+        log.error(f"Error al verificar rol: {e}")
+        raise BasedException(
+            message=f"Error al verificar el rol del usuario {current_user.nick_name}",
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR
+        )
+
+    @staticmethod
+    async def _check_permiso(current_user: Usuarios, permission: str, user_repo: UsuariosRepository = Depends(get_user_repository)):
         """
-        Verify if the current user is a superuser (rol_id == 4).
+         Validate if the authenticated user has one of the required roles.
 
-        Args:
-            self (Usuarios): The authenticated user object from get_current_user.
+          Args:
+              current_user (Usuarios): The authenticated user object.
+              permission (str): The permission name required to access to the endpoint.
+              user_repo (UsuariosRepository): The repository for user-related database operations.
 
-        Returns:
-            Usuarios: The authenticated superuser object.
-
-        Raises:
-            BasedException: If the user does not have sufficient permissions.
+          Raises:
+              BasedException: If the user does not have the required roles or an unexpected error occurs.
         """
         try:
-            if not self.rol_id == 4:
+            permisos = await user_repo.get_rol_permission(rol_id=current_user.rol_id)
+            permisos_nombres = [p.permiso for p in permisos]
+
+            if permission not in permisos_nombres:
                 raise BasedException(
-                    message="No cuenta con permisos suficientes",
+                    message=f"Acceso denegado, no cuenta con los permisos suficientes para este recurso.",
                     status_code=status.HTTP_403_FORBIDDEN
                 )
-            return self
+        except BasedException as e:
+            raise e
+
         except Exception as e:
-            log.error(f"Error al verificar superusuario: {e}")
+            log.error(f"Error en validación de permiso: {e}")
             raise BasedException(
-                message="Error al verificar permisos de superusuario",
+                message="Error interno en validación de permisos",
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
 
+
     @staticmethod
-    def require_roles(*roles: str):
+    def require_access(roles: list[str], permiso: Optional[str] = None):
         """
-        Validate if the authenticated user has one of the required roles.
+        Validate if the authenticated user has one of the required roles and the specify permission (optional).
 
         Args:
-            *roles (str): One or more role names required to access the endpoint.
+            *roles (list[str]): List with role names required to access the endpoint.
+            permiso (str, optional): Name of specify permission.
 
         Returns:
-            function: Dependency function that checks if the current user has one of the allowed roles.
+            function: Dependency function that checks if the current user has one of the allowed roles and related permission.
 
         Raises:
-            BasedException: If the user does not have the required roles or an unexpected error occurs.
+            BasedException: If the user does not have the required roles and permission or an unexpected error occurs.
         """
 
-        async def role_checker(current_user: Usuarios = Depends(AuthService.get_current_user)):
+        async def checker(current_user: Usuarios = Depends(AuthService.get_current_user),
+                          user_repo: UsuariosRepository = Depends(get_user_repository)
+        ):
             try:
-                if current_user.rol not in roles:
-                    raise BasedException(
-                        message="Acceso denegado, no dispone de permisos para obtener acceso a este recurso",
-                        status_code=status.HTTP_403_FORBIDDEN
-                    )
-                return current_user
+
+                #Validación SU
+                if current_user.rol == UserRoleEnum.SUPER_ADMINISTRATOR:
+                    return  current_user
+
+                else:
+                    # 1. Validar rol
+                    AuthService._check_rol(current_user, roles)
+
+                    # 2. Se consulta el permiso si este se especifica
+                    if permiso is not None:
+                       await  AuthService._check_permiso(current_user,permiso, user_repo)
+
+                    return current_user
+
             except BasedException as e:
                 raise e
             except Exception as e:
-                log.error(f"Error al verificar roles: {e}")
+                log.error(f"Error en validación de acceso: {e}")
                 raise BasedException(
-                    message="Error al verificar permisos del rol",
+                    message="Error interno en validación de acceso del usuario",
                     status_code=status.HTTP_500_INTERNAL_SERVER_ERROR
                 )
 
-        return role_checker
+        return checker
