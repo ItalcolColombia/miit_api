@@ -3,7 +3,8 @@ from typing import List, Optional
 from fastapi import APIRouter, Depends, HTTPException, status, Query
 from fastapi_pagination import Page
 from core.di.service_injection import get_viajes_service, get_mat_service, get_alm_service, get_mov_service, \
-    get_pesadas_service, get_transacciones_service, get_flotas_service
+    get_pesadas_service, get_transacciones_service, get_flotas_service, get_alm_mat_service
+from schemas.almacenamientos_materiales_schema import VAlmMaterialesResponse
 
 from schemas.almacenamientos_schema import AlmacenamientoResponse
 from schemas.materiales_schema import MaterialesResponse
@@ -11,6 +12,7 @@ from schemas.movimientos_schema import MovimientosResponse
 from schemas.pesadas_schema import PesadaResponse, PesadaCreate
 from schemas.transacciones_schema import TransaccionResponse, TransaccionCreate
 from schemas.viajes_schema import VViajesResponse
+from services.almacenamientos_materiales_service import AlmacenamientosMaterialesService
 from services.almacenamientos_service import AlmacenamientosService
 from services.auth_service import AuthService
 from services.flotas_service import FlotasService
@@ -28,35 +30,37 @@ log = LoggerUtil()
 response_json = ResponseUtil().json_response
 router = APIRouter(prefix="/scada", tags=["Automatizador"], dependencies=[Depends(AuthService.get_current_user)]) #
 
-@router.get("/almacenamientos-listado",
-            summary="Obtener listado de almacenamientos",
-            description="Retorna listado de los almacenamientos disponibles en el repositorio central",
-            response_model=List[AlmacenamientoResponse],
+@router.get("/almacenamientos-saldos",
+            summary="Obtener listado paginado de almacenamientos saldos con filtro opcional por nombre.",
+            description="Retorna almacenamientos en modo páginado, filtrados opcionalmente por nombre específico",
+            response_model=Page[VAlmMaterialesResponse],
             responses={
                 status.HTTP_404_NOT_FOUND: {"model": ErrorResponse},
                 status.HTTP_500_INTERNAL_SERVER_ERROR: {"model": ErrorResponse},
             },
 )
-async def get_almacenamientos_listado(
-    alm_service: AlmacenamientosService = Depends(get_alm_service)
+async def get_almacenamientos_paginado(
+    alm_mat_service: AlmacenamientosMaterialesService = Depends(get_alm_mat_service),
+    nombre_alm: Optional[str] = Query(None, description="Nombre específico a buscar")
 ):
+    if nombre_alm is None:
+        log.info(f"Payload recibido: Obtener alm. con nombre {nombre_alm}")
     try:
-        return await alm_service.get_all_alm()
+        return await alm_mat_service.get_pag_alm_mat(nombre_alm)
 
     except HTTPException as http_exc:
-        log.warning(f"No se encontraron los almacenamientos: {http_exc.detail}")
+        log.warning(f"No se encontraron alm_mat: {http_exc.detail}")
         return response_json(
             status_code=http_exc.status_code,
             message=http_exc.detail
         )
 
     except Exception as e:
-        log.error(f"Error inesperado al obtener listado de almacenamientos")
+        log.error(f"Error inesperado al obtener listado de alm_mat")
         return response_json(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             message=str(e)
         )
-
 
 @router.get("/buques-listado",
             summary="Obtener listado de buques habilitados para recibo",
@@ -89,7 +93,7 @@ async def get_buques_listado(
 @router.put("/buque-finalizar/{puerto_id}",
             status_code=status.HTTP_200_OK,
             summary="Modificar estado de un buque por partida",
-            description="Evento realizado por la automatización en paralelo a confirmación del levante de carga de la motonave por PBCU.",
+            description="Evento realizado por la automatización al finalizar el recibo de buque.",
             response_model=UpdateResponse,
             responses={
                 status.HTTP_400_BAD_REQUEST: {"model": ErrorResponse},
@@ -101,7 +105,7 @@ async def end_buque(
     log.info(f"Payload recibido: Flota {puerto_id} - Partida")
     try:
 
-        await service.chg_estado_buque(puerto_id, False)
+        await service.chg_estado_flota(puerto_id, False)
         log.info(f"La Partida de buque {puerto_id} marcada exitosamente.")
         return response_json(
             status_code=status.HTTP_200_OK,
@@ -189,6 +193,42 @@ async def set_points_camion(
         return response_json(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             message=f"Error interno: {e}"
+        )
+
+@router.put("/camion-finalizar/{puerto_id}",
+            status_code=status.HTTP_200_OK,
+            summary="Modificar estado de un camion por cargue",
+            description="Evento realizado por la automatización al finalizar el cargue de camión.",
+            response_model=UpdateResponse,
+            responses={
+                status.HTTP_400_BAD_REQUEST: {"model": ErrorResponse},
+                status.HTTP_422_UNPROCESSABLE_ENTITY: {"model": ValidationErrorResponse},
+            })
+async def end_camion(
+        puerto_id: str,
+        service: ViajesService = Depends(get_viajes_service)):
+    log.info(f"Payload recibido: Camion {puerto_id} - cargado")
+    try:
+
+        await service.chg_estado_flota(puerto_id, False)
+        log.info(f"El cargue de camión {puerto_id} marcado exitosamente.")
+        return response_json(
+            status_code=status.HTTP_200_OK,
+            message=f"estado actualizado",
+        )
+
+    except HTTPException as http_exc:
+        log.error(f"El cargue de camión {puerto_id} no pudo marcarse: {http_exc.detail}")
+        return response_json(
+            status_code=http_exc.status_code,
+            message=http_exc.detail
+        )
+
+    except Exception as e:
+        log.error(f"Error al procesar marcado de cargue de camión {puerto_id}: {e}")
+        return response_json(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            message=str(e)
         )
 
 @router.get("/materiales-listado",

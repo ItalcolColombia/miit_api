@@ -8,7 +8,7 @@ from core.exceptions.base_exception import BasedException
 from database.models import VViajes
 from typing import List, Optional
 from repositories.viajes_repository import ViajesRepository
-from schemas.bls_schema import BlsCreate, BlsExtCreate, BlsResponse
+from schemas.bls_schema import BlsCreate, BlsExtCreate, BlsResponse, BlsUpdate
 from services.bls_service import BlsService
 from services.clientes_service import ClientesService
 from services.materiales_service import MaterialesService
@@ -329,13 +329,13 @@ class ViajesService:
                 status_code=status.HTTP_409_CONFLICT
             )
 
-    async def chg_estado_buque(self, puerto_id: str, estado: bool) -> FlotasResponse:
+    async def chg_estado_flota(self, puerto_id: str, estado: bool) -> FlotasResponse:
         """
-        Change the status of a buque associated with a viaje.
+        Change the status of a flota associated with a viaje.
 
         Args:
             puerto_id (str): The puerto_id of the viaje.
-            estado (bool): The new status for the buque.
+            estado (bool): The new status for the flota.
 
         Returns:
             FlotasResponse: The updated flota object.
@@ -358,10 +358,53 @@ class ViajesService:
         except EntityNotFoundException as e:
             raise e
         except Exception as e:
-            log.error(f"Error al cambiar estado de buque con puerto_id {puerto_id}: {e}")
+            log.error(f"Error al cambiar estado de flota con puerto_id {puerto_id}: {e}")
             raise BasedException(
-                message=f"Error al cambiar el estado del buque con puerto_id {puerto_id}",
-                status_code=status.HTTP_409_CONFLICT
+                message=f"Error al cambiar el estado de flota con puerto_id {puerto_id}",
+                status_code=status.HTTP_424_FAILED_DEPENDENCY
+            )
+
+    async def chg_estado_carga(self, bl_num: str, estado_puerto: Optional[bool] = None, estado_operador: Optional[bool] = None) -> BlsResponse:
+        """
+        Change the release status of a BL.
+
+        Args:
+            bl_num (str): The BL identifier.
+            estado_puerto (bool): The realese status value changed by the PBCU.
+            estado_operador (bool): The realese status value changed by the operator.
+
+        Returns:
+            BlsResponse: The updated BL object.
+
+        Raises:
+            EntityNotFoundException: If viaje or flota is not found.
+            BasedException: If update fails due to database or other errors.
+        """
+        try:
+            existing_bl = await self.bls_service.get_bl_by_num(bl_num)
+            if not existing_bl:
+                raise EntityNotFoundException(f"No existe BL'{bl_num}'")
+
+            #Se crea diccionario
+            update_fields = {}
+
+            # Se valida el estado a actualizar
+            if estado_puerto is not None:
+                update_fields["estado_puerto"] = estado_puerto
+
+            if estado_operador is not None:
+                update_fields["estado_operador"] = estado_operador
+
+            update_data = BlsUpdate(**update_fields)
+            update_bl = await self.bls_service.update(existing_bl.id, update_data)
+            return update_bl
+        except EntityNotFoundException as e:
+            raise e
+        except Exception as e:
+            log.error(f"Error al cambiar estado puerto de BL {bl_num}: {e}")
+            raise BasedException(
+                message=f"Error al cambiar el estado puerto de BL {bl_num}: {e}",
+                status_code=status.HTTP_424_FAILED_DEPENDENCY
             )
 
     async def chg_camion_ingreso(self, puerto_id: str, fecha: datetime) -> ViajesResponse:
@@ -515,8 +558,8 @@ class ViajesService:
         except Exception as e:
             log.error(f"Error creando BL con no_bl {bl_input.no_bl}: {e}")
             raise BasedException(
-                message="Error al crear el BL",
-                status_code=status.HTTP_409_CONFLICT
+                message=f"Error al crear el BL :{e}",
+                status_code=status.HTTP_424_FAILED_DEPENDENCY
             )
 
 

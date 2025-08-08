@@ -3,6 +3,7 @@ from typing import Annotated
 
 # Repositories
 from repositories.almacenamientos_repository import AlmacenamientosRepository
+from repositories.almacenamientos_materiales_repository import AlmacenamientosMaterialesRepository
 from repositories.bls_repository import BlsRepository
 from repositories.clientes_repository import ClientesRepository
 from repositories.flotas_repository import FlotasRepository
@@ -16,6 +17,7 @@ from repositories.usuarios_repository import UsuariosRepository
 # Services
 from services.auth_service import AuthService
 from services.almacenamientos_service import AlmacenamientosService
+from services.almacenamientos_materiales_service import AlmacenamientosMaterialesService
 from services.bls_service import BlsService
 from services.clientes_service import ClientesService
 from services.flotas_service import FlotasService
@@ -34,6 +36,7 @@ from .repository_injection import (
     get_viajes_repository,
     get_flotas_repository,
     get_alm_repository,
+    get_alm_mat_repository,
     get_materiales_repository,
     get_movimientos_repository,
     get_pesadas_repository,
@@ -49,6 +52,11 @@ async def get_alm_service(
     alm_repository: AlmacenamientosRepository = Depends(get_alm_repository)
 ) -> AlmacenamientosService:
     return AlmacenamientosService(alm_repository)
+
+async def get_alm_mat_service(
+    alm_mat_repository: AlmacenamientosMaterialesRepository = Depends(get_alm_mat_repository)
+) -> AlmacenamientosMaterialesService:
+    return AlmacenamientosMaterialesService(alm_mat_repository)
 
 async def get_flotas_service(
     flotas_repository: FlotasRepository = Depends(get_flotas_repository)

@@ -10,6 +10,9 @@ class BlsResponse(BaseSchema):
     cliente_id: int
     no_bl: str
     peso_bl: Decimal
+    cargue_directo: Optional[bool] = False
+    estado_puerto: Optional[bool] = False
+    estado_operador: Optional[bool] = False
 
     model_config = ConfigDict(from_attributes=True)
 
@@ -19,6 +22,9 @@ class BlsCreate(BaseSchema):
     cliente_id: int
     no_bl: str = Field(..., max_length=100)
     peso_bl: Decimal = Field(..., max_digits=10, decimal_places=2)
+    cargue_directo: Optional[bool] = False
+    estado_puerto: Optional[bool] = False
+    estado_operador: Optional[bool] = False
 
     class Config:
         json_schema_extra = {
@@ -28,16 +34,22 @@ class BlsCreate(BaseSchema):
                 "cliente_id" : "1",
                 "no_bl": "SSF010448001",
                 "peso_bl": 50478.00,
+                "cargue_directo" : False,
+                "estado_puerto": False,
+                "estado_operador": False
             }
         }
 
 
 class BlsUpdate(BaseSchema):
-    viaje_id: int
-    material_id: int
-    cliente_id: int
-    no_bl: str = Field(..., max_length=100)
-    peso_bl: Decimal = Field(..., max_digits=10, decimal_places=2)
+    viaje_id: Optional[int] = None
+    material_id: Optional[int] = None
+    cliente_id: Optional[int] = None
+    no_bl: Optional[str] = Field(None, max_length=100)
+    peso_bl: Optional[Decimal] = Field(None, max_digits=10, decimal_places=2)
+    cargue_directo: Optional[bool] = None
+    estado_puerto: Optional[bool] = None
+    estado_operador: Optional[bool] = None
 
 
 class BlsExtCreate(BaseSchema):
@@ -49,14 +61,20 @@ class BlsExtCreate(BaseSchema):
     cliente_id: Optional[int] = None
     no_bl: str = Field(..., max_length=100)
     peso_bl: Decimal = Field(..., max_digits=10, decimal_places=2)
+    cargue_directo: Optional[bool] = False
+    estado_puerto: Optional[bool] = False
+    estado_operador: Optional[bool] = False
 
     class Config:
         json_schema_extra = {
             "example": {
                 "puerto_id": "VOY2024001",
-                "material_name": "TORTA SOYA USA",
+                "material_name": "TORTA DE SOYA USA",
                 "cliente_name": "CUSTOMER COMPANY NAME",
                 "no_bl": "SSF034576272",
                 "peso_bl": 462000.00,
+                "cargue_directo": False,
+                "estado_puerto": False,
+                "estado_operador": False
             }
         }
