@@ -16,6 +16,9 @@ class UserRoleEnum(str, Enum):
         DEFAULT (str): Represents a standard user with basic access rights.
     """
 
-    SUPER_ADMINISTRATOR = "super_administrator"
-    ADMINISTRATOR = "administrator"
-    DEFAULT = "default"
+    COLABORADOR = "Colaborador"
+    SUPERVISOR = "Supervisor"
+    INTEGRADOR = "Integrador"
+    AUTOMATIZADOR = "Automatizador"
+    ADMINISTRADOR = "Administrador"
+    SUPER_ADMINISTRATOR = "SuperAdministrador"

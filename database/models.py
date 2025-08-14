@@ -8,17 +8,6 @@ from utils.any_utils import AnyUtils
 
 Base = declarative_base()
 
-class EmployeeModel(Base):
-    __tablename__ = "employees"
-
-    id = Column(Integer, primary_key=True, index=True)
-    name = Column(String, nullable=False)
-    email = Column(String, unique=True, nullable=False)
-    department = Column(String, nullable=False)
-    salary = Column(DECIMAL(10, 2), nullable=False)
-    birth_date = Column(Date, nullable=False)
-
-
 class Almacenamientos(Base):
     __tablename__ = "almacenamientos"
     id = Column(Integer, primary_key=True, index=True)
@@ -46,6 +35,9 @@ class Bls(Base):
     cliente_id = Column(Integer, ForeignKey("clientes.id"), nullable=False)
     no_bl = Column(String)
     peso_bl = Column(Numeric(10, 2))
+    cargue_directo = Column(Boolean, nullable=False, default=0)
+    estado_puerto = Column(Boolean, nullable=False, default=0)
+    estado_operador = Column(Boolean, nullable=False, default=0)
 
     # Define relationships
     viaje = relationship("Viajes", backref=backref("bls"))
@@ -232,3 +224,38 @@ class VPesadasAcumulado(Base):
     material = Column(String)
     peso = Column(Numeric(10,2), nullable=False)
     fecha = Column(DateTime)
+
+
+class VUsuariosRoles(Base):
+    __tablename__ = "v_usuarios_roles"
+    id = Column(Integer,  primary_key=True, index=True)
+    nick_name = Column(String(10))
+    full_name = Column(String(100))
+    cedula = Column(Integer)
+    email = Column(String(100))
+    clave = Column(String(200))
+    fecha_modificado = Column(TIMESTAMP, server_default=func.now(), onupdate=func.now())
+    rol_id = Column(Integer)
+    rol = Column(String(200))
+    recuperacion = Column(String(300), nullable=True)
+    foto = Column(String)
+    estado = Column(Boolean)
+    estado_rol = Column(Boolean)
+
+
+
+class VRolesPermisos(Base):
+    __tablename__ = "v_roles_permisos"
+    rol_id = Column(Integer)
+    rol = Column(String(200))
+    permiso_id = Column(Integer,  primary_key=True, index=True)
+    permiso = Column(String(200))
+
+
+class VAlmMateriales(Base):
+    __tablename__ = "v_almacenamientos_materiales"
+    almacenamiento_id = Column(Integer, primary_key=True, index=True)
+    almacenamiento = Column(String(200))
+    material_id = Column(Integer)
+    material = Column(String(200))
+    saldo = Column(Numeric(10,2), nullable=False)

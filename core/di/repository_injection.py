@@ -1,5 +1,6 @@
 from fastapi import Depends
 from sqlalchemy.ext.asyncio import AsyncSession
+
 from .database_injection import get_db
 from database.models import (
     Usuarios,
@@ -8,6 +9,7 @@ from database.models import (
     Clientes,
     Materiales,
     Almacenamientos,
+    AlmacenamientosMateriales,
     Movimientos,
     Pesadas,
     Transacciones,
@@ -16,6 +18,7 @@ from database.models import (
 
 # Repositories
 from repositories.almacenamientos_repository import AlmacenamientosRepository
+from repositories.almacenamientos_materiales_repository import AlmacenamientosMaterialesRepository
 from repositories.bls_repository import BlsRepository
 from repositories.clientes_repository import ClientesRepository
 from repositories.flotas_repository import FlotasRepository
@@ -28,6 +31,7 @@ from repositories.usuarios_repository import UsuariosRepository
 
 # Schemas
 from schemas.almacenamientos_schema import  AlmacenamientoResponse
+from schemas.almacenamientos_materiales_schema import AlmacenamientoMaterialesResponse
 from schemas.bls_schema import BlsResponse
 from schemas.clientes_schema import ClientesResponse
 from schemas.flotas_schema import FlotasResponse
@@ -53,6 +57,12 @@ async def get_alm_repository(
     session: AsyncSession = Depends(get_db)
 ) -> AlmacenamientosRepository:
     return AlmacenamientosRepository(Almacenamientos, AlmacenamientoResponse, session)
+
+async def get_alm_mat_repository(
+    session: AsyncSession = Depends(get_db)
+) -> AlmacenamientosMaterialesRepository:
+    return AlmacenamientosMaterialesRepository(AlmacenamientosMateriales, AlmacenamientoMaterialesResponse, session)
+
 
 async def get_flotas_repository(
         session: AsyncSession = Depends(get_db)

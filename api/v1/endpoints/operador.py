@@ -27,7 +27,7 @@ router = APIRouter(prefix="/integrador", tags=["Integrador"], dependencies=[Depe
 @router.post("/buque-registro",
              status_code=status.HTTP_201_CREATED,
              summary="Registrar nuevo buque",
-             description="Evento efectuado por el operador posterior al anuncio de nueva visita obtenida a traves de la interfaz de PBCU.",
+             description="Evento efectuado por el operador posterior al anuncio de nueva visita obtenida a través de la interfaz de PBCU.",
              response_model=CreateResponse,
              responses={
                  status.HTTP_400_BAD_REQUEST: {"model": ErrorResponse},
@@ -63,7 +63,7 @@ async def create_buque(
 @router.post("/buque-carga",
              status_code=status.HTTP_201_CREATED,
              summary="Registrar carga de buque",
-             description="Evento efectuado por el operador con la información obtenida a traves de la interfaz de PBCU.",
+             description="Evento efectuado por el operador con la información obtenida a través de la interfaz de PBCU.",
              response_model=CreateResponse,
              responses={
                  status.HTTP_400_BAD_REQUEST: {"model": ErrorResponse},
@@ -95,11 +95,10 @@ async def set_load(
             message=str(e)
         )
 
-
 @router.put("/buque-arribo/{puerto_id}",
             status_code=status.HTTP_200_OK,
             summary="Modificar estado de un buque por arribo",
-            description="Evento realizado por el operador post confirmación del arribo de la motonave a traves de la interfaz de PBCU.",
+            description="Evento realizado por el operador post confirmación del arribo de la motonave a través de la interfaz de PBCU.",
             response_model=UpdateResponse,
             responses={
                 status.HTTP_400_BAD_REQUEST: {"model": ErrorResponse},
@@ -110,7 +109,7 @@ async def buque_in(
         service: ViajesService = Depends(get_viajes_service)):
     log.info(f"Payload recibido: Flota {puerto_id} - Arribo")
     try:
-        await service.chg_estado_buque(puerto_id, True)
+        await service.chg_estado_flota(puerto_id, True)
         log.info(f"Arribo de buque {puerto_id} marcado exitosamente.")
         return response_json(
             status_code=status.HTTP_200_OK,
@@ -131,10 +130,45 @@ async def buque_in(
             message=str(e)
         )
 
+@router.put("/levante-carga/{no_bl}",
+            status_code=status.HTTP_200_OK,
+            summary="Modificar estado del bit de levante de carga de un BL",
+            description="Evento realizado por el operador post confirmación de ReleasedCargo de la motonave a través de la interfaz de PBCU.",
+            response_model=UpdateResponse,
+            responses={
+                status.HTTP_400_BAD_REQUEST: {"model": ErrorResponse},
+                status.HTTP_422_UNPROCESSABLE_ENTITY: {"model": ValidationErrorResponse},
+            })
+async def load_release(
+        no_bl: str,
+        service: ViajesService = Depends(get_viajes_service)):
+    log.info(f"Payload recibido: BL {no_bl} - Levante de Carga")
+    try:
+        await service.chg_estado_carga(no_bl, True)
+        log.info(f"BL {no_bl} marcado estado_puerto exitosamente.")
+        return response_json(
+            status_code=status.HTTP_200_OK,
+            message=f"estado_puerto actualizado",
+        )
+
+    except HTTPException as http_exc:
+        log.error(f"BL {no_bl} no pudo marcarse: {http_exc.detail}")
+        return response_json(
+            status_code=http_exc.status_code,
+            message=http_exc.detail
+        )
+
+    except Exception as e:
+        log.error(f"Error al procesar marcado de BL {no_bl}: {e}")
+        return response_json(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            message=str(e)
+        )
+
 @router.post("/camion-registro",
              status_code=status.HTTP_201_CREATED,
              summary="Registrar camión",
-             description="Evento realizado por el operador con la cita de enturnamiento notificada a traves de la interfaz de PBCU.",
+             description="Evento realizado por el operador con la cita de enturnamiento notificada a través de la interfaz de PBCU.",
              response_model=CreateResponse,
              responses={
                  status.HTTP_400_BAD_REQUEST: {"model": ErrorResponse},
@@ -169,7 +203,7 @@ async def create_camion(
 @router.put("/camion-ingreso/{puerto_id}",
             status_code=status.HTTP_200_OK,
             summary="Modificar cita del camion para actualizar ingreso",
-            description="Evento realizado por el operador post confirmación del ingreso del camión a báscula a traves de la interfaz de PBCU.",
+            description="Evento realizado por el operador post confirmación del ingreso del camión a báscula a través de la interfaz de PBCU.",
             response_model=UpdateResponse,
             responses={
                 status.HTTP_400_BAD_REQUEST: {"model": ErrorResponse},
@@ -206,7 +240,7 @@ async def in_camion(
 @router.put("/camion-egreso/{puerto_id}",
             status_code=status.HTTP_200_OK,
             summary="Modificar cita del camion para actualizar el egreso",
-            description="Evento realizado por el operador post confirmación del egreso del camión a báscula a traves de la interfaz de PBCU.",
+            description="Evento realizado por el operador post confirmación del egreso del camión a báscula a través de la interfaz de PBCU.",
             response_model=UpdateResponse,
             responses={
                 status.HTTP_400_BAD_REQUEST: {"model": ErrorResponse},
@@ -243,7 +277,7 @@ async def out_camion(
 
 @router.get("/pesadas-parciales/{puerto_id}",
              summary="Obtener acumulado de pesadas",
-             description="Evento realizado por el operador post petición de consulta recibida a traves de la interfaz de PBCU.",
+             description="Evento realizado por el operador post petición de consulta recibida a través de la interfaz de PBCU.",
              response_model=VPesadasAcumResponse,
              responses={
                  status.HTTP_404_NOT_FOUND: {"model": ErrorResponse},
