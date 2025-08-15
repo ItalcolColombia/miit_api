@@ -93,7 +93,7 @@ async def get_buques_listado(
 @router.put("/buque-finalizar/{puerto_id}",
             status_code=status.HTTP_200_OK,
             summary="Modificar estado de un buque por partida",
-            description="Evento realizado por la automatización al finalizar el recibo de buque.",
+            description="Evento realizado por la automatización al dar por finalizado el recibo de buque.",
             response_model=UpdateResponse,
             responses={
                 status.HTTP_400_BAD_REQUEST: {"model": ErrorResponse},
@@ -127,8 +127,8 @@ async def end_buque(
         )
 
 @router.get("/camiones-listado",
-            summary="Obtener listado paginado de camiones con filtro opcional por placa",
-            description="Retorna camiones en modo páginado, filtradas opcionalmente por placa específica",
+            summary="Obtener listado paginado de camiones disponibles para despacho con filtro opcional por placa",
+            description="Retorna camiones a despachar en modo páginado, filtradas opcionalmente por placa específica",
             response_model=Page[VViajesResponse],
             responses={
                 status.HTTP_404_NOT_FOUND: {"model": ErrorResponse},
@@ -193,42 +193,6 @@ async def set_points_camion(
         return response_json(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             message=f"Error interno: {e}"
-        )
-
-@router.put("/camion-finalizar/{puerto_id}",
-            status_code=status.HTTP_200_OK,
-            summary="Modificar estado de un camion por cargue",
-            description="Evento realizado por la automatización al finalizar el cargue de camión.",
-            response_model=UpdateResponse,
-            responses={
-                status.HTTP_400_BAD_REQUEST: {"model": ErrorResponse},
-                status.HTTP_422_UNPROCESSABLE_ENTITY: {"model": ValidationErrorResponse},
-            })
-async def end_camion(
-        puerto_id: str,
-        service: ViajesService = Depends(get_viajes_service)):
-    log.info(f"Payload recibido: Camion {puerto_id} - cargado")
-    try:
-
-        await service.chg_estado_flota(puerto_id, False)
-        log.info(f"El cargue de camión {puerto_id} marcado exitosamente.")
-        return response_json(
-            status_code=status.HTTP_200_OK,
-            message=f"estado actualizado",
-        )
-
-    except HTTPException as http_exc:
-        log.error(f"El cargue de camión {puerto_id} no pudo marcarse: {http_exc.detail}")
-        return response_json(
-            status_code=http_exc.status_code,
-            message=http_exc.detail
-        )
-
-    except Exception as e:
-        log.error(f"Error al procesar marcado de cargue de camión {puerto_id}: {e}")
-        return response_json(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            message=str(e)
         )
 
 @router.get("/materiales-listado",

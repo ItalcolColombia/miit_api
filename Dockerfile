@@ -6,6 +6,7 @@ FROM registry.access.redhat.com/ubi8/ubi:latest
 ##Instalar dependencias del sistema
 RUN yum update -y && \
     yum install -y \
+    procps-ng \
     gcc \
     openssl-devel \
     bzip2-devel \
@@ -48,8 +49,7 @@ WORKDIR /var/www/metalsoft/miit_api
 
 #Clonar y obtener proyecto
 RUN cd /var/www/metalsoft/work_dir
-RUN git clone https://oauth2:${ghp_TOKEN}@github.com/jadapache/miit.git . && \
-    rm -rf .git
+RUN git clone https://oauth2:${ghp_TOKEN}@github.com/ItalcolColombia/miit_api
 
 #Definir las variables de entorno
 ENV API_NAME=MIIT_API \

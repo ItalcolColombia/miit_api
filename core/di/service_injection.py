@@ -20,6 +20,7 @@ from services.almacenamientos_service import AlmacenamientosService
 from services.almacenamientos_materiales_service import AlmacenamientosMaterialesService
 from services.bls_service import BlsService
 from services.clientes_service import ClientesService
+from services.feedback_service import FeedbackService
 from services.flotas_service import FlotasService
 from services.viajes_service import ViajesService
 from services.materiales_service import MaterialesService
@@ -79,17 +80,22 @@ async def get_mat_service(
 ) -> MaterialesService:
     return MaterialesService(materiales_repository)
 
+async def get_feedback_service() -> FeedbackService:
+    return FeedbackService()
+
 async def get_viajes_service(
     viajes_repository: Annotated[ViajesRepository, Depends(get_viajes_repository)],
     materiales_service: Annotated[MaterialesService, Depends(get_mat_service)],
     bls_service: Annotated[BlsService, Depends(get_bls_service)],
     clientes_service: Annotated[ClientesService, Depends(get_clientes_service)],
     flotas_service: Annotated[FlotasService, Depends(get_flotas_service)],
+    feedback_service: Annotated[FeedbackService, Depends(get_feedback_service)],
 ) -> ViajesService:
     return ViajesService(
         viajes_repository=viajes_repository,
         mat_service=materiales_service,
         flotas_service=flotas_service,
+        feedback_service=feedback_service,
         bl_service=bls_service,
         client_service=clientes_service,
     )
@@ -117,8 +123,3 @@ async def get_user_service(
     return UsuariosService(user_repository)
 
 
-
-# async def get_employee_reports_service(
-#     employee_repository: IRepository = Depends(get_flotas_repository)
-# ) -> EmployeeReportsService:
-#     return EmployeeReportsService(employee_repository)
