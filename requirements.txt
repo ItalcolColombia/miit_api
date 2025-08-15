@@ -13,3 +13,4 @@ uvicorn
 bcrypt
 cryptography
 itsdangerous
+httpx

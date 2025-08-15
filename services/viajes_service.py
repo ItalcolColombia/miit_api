@@ -6,11 +6,12 @@ from starlette import status
 
 from core.exceptions.base_exception import BasedException
 from database.models import VViajes
-from typing import List, Optional
+from typing import List, Optional, Any, Dict
 from repositories.viajes_repository import ViajesRepository
 from schemas.bls_schema import BlsCreate, BlsExtCreate, BlsResponse, BlsUpdate
 from services.bls_service import BlsService
 from services.clientes_service import ClientesService
+from services.feedback_service import FeedbackService
 from services.materiales_service import MaterialesService
 from services.flotas_service import FlotasService
 from schemas.viajes_schema import (
@@ -27,12 +28,13 @@ log = LoggerUtil()
 
 class ViajesService:
 
-    def __init__(self, viajes_repository: ViajesRepository, mat_service : MaterialesService, flotas_service : FlotasService, bl_service : BlsService, client_service : ClientesService) -> None:
+    def __init__(self, viajes_repository: ViajesRepository, mat_service : MaterialesService, flotas_service : FlotasService, feedback_service : FeedbackService, bl_service : BlsService, client_service : ClientesService) -> None:
         self._repo = viajes_repository
         self.mat_service = mat_service
         self.flotas_service = flotas_service
         self.bls_service = bl_service
         self.clientes_service = client_service
+        self.feedback_service = feedback_service
 
     async def create(self, viaje: ViajeCreate) -> ViajesResponse:
         """
@@ -352,6 +354,16 @@ class ViajesService:
             flota = await self.flotas_service.get_flota(viaje.flota_id)
             if not flota:
                 raise EntityNotFoundException(f"Flota con id '{viaje.flota_id}' no existe")
+
+            # Se crea diccionario
+            notification_data = {
+                "puerto_id": puerto_id,
+                "message": f"Buque {flota.referencia} estado cambiado a {estado}"
+            }
+
+            # Se envia body a la API Externa
+            await self.feedback_service.notify(notification_data)
+            log.info(f"Notificación enviada para flota {flota.referencia} con estado {estado}")
 
             updated_buque = await self.flotas_service.update_status(flota, estado)
             return updated_buque

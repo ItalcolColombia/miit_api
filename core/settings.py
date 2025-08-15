@@ -49,6 +49,12 @@ class Settings(BaseSettings):
     #Aditional Params
     ENCRYPTION_KEY:str="5o5POG_5KxOpY3ztmwrKn6Y4kF16B4xoyEKHWoYERZw="
 
+    # TurboGraneles API
+    TG_API_AUTH:str = ""
+    TG_API_URL:str = ""
+    TG_API_USER:str =""
+    TG_API_PASS:str =""
+
     class Config:
         env_file = ".env"
         case_sensitive = True
