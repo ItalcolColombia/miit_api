@@ -355,16 +355,6 @@ class ViajesService:
             if not flota:
                 raise EntityNotFoundException(f"Flota con id '{viaje.flota_id}' no existe")
 
-            # Se crea diccionario
-            notification_data = {
-                "puerto_id": puerto_id,
-                "message": f"Buque {flota.referencia} estado cambiado a {estado}"
-            }
-
-            # Se envia body a la API Externa
-            await self.feedback_service.notify(notification_data)
-            log.info(f"Notificación enviada para flota {flota.referencia} con estado {estado}")
-
             updated_buque = await self.flotas_service.update_status(flota, estado)
             return updated_buque
         except EntityNotFoundException as e:

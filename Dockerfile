@@ -30,19 +30,6 @@ RUN update-ca-trust extract
 RUN ln -sf /usr/share/zoneinfo/America/Bogota /etc/localtime && \
     echo "America/Bogota" > /etc/localtime
 
-# # Download and install Python 3.13.3
-# RUN cd /usr/src \  
-#   && wget https://www.python.org/ftp/python/3.13.3/Python-3.13.3.tgz \ 
-#   && tar -xzf Python-3.13.3.tgz \     
-#   && cd Python-3.13.3 \     
-#   && ./configure --enable-optimizations \     
-#   && make altinstall \
-#   && ln -s /usr/local/bin/python3.13.3 /usr/bin/python3.13.3 \
-#   && ln -s /usr/local/bin/pip3.13.3 /usr/bin/pip3.13.3
-	
-# # Verify Python installation
-# RUN python3.12 --version
-
 #Instalar o actualizar gestor de paquetes pip, setuptools, wheel, supervisor
 RUN pip install --upgrade pip "setuptools<81" wheel supervisor
 
