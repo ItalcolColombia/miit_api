@@ -24,7 +24,7 @@ from utils.message_util import MessageUtil
 API_HOST = get_settings().API_HOST
 API_PORT = get_settings().API_PORT
 API_VERSION_STR = get_settings().API_V1_STR
-API_VERSION = get_settings().API_VERSION
+API_VERSION = "0.0.10"
 API_STAGE = get_settings().API_LOG_LEVEL
 
 SECRET_KEY = get_settings().JWT_SECRET_KEY
