@@ -27,7 +27,7 @@ router = APIRouter(prefix="/integrador", tags=["Integrador"], dependencies=[Depe
 @router.post("/buque-registro",
              status_code=status.HTTP_201_CREATED,
              summary="Registrar nuevo buque",
-             description="Evento efectuado por el operador posterior al anuncio de nueva visita obtenida a través de la interfaz de PBCU.",
+             description="Evento efectuado por el operador posterior a Anuncio MN obtenido a través de la interfaz de PBCU.",
              response_model=CreateResponse,
              responses={
                  status.HTTP_400_BAD_REQUEST: {"model": ErrorResponse},
@@ -130,10 +130,10 @@ async def buque_in(
             message=str(e)
         )
 
-@router.put("/levante-carga/{no_bl}",
+@router.put("/levante-carga-puerto/{no_bl}",
             status_code=status.HTTP_200_OK,
-            summary="Modificar estado del bit de levante de carga de un BL",
-            description="Evento realizado por el operador post confirmación de ReleasedCargo de la motonave a través de la interfaz de PBCU.",
+            summary="Modificar bit del estado_puerto de un BL",
+            description="Evento realizado por el operador posterior a confirmación de levante de carga la motonave a través de la interfaz de PBCU.",
             response_model=UpdateResponse,
             responses={
                 status.HTTP_400_BAD_REQUEST: {"model": ErrorResponse},
@@ -144,15 +144,15 @@ async def load_release(
         service: ViajesService = Depends(get_viajes_service)):
     log.info(f"Payload recibido: BL {no_bl} - Levante de Carga")
     try:
-        await service.chg_estado_carga(no_bl, True)
-        log.info(f"BL {no_bl} marcado estado_puerto exitosamente.")
+        await service.chg_estado_carga(no_bl, estado_puerto=True)
+        log.info(f"BL {no_bl}  estado_puerto marcado exitosamente.")
         return response_json(
             status_code=status.HTTP_200_OK,
             message=f"estado_puerto actualizado",
         )
 
     except HTTPException as http_exc:
-        log.error(f"BL {no_bl} no pudo marcarse: {http_exc.detail}")
+        log.error(f"BL {no_bl} el estado_puerto no pudo marcarse: {http_exc.detail}")
         return response_json(
             status_code=http_exc.status_code,
             message=http_exc.detail
@@ -160,6 +160,41 @@ async def load_release(
 
     except Exception as e:
         log.error(f"Error al procesar marcado de BL {no_bl}: {e}")
+        return response_json(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            message=str(e)
+        )
+
+@router.put("/levante-carga-operador/{no_bl}",
+            status_code=status.HTTP_200_OK,
+            summary="Modificar bit del estado_operador ",
+            description="Evento realizado por el operador posterior a confirmación de levante de carga la motonave a través de la interfaz de Control Carga.",
+            response_model=UpdateResponse,
+            responses={
+                status.HTTP_400_BAD_REQUEST: {"model": ErrorResponse},
+                status.HTTP_422_UNPROCESSABLE_ENTITY: {"model": ValidationErrorResponse},
+            })
+async def load_release(
+        no_bl: str,
+        service: ViajesService = Depends(get_viajes_service)):
+    log.info(f"Payload recibido: BL {no_bl} - Levante de Carga")
+    try:
+        await service.chg_estado_carga(no_bl,estado_operador=True)
+        log.info(f"BL {no_bl}  estado_operador  marcado exitosamente.")
+        return response_json(
+            status_code=status.HTTP_200_OK,
+            message=f"estado_operador actualizado",
+        )
+
+    except HTTPException as http_exc:
+        log.error(f"BL {no_bl} estado_operador no pudo marcarse: {http_exc.detail}")
+        return response_json(
+            status_code=http_exc.status_code,
+            message=http_exc.detail
+        )
+
+    except Exception as e:
+        log.error(f"Error al procesar marcado estado_operador de BL {no_bl}: {e}")
         return response_json(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             message=str(e)

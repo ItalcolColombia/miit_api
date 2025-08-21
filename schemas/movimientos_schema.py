@@ -10,10 +10,11 @@ class MovimientosResponse(BaseModel):
     tipo: str
     accion: str
     observacion: Optional[str] = None
-    fecha_hora: datetime
     peso: Decimal
     saldo_anterior: Decimal
     saldo_nuevo: Optional[Decimal] = None
+    fecha_hora: Optional[datetime] = None
+    usuario_id: Optional[int] = None
 
     class Config:
         from_attributes = True
@@ -25,10 +26,11 @@ class MovimientosCreate(MovimientosResponse):
     tipo: Optional[str] = Field(None, max_length=50)
     accion: Optional[str] = Field(None, max_length=50)
     observacion: Optional[str] = Field(None, max_length=50)
-    fecha_hora: Optional[datetime] = None
     peso: Optional[Decimal] = Field(..., max_digits=14, decimal_places=2)
     saldo_anterior: Optional[Decimal] = Field(..., max_digits=14, decimal_places=2)
     saldo_nuevo: Optional[Decimal] = Field(..., max_digits=14, decimal_places=2)
+    fecha_hora: Optional[datetime] = None
+    usuario_id: Optional[int] = None
 
     class Config:
         json_schema_extra = {

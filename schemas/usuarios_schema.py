@@ -13,6 +13,8 @@ class UsuariosResponse(BaseSchema):
     clave: str
     rol_id: int
     estado: bool = False
+    fecha_hora: Optional[datetime] = None
+    usuario_id: Optional[int] = None
 
     class Config:
      from_attributes = True
@@ -25,9 +27,10 @@ class UsuarioCreate(BaseSchema):
     cedula: int  # Required field
     email: str = Field(..., min_length=5, max_length=100)
     clave: str
-    fecha_modificado: Optional[datetime] = None
     rol_id: int
     estado: bool = False
+    fecha_hora: Optional[datetime] = None
+    usuario_id: Optional[int] = None
 
     class Config:
         json_schema_extra = {
@@ -65,17 +68,19 @@ class UserAuth(BaseSchema):
     clave: str = "admin"
 
 class VUsuariosRolResponse(BaseModel):
+    id: int
     nick_name: str
     full_name: str
     cedula: int
     email: str
     clave: str
-    fecha_modificado: Optional[datetime] = None
     rol_id: int
     rol: str
     recuperacion: Optional[str]= None
     estado: Optional[bool] = False
     estado_rol: Optional[bool] = False
+    fecha_hora: Optional[datetime] = None
+    usuario_id: Optional[int] = None
 
     class Config:
         from_attributes = True

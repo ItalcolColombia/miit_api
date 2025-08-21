@@ -112,9 +112,15 @@ async def get_pesadas_service(
     return PesadasService(pesadas_repository)
 
 async def get_transacciones_service(
-    trans_repository: TransaccionesRepository = Depends(get_transacciones_repository)
+    trans_repository: Annotated[TransaccionesRepository, Depends(get_transacciones_repository)],
+    pesadas_service: Annotated[PesadasService, Depends(get_pesadas_service)],
+    mov_service: Annotated[MovimientosService, Depends(get_mov_service)],
 ) -> TransaccionesService:
-    return TransaccionesService(trans_repository)
+    return TransaccionesService(
+        tran_repository=trans_repository,
+        pesadas_service=pesadas_service,
+        mov_service=mov_service,
+    )
 
 
 async def get_user_service(

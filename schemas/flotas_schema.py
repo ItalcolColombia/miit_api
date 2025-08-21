@@ -1,3 +1,4 @@
+from datetime import datetime
 from typing import Optional
 from pydantic import Field, ConfigDict
 from schemas.base_schema import BaseSchema
@@ -8,6 +9,8 @@ class FlotasResponse(BaseSchema):
     referencia: str
     puntos: Optional[int] = None
     estado: Optional[bool] = True
+    fecha_hora: Optional[datetime] = None
+    usuario_id: Optional[int] = None
 
     model_config = ConfigDict(from_attributes=True)
 
@@ -17,6 +20,8 @@ class FlotaCreate(BaseSchema):
     referencia: str = Field(..., max_length=255)
     puntos: Optional[int] = None
     estado: Optional[bool] = True
+    fecha_hora: Optional[datetime] = None
+    usuario_id: Optional[int] = None
 
     model_config = ConfigDict(
         extra='ignore',
@@ -34,5 +39,6 @@ class FlotaUpdate(BaseSchema):
     referencia: Optional[str] = Field(None, max_length=255)
     puntos: Optional[int] = None
     estado: Optional[bool] = None
-
+    fecha_hora: Optional[datetime] = None
+    usuario_id: Optional[int] = None
 

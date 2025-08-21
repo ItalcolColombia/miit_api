@@ -2,7 +2,7 @@ from typing import Optional
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 from repositories.base_repository import IRepository
-from schemas.almacenamientos_schema import AlmacenamientoResponse, AlmacenamientoCreate, AlmacenamientoUpdate
+from schemas.almacenamientos_schema import AlmacenamientoResponse
 from database.models import Almacenamientos
 
 class AlmacenamientosRepository(IRepository[Almacenamientos, AlmacenamientoResponse]):
@@ -14,7 +14,7 @@ class AlmacenamientosRepository(IRepository[Almacenamientos, AlmacenamientoRespo
 
     async def get_alm_id_by_name(self, alm_name: str) -> Optional[int]:
         """
-                        Find a Almacenamiento by 'name'
+                        Find an Almacenamiento by 'name'
 
                         Args:
                             alm_name: The almacenamiento name param to filter.

@@ -7,17 +7,20 @@ from starlette import status
 from core.exceptions.base_exception import BasedException
 from core.exceptions.entity_exceptions import EntityNotFoundException, EntityAlreadyRegisteredException
 from database.models import Transacciones
-from schemas.movimientos_schema import MovimientosCreate, MovimientosResponse
 from schemas.transacciones_schema import TransaccionResponse, TransaccionCreate, TransaccionUpdate
 from repositories.transacciones_repository import TransaccionesRepository
+from services.movimientos_service import MovimientosService
+from services.pesadas_service import PesadasService
 
 from utils.logger_util import LoggerUtil
 log = LoggerUtil()
 
 class TransaccionesService:
 
-    def __init__(self, tran_repository: TransaccionesRepository) -> None:
+    def __init__(self, tran_repository: TransaccionesRepository, pesadas_service : PesadasService, mov_service : MovimientosService) -> None:
         self._repo = tran_repository
+        self.pesadas_service = pesadas_service
+        self.mov_service = mov_service
 
     async def create_transaccion(self, tran: TransaccionCreate) -> TransaccionResponse:
         """
@@ -202,7 +205,7 @@ class TransaccionesService:
         """
         try:
             # 1. Obtener la transacción y validar su estado
-            tran = await self._repo.get_by_id(tran_id)
+            tran = await self.get_transaccion(tran_id)
             if tran is None:
                 raise EntityNotFoundException(f"La transacción con ID '{tran_id}' no fue encontrada.")
 
@@ -212,11 +215,15 @@ class TransaccionesService:
                     status_code=status.HTTP_400_BAD_REQUEST
                 )
 
+            # 2. Se obtiene sumatoria de pesadas para setear peso real
+            pesada = await self.pesadas_service.get_pesada_acumulada(tran.viaje_id)
+
             # 2. Se prepara los datos para actualizar la transacción
 
             update_fields = {
                 "estado": "Finalizada",
-                "fecha_fin": datetime.now()
+                "fecha_fin": datetime.now(),
+                "peso_real" : pesada.peso_real,
             }
             update_data = TransaccionUpdate(**update_fields)
 
@@ -254,7 +261,7 @@ class TransaccionesService:
         except Exception as e:
             log.error(f"Error al finalizar transacción con ID {tran_id}: {e}")
             raise BasedException(
-                message="Error inesperado al finalizar la transacción.",
+                message=f"Error inesperado al finalizar la transacción : {e}",
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
 

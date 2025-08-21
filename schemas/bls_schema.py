@@ -1,3 +1,5 @@
+from datetime import datetime
+
 from pydantic import Field, ConfigDict
 from schemas.base_schema import BaseSchema
 from decimal import Decimal
@@ -13,6 +15,8 @@ class BlsResponse(BaseSchema):
     cargue_directo: Optional[bool] = False
     estado_puerto: Optional[bool] = False
     estado_operador: Optional[bool] = False
+    fecha_hora: Optional[datetime] = None
+    usuario_id: Optional[int] = None
 
     model_config = ConfigDict(from_attributes=True)
 
@@ -25,6 +29,8 @@ class BlsCreate(BaseSchema):
     cargue_directo: Optional[bool] = False
     estado_puerto: Optional[bool] = False
     estado_operador: Optional[bool] = False
+    fecha_hora: Optional[datetime] = None
+    usuario_id: Optional[int] = None
 
     class Config:
         json_schema_extra = {
@@ -50,6 +56,8 @@ class BlsUpdate(BaseSchema):
     cargue_directo: Optional[bool] = None
     estado_puerto: Optional[bool] = None
     estado_operador: Optional[bool] = None
+    fecha_hora: Optional[datetime] = None
+    usuario_id: Optional[int] = None
 
 
 class BlsExtCreate(BaseSchema):

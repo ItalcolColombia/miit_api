@@ -7,22 +7,24 @@ class PesadaBase(BaseModel):
     transaccion_id: Optional[int] = None
     consecutivo: float
     bascula_id: Optional[int] = None
-    fecha_hora: datetime
     peso_meta: Optional[Decimal] = None
     peso_real: Decimal
     peso_vuelo: Optional[Decimal] = None
     peso_fino: Optional[Decimal] = None
+    fecha_hora: Optional[datetime] = None
+    usuario_id: Optional[int] = None
 
 
 class PesadaCreate(PesadaBase):
     transaccion_id: Optional[int] = None
     consecutivo: Optional[float] = None
     bascula_id: Optional[int] = None
-    fecha_hora: Optional[datetime] = None
     peso_meta: Optional[Decimal] = Field(None, max_digits=10, decimal_places=2)
     peso_real: Decimal = Field(..., max_digits=10, decimal_places=2)
     peso_vuelo: Optional[Decimal] = Field(None, max_digits=10, decimal_places=2)
     peso_fino: Optional[Decimal] = Field(None, max_digits=10, decimal_places=2)
+    fecha_hora: Optional[datetime] = None
+    usuario_id: Optional[int] = None
 
     class Config:
         json_schema_extra = {
@@ -42,11 +44,12 @@ class PesadaUpdate(PesadaCreate):
     transaccion_id: Optional[int] = None
     consecutivo: Optional[float] = None
     bascula_id: Optional[int] = None
-    fecha_hora: Optional[datetime] = None
     peso_meta: Optional[Decimal] = Field(None, max_digits=10, decimal_places=2)
     peso_real: Decimal = Field(..., max_digits=10, decimal_places=2)
     peso_vuelo: Optional[Decimal] = Field(None, max_digits=10, decimal_places=2)
     peso_fino: Optional[Decimal] = Field(None, max_digits=10, decimal_places=2)
+    fecha_hora: Optional[datetime] = None
+    usuario_id: Optional[int] = None
 
 class PesadaResponse(PesadaBase):
     id: int
@@ -62,8 +65,10 @@ class VPesadasAcumResponse(BaseModel):
     pit: int
     material: str
     peso: Decimal = Field(..., max_digits=10, decimal_places=2)
-    fecha: datetime
     puerto_id: Optional[str] = None
+    fecha_hora: datetime
+    usuario_id: int
+
 
     class Config:
         from_attributes = True

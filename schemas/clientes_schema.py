@@ -1,3 +1,5 @@
+from datetime import datetime
+
 from pydantic import Field, ConfigDict
 from schemas.base_schema import BaseSchema
 from decimal import Decimal
@@ -13,6 +15,8 @@ class ClientesResponse(BaseSchema):
     primer_apellido: Optional[str] = Field(None, max_length=30)
     segundo_apellido: Optional[str] = Field(None, max_length=30)
     id_actividad: Optional[int] = None
+    fecha_hora: Optional[datetime] = None
+    usuario_id: Optional[int] = None
 
     model_config = ConfigDict(from_attributes=True)
 
@@ -25,6 +29,8 @@ class ClienteCreate(BaseSchema):
     primer_apellido: Optional[str] = Field(None, max_length=30)
     segundo_apellido: Optional[str] = Field(None, max_length=30)
     id_actividad: Optional[int] = None
+    fecha_hora: Optional[datetime] = None
+    usuario_id: Optional[int] = None
 
     class Config:
         json_schema_extra = {
@@ -47,4 +53,6 @@ class ClienteUpdate(BaseSchema):
     primer_apellido: Optional[str] = Field(None, max_length=30)
     segundo_apellido: Optional[str] = Field(None, max_length=30)
     id_actividad: Optional[int] = None
+    fecha_hora: Optional[datetime] = None
+    usuario_id: Optional[int] = None
 

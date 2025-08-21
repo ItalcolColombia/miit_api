@@ -8,19 +8,8 @@ from utils.logger_util import LoggerUtil
 log = LoggerUtil()
 
 class FeedbackService:
-    """
-    Service for sending notifications to an external API.
-
-    This class handles authentication with an external API to obtain a JWT token and sends
-    generic notifications using the provided token and notification data.
-
-    Attributes:
-        _jwt_token (Optional[str]): The JWT token used for authenticating requests to the external API.
-    """
-
     def __init__(self):
         self._jwt_token: Optional[str] = None
-
 
     async def _get_jwt_token(self) -> str:
         """
@@ -75,8 +64,7 @@ class FeedbackService:
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
 
-    @staticmethod
-    async def notify(notification_data: Dict[str, Any],jwt_token: str = Depends(_get_jwt_token)) -> Dict[str, Any]:
+    async def notify(self, notification_data: Dict[str, Any],jwt_token: str = Depends(_get_jwt_token)) -> Dict[str, Any]:
         """
         Send a generic notification to an external API.
 

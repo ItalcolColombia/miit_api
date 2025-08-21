@@ -51,13 +51,13 @@ class IRepository(Generic[ModelType, SchemaType]):
         except AttributeError as e:
             raise ValueError(f"Invalid attribute in filter: {e}")
 
-    async def get_by_id(self, id: int) -> Optional[SchemaType]:
+    async def get_by_id(self, entity_id: int) -> Optional[SchemaType]:
         try:
-            result = await self.db.execute(select(self.model).filter(self.model.id == id))
-            item = result.scalar_one()
-            return self.schema.model_validate(item)
+            result = await self.db.execute(select(self.model).filter(self.model.id == entity_id))
+            db_obj = result.scalar_one()
+            return self.schema.model_validate(db_obj)
         except NoResultFound:
-            return None
+            raise EntityNotFoundException(self.model.__name__, entity_id)
         
     async def find_one(self, **kwargs) -> Optional[SchemaType]:
         try:
@@ -86,10 +86,10 @@ class IRepository(Generic[ModelType, SchemaType]):
         result = await self.db.execute(query)
         return result.scalar()
 
-    async def update(self, id: int, obj: BaseModel) -> BaseModel:
+    async def update(self, entity_id: int, obj: BaseModel) -> BaseModel:
         try:
             # Fetch the object to update asynchronously
-            result = await self.db.execute(select(self.model).filter(self.model.id == id))
+            result = await self.db.execute(select(self.model).filter(self.model.id == entity_id))
             db_obj = result.scalar_one()
 
             # Update fields
@@ -102,15 +102,15 @@ class IRepository(Generic[ModelType, SchemaType]):
             await self.db.refresh(db_obj)  # Refresh object state
             return self.schema.model_validate(db_obj)
         except NoResultFound:
-            raise EntityNotFoundException(self.model.__name__, id)
+            raise EntityNotFoundException(self.model.__name__, entity_id)
 
-    async def delete(self, id: int) -> bool:
+    async def delete(self, entity_id: int) -> bool:
         try:
             # Fetch and delete the object asynchronously
-            result = await self.db.execute(select(self.model).filter(self.model.id == id))
+            result = await self.db.execute(select(self.model).filter(self.model.id == entity_id))
             db_obj = result.scalar_one()
             await self.db.delete(db_obj)
             await self.db.commit()  # Commit the deletion
             return True
         except NoResultFound:
-            raise EntityNotFoundException(self.model.__name__, id)
+            raise EntityNotFoundException(self.model.__name__, entity_id)

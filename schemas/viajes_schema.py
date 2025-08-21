@@ -17,6 +17,8 @@ class ViajesResponse(BaseSchema):
     material_id: Optional[int] = None
     viaje_origen: Optional[str] = None
     despacho_directo: Optional[bool] = None
+    fecha_hora: Optional[datetime] = None
+    usuario_id: Optional[int] = None
 
     model_config = ConfigDict(from_attributes=True)
 
@@ -38,6 +40,8 @@ class ViajeCreate(BaseSchema):
     material_id: Optional[int] = None
     viaje_origen: Optional[str] = None
     despacho_directo: Optional[bool] = None
+    fecha_hora: Optional[datetime] = None
+    usuario_id: Optional[int] = None
 
 
     class Config:
@@ -63,6 +67,8 @@ class ViajeBuqueExtCreate(BaseModel):
     fecha_llegada: Optional[datetime] = None
     fecha_salida: Optional[datetime] = None
     estado: Optional[bool] = None
+    fecha_hora: Optional[datetime] = None
+    usuario_id: Optional[int] = None
 
     @field_validator('tipo')
     def tipo_valido(cls, value):
@@ -101,6 +107,8 @@ class ViajeCamionExtCreate(BaseModel):
     viaje_origen: Optional[str] = None
     despacho_directo: Optional[bool] = None
     puntos: Optional[int] = 1
+    fecha_hora: Optional[datetime] = None
+    usuario_id: Optional[int] = None
 
     @field_validator('material_name')
     def material_name_not_empty(cls, value):
@@ -149,6 +157,8 @@ class FlotaExtLoadCreate(ViajeBuqueExtCreate):
     razon_social: str = Field(..., max_length=300)
     material : str = Field(..., max_length=200)
     peso_bl: Decimal = Field(..., max_digits=10, decimal_places=2)
+    fecha_hora: Optional[datetime] = None
+    usuario_id: Optional[int] = None
 
 
     class Config:
@@ -172,3 +182,5 @@ class ViajeUpdate(BaseSchema):
     material_id: Optional[int] = None
     viaje_origen: Optional[int] = None
     despacho_directo: Optional[bool] = None
+    fecha_hora: Optional[datetime] = None
+    usuario_id: Optional[int] = None
