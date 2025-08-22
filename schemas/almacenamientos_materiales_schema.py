@@ -44,8 +44,9 @@ class VAlmMaterialesResponse(BaseModel):
     material_id: int
     material: str
     saldo: Decimal = Field(..., max_digits=10, decimal_places=2)
-    fecha_hora: Optional[datetime] = None
-    usuario_id: Optional[int] = None
+    fecha_hora: datetime
+    usuario_id: int
+    usuario: str
 
 
     class Config:

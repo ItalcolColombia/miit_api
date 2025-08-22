@@ -399,7 +399,7 @@ async def create_transaccion(
                 status.HTTP_422_UNPROCESSABLE_ENTITY: {"model": ValidationErrorResponse},
             })
 async def end_transaction(
-        tran_id: str,
+        tran_id: int,
         service: TransaccionesService = Depends(get_transacciones_service)):
     log.info(f"Payload recibido: Transacción {tran_id} - Finalizar")
 

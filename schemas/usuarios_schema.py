@@ -79,8 +79,9 @@ class VUsuariosRolResponse(BaseModel):
     recuperacion: Optional[str]= None
     estado: Optional[bool] = False
     estado_rol: Optional[bool] = False
-    fecha_hora: Optional[datetime] = None
-    usuario_id: Optional[int] = None
+    fecha_hora: datetime
+    usuario_id: int
+    usuario: str
 
     class Config:
         from_attributes = True
@@ -90,6 +91,9 @@ class VRolesPermResponse(BaseModel):
     rol: str
     permiso_id: int
     permiso: str
+    fecha_hora: datetime
+    usuario_id: int
+    usuario: str
 
     class Config:
         from_attributes = True

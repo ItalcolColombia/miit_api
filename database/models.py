@@ -247,7 +247,9 @@ class VPesadasAcumulado(Base):
     pit = Column(Integer)
     material = Column(String)
     peso = Column(Numeric(10,2), nullable=False)
-    fecha = Column(DateTime)
+    fecha_hora = Column(TIMESTAMP, server_default=func.now(), onupdate=func.now())
+    usuario_id = Column(Integer, nullable=True)
+    usuario = Column(String(200))
 
 
 class VUsuariosRoles(Base):
@@ -264,8 +266,9 @@ class VUsuariosRoles(Base):
     foto = Column(String)
     estado = Column(Boolean)
     estado_rol = Column(Boolean)
-    fecha_hora = Column(TIMESTAMP, server_default=func.now(), onupdate=func.now())
-
+    fecha_hora = Column(TIMESTAMP)
+    usuario_id = Column(Integer, nullable=True)
+    usuario = Column(String(200))
 
 
 class VRolesPermisos(Base):
@@ -274,6 +277,9 @@ class VRolesPermisos(Base):
     rol = Column(String(200))
     permiso_id = Column(Integer,  primary_key=True, index=True)
     permiso = Column(String(200))
+    fecha_hora = Column(TIMESTAMP)
+    usuario_id = Column(Integer, nullable=True)
+    usuario = Column(String(200))
 
 
 class VAlmMateriales(Base):
@@ -283,3 +289,6 @@ class VAlmMateriales(Base):
     material_id = Column(Integer)
     material = Column(String(200))
     saldo = Column(Numeric(10,2), nullable=False)
+    fecha_hora = Column(TIMESTAMP)
+    usuario_id = Column(Integer, nullable=True)
+    usuario = Column(String(200))

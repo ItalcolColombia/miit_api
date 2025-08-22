@@ -16,7 +16,7 @@ class Settings(BaseSettings):
     API_HOST: str = "0.0.0.0"
     API_PORT: int = "8000"
     API_V1_STR: str = "v1"
-    API_VERSION: str = "0.0.9"
+    API_VERSION_NUM: str = "0.0.11"
     API_LOG_LEVEL: str = "DEBUG"
     APP_LOG_DIR: str = "/var/www/metalteco/log/app_logs"
 
@@ -51,9 +51,10 @@ class Settings(BaseSettings):
 
     # TurboGraneles API
     TG_API_AUTH:str = ""
-    TG_API_URL:str = ""
-    TG_API_USER:str =""
-    TG_API_PASS:str =""
+    TG_API_URL:str = "http://turbograneles-puertoantioquia-424798204.us-east-1.elb.amazonaws.com"
+    TG_API_USER:str = "daniel.pacheco@metalteco.com"
+    TG_API_PASS:str ="Passw0rd_metalteco"
+
 
     class Config:
         env_file = ".env"

@@ -14,17 +14,22 @@ class PesadasRepository(IRepository[Pesadas, PesadaResponse]):
         super().__init__(model, schema, db)
 
 
-    async def get_sumatoria_pesadas(self, puerto_ref: str) -> VPesadasAcumResponse | None:
+    async def get_sumatoria_pesadas(self, puerto_ref: Optional[str] = None, tran_id: Optional[int] = None) -> VPesadasAcumResponse | None:
         """
                 Filter pesada sum
 
                 Returns:
                     A sum of Pesadas register matching the filter, otherwise, returns a null.
                 """
-        query = (
-            select(VPesadasAcumulado)
-            .where(VPesadasAcumulado.puerto_id == puerto_ref)
-        )
+
+        query = select(VPesadasAcumulado)
+
+        if puerto_ref is not None:
+            query = query.where(VPesadasAcumulado.puerto_id == puerto_ref)
+
+        if tran_id is not None:
+            query = query.where(VPesadasAcumulado.transaccion == tran_id)
+
         result = await self.db.execute(query)
         pesada = result.scalars().all()
 

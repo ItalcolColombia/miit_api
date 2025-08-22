@@ -68,6 +68,7 @@ class VPesadasAcumResponse(BaseModel):
     puerto_id: Optional[str] = None
     fecha_hora: datetime
     usuario_id: int
+    usuario:str
 
 
     class Config:

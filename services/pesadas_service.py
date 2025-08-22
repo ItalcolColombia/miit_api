@@ -197,12 +197,13 @@ class PesadasService:
                 status_code=status.HTTP_409_CONFLICT
             )
 
-    async def get_pesada_acumulada(self, puerto_id: str) -> VPesadasAcumResponse:
+    async def get_pesada_acumulada(self, puerto_id: Optional[str] = None, tran_id: Optional[int] = None) -> VPesadasAcumResponse:
         """
         Retrieve the sum of pesadas related to a puerto_id.
 
         Args:
-            puerto_id (str): The ID of the puerto to filter pesadas by.
+            puerto_id (str): The optional ID of the puerto to filter pesadas by.
+            tran_id (int): The optional ID of the transaction to filter pesadas by.
 
         Returns:
             VPesadasAcumResponse: An object containing the accumulated pesada data.
@@ -212,7 +213,7 @@ class PesadasService:
             BasedException: For unexpected errors during the retrieval process.
         """
         try:
-            pesada = await self._repo.get_sumatoria_pesadas(puerto_id)
+            pesada = await self._repo.get_sumatoria_pesadas(puerto_id, tran_id)
 
             if pesada is None:
                 raise EntityNotFoundException(f"No se encontraron registros de pesadas para la flota '{puerto_id}'")

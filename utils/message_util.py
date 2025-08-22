@@ -38,7 +38,7 @@ class MessageUtil:
             self.__api_name = get_settings().API_NAME
             self.__api_host = get_settings().API_HOST
             self.__api_port = get_settings().API_PORT
-            self.__api_version = get_settings().API_VERSION
+            self.__api_version = get_settings().API_VERSION_NUM
             self.__api_str_version = get_settings().API_V1_STR
         except Exception as e:
             log.error(f"Error en message_util: {e}")

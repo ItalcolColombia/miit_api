@@ -1,3 +1,4 @@
+import httpx
 from fastapi import Depends
 from typing import Annotated
 
@@ -20,7 +21,7 @@ from services.almacenamientos_service import AlmacenamientosService
 from services.almacenamientos_materiales_service import AlmacenamientosMaterialesService
 from services.bls_service import BlsService
 from services.clientes_service import ClientesService
-from services.feedback_service import FeedbackService
+from services.ext_api_service import ExtApiService
 from services.flotas_service import FlotasService
 from services.viajes_service import ViajesService
 from services.materiales_service import MaterialesService
@@ -80,8 +81,9 @@ async def get_mat_service(
 ) -> MaterialesService:
     return MaterialesService(materiales_repository)
 
-async def get_feedback_service() -> FeedbackService:
-    return FeedbackService()
+
+async def get_ext_api_service() -> ExtApiService:
+    return ExtApiService()
 
 async def get_viajes_service(
     viajes_repository: Annotated[ViajesRepository, Depends(get_viajes_repository)],
@@ -89,7 +91,7 @@ async def get_viajes_service(
     bls_service: Annotated[BlsService, Depends(get_bls_service)],
     clientes_service: Annotated[ClientesService, Depends(get_clientes_service)],
     flotas_service: Annotated[FlotasService, Depends(get_flotas_service)],
-    feedback_service: Annotated[FeedbackService, Depends(get_feedback_service)],
+    feedback_service: Annotated[ExtApiService, Depends(get_ext_api_service)],
 ) -> ViajesService:
     return ViajesService(
         viajes_repository=viajes_repository,

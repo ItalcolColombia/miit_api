@@ -5,13 +5,14 @@ from sqlalchemy import select
 from starlette import status
 
 from core.exceptions.base_exception import BasedException
+from core.settings import get_settings
 from database.models import VViajes
 from typing import List, Optional, Any, Dict
 from repositories.viajes_repository import ViajesRepository
 from schemas.bls_schema import BlsCreate, BlsExtCreate, BlsResponse, BlsUpdate
 from services.bls_service import BlsService
 from services.clientes_service import ClientesService
-from services.feedback_service import FeedbackService
+from services.ext_api_service import ExtApiService
 from services.materiales_service import MaterialesService
 from services.flotas_service import FlotasService
 from schemas.viajes_schema import (
@@ -28,7 +29,7 @@ log = LoggerUtil()
 
 class ViajesService:
 
-    def __init__(self, viajes_repository: ViajesRepository, mat_service : MaterialesService, flotas_service : FlotasService, feedback_service : FeedbackService, bl_service : BlsService, client_service : ClientesService) -> None:
+    def __init__(self, viajes_repository: ViajesRepository, mat_service : MaterialesService, flotas_service : FlotasService, feedback_service : ExtApiService, bl_service : BlsService, client_service : ClientesService) -> None:
         self._repo = viajes_repository
         self.mat_service = mat_service
         self.flotas_service = flotas_service
@@ -357,15 +358,14 @@ class ViajesService:
 
             updated_buque = await self.flotas_service.update_status(flota, estado)
 
-            # Se crea diccionario
-            notification_data = {
-                "voyage": puerto_id,
-                "status": f"Finished"
-            }
-
-            # Se envia body API Externa
-            await self.feedback_service.notify(notification_data)
-            log.info(f"Notificación enviada para flota {flota.referencia} con estado {estado}")
+            # Solo notificar si el cambio de estado es para finalizado
+            if not estado:
+                notification_data = {
+                    "voyage": puerto_id,
+                    "status": "Finished"
+                }
+                await self.feedback_service.post(notification_data,f"{get_settings().TG_API_URL}/api/v1/Metalsoft/FinalizaBuque")
+                log.info(f"Notificación enviada para flota {flota.referencia} con estado {estado}")
 
             return updated_buque
         except EntityNotFoundException as e:

@@ -209,31 +209,27 @@ class TransaccionesService:
             if tran is None:
                 raise EntityNotFoundException(f"La transacción con ID '{tran_id}' no fue encontrada.")
 
-            if tran.estado != "Activa":
+            if tran.estado != "Proceso":
                 raise BasedException(
-                    message=f"La transacción no pudo finalizar porque su estado es '{tran.estado}'. Solo las transacciones 'Activa' pueden finalizarse.",
+                    message=f"La transacción no se puede finalizar porque su estado es '{tran.estado}'. Solo las transacciones en estado 'Proceso' pueden finalizarse.",
                     status_code=status.HTTP_400_BAD_REQUEST
                 )
 
             # 2. Se obtiene sumatoria de pesadas para setear peso real
-            pesada = await self.pesadas_service.get_pesada_acumulada(tran.viaje_id)
+            pesada = await self.pesadas_service.get_pesada_acumulada(tran_id=tran.id)
 
             # 2. Se prepara los datos para actualizar la transacción
 
             update_fields = {
                 "estado": "Finalizada",
                 "fecha_fin": datetime.now(),
-                "peso_real" : pesada.peso_real,
+                "peso_real" : pesada.peso,
             }
             update_data = TransaccionUpdate(**update_fields)
 
             # 3. Se actualiza la transacción en la base de datos
             updated = await self._repo.update(tran_id, update_data)
 
-            # # 4. Verificación de update
-            # if not updated_transaccion:
-            #     raise BasedException(f"Error al actualizar la transacción")
-            #
             # #5. Se consulta saldo anterior
             #
             # # 5. Preparar y crear el movimiento asociado

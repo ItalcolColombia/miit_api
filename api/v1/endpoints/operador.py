@@ -322,7 +322,7 @@ async def get_acum_pesadas(
         service: PesadasService = Depends(get_pesadas_service),
         puerto_id: str = None):
     try:
-        pesadas = await service.get_pesada_acumulada(puerto_id)
+        pesadas = await service.get_pesada_acumulada(puerto_id=puerto_id)
         log.info(f"Consulta de pesadas para flota {puerto_id} realizada exitosamente.")
         return pesadas
 
