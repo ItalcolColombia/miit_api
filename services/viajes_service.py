@@ -239,13 +239,13 @@ class ViajesService:
                 raise EntityAlreadyRegisteredException(f"Ya existe un viaje con puerto_id '{viaje_create.puerto_id}'")
 
             # 2. Crear la flota si no existe
-            #nueva_flota_data = viaje_create.model_dump()
-            #nueva_flota_data["usuario_id"] = user_id
-            #db_flota = FlotaCreate(**nueva_flota_data)
-            #await self.flotas_service.create_flota_if_not_exists(db_flota)
+            nueva_flota_data = viaje_create.model_dump()
+            nueva_flota_data["usuario_id"] = user_id
+            db_flota = FlotaCreate(**nueva_flota_data)
+            await self.flotas_service.create_flota_if_not_exists(db_flota)
 
-            nueva_flota = FlotaCreate.model_validate(viaje_create)
-            await self.flotas_service.create_flota_if_not_exists(nueva_flota)
+            #nueva_flota = FlotaCreate.model_validate(viaje_create)
+            #await self.flotas_service.create_flota_if_not_exists(nueva_flota)
 
 
 
