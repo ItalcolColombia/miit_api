@@ -7,8 +7,7 @@ from colorlog import ColoredFormatter
 from starlette import status
 
 from core.exceptions.base_exception import BasedException
-from database.connection import AsyncSession 
-from core.settings import get_settings
+from core.config.settings import get_settings
 
 
 class LoggerUtil:

@@ -5,9 +5,9 @@ from sqlalchemy import select
 from starlette import status
 
 from core.exceptions.base_exception import BasedException
-from core.settings import get_settings
+from core.config.settings import get_settings
 from database.models import VViajes
-from typing import List, Optional, Any, Dict
+from typing import List, Optional
 from repositories.viajes_repository import ViajesRepository
 from schemas.bls_schema import BlsCreate, BlsExtCreate, BlsResponse, BlsUpdate
 from services.bls_service import BlsService
@@ -217,12 +217,13 @@ class ViajesService:
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
 
-    async def create_buque_nuevo(self, viaje_create: ViajeBuqueExtCreate) -> ViajesResponse:
+    async def create_buque_nuevo(self, viaje_create: ViajeBuqueExtCreate, user_id : int) -> ViajesResponse:
         """
         Create a new buque viaje, including associated flota if it doesn't exist.
 
         Args:
             viaje_create (ViajeBuqueExtCreate): The buque viaje data to create.
+            user_id (int): The ID of the user performing the creation, extracted from JWT.
 
         Returns:
             ViajesResponse: The created buque viaje object.
@@ -238,8 +239,15 @@ class ViajesService:
                 raise EntityAlreadyRegisteredException(f"Ya existe un viaje con puerto_id '{viaje_create.puerto_id}'")
 
             # 2. Crear la flota si no existe
+            #nueva_flota_data = viaje_create.model_dump()
+            #nueva_flota_data["usuario_id"] = user_id
+            #db_flota = FlotaCreate(**nueva_flota_data)
+            #await self.flotas_service.create_flota_if_not_exists(db_flota)
+
             nueva_flota = FlotaCreate.model_validate(viaje_create)
             await self.flotas_service.create_flota_if_not_exists(nueva_flota)
+
+
 
             # 3. Obtener flota (ya creada o existente)
             flota = await self.flotas_service.get_flota_by_ref(ref=viaje_create.referencia)
@@ -250,6 +258,7 @@ class ViajesService:
             # 4. Ajustar el schema al requerido
             viaje_data = viaje_create.model_dump(exclude={"referencia", "estado"})
             viaje_data["flota_id"] = flota.id
+            viaje_data["usuario_id"] = user_id
 
             # 5. Crear registro en la base de datos
             db_viaje = ViajeCreate(**viaje_data)
@@ -272,12 +281,13 @@ class ViajesService:
                 status_code=status.HTTP_409_CONFLICT
             )
 
-    async def create_camion_nuevo(self, viaje_create: ViajeCamionExtCreate) -> ViajesResponse:
+    async def create_camion_nuevo(self, viaje_create: ViajeCamionExtCreate, user_id : int) -> ViajesResponse:
         """
         Create a new camion viaje, including associated flota and material if valid.
 
         Args:
             viaje_create (ViajeCamionExtCreate): The camion viaje data to create.
+            user_id (int): The ID of the user performing the creation, extracted from JWT.
 
         Returns:
             ViajesResponse: The created camion viaje object.
@@ -294,6 +304,7 @@ class ViajesService:
 
             # 2. Crear la flota si no existe
             nueva_flota = FlotaCreate.model_validate(viaje_create)
+            nueva_flota["usuario_id"] = user_id
             await self.flotas_service.create_flota_if_not_exists(nueva_flota)
 
             # 3. Obtener flota (ya creada o existente)

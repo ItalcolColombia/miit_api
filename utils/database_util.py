@@ -1,10 +1,9 @@
-import asyncio
 from sqlalchemy.ext.asyncio import create_async_engine
 from sqlalchemy.exc import OperationalError
 from starlette import status
 
 from core.exceptions.base_exception import BasedException
-from core.settings import get_settings
+from core.config.settings import get_settings
 from database.configuration import DatabaseConfigurationUtil
 
 from utils.logger_util import LoggerUtil

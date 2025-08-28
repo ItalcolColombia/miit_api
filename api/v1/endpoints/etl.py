@@ -4,17 +4,17 @@ from fastapi import APIRouter, Depends, HTTPException, status, Query
 from fastapi_pagination import Page
 from core.di.service_injection import get_viajes_service, get_mat_service, get_alm_service, get_mov_service, \
     get_pesadas_service, get_transacciones_service, get_flotas_service, get_alm_mat_service
-from schemas.almacenamientos_materiales_schema import VAlmMaterialesResponse
-
+from core.enums.user_role_enum import UserRoleEnum
+from core.middleware.auth_middleware import require_access,get_current_user
 from schemas.almacenamientos_schema import AlmacenamientoResponse
+from schemas.almacenamientos_materiales_schema import VAlmMaterialesResponse
 from schemas.materiales_schema import MaterialesResponse
 from schemas.movimientos_schema import MovimientosResponse
 from schemas.pesadas_schema import PesadaResponse, PesadaCreate
 from schemas.transacciones_schema import TransaccionResponse, TransaccionCreate
 from schemas.viajes_schema import VViajesResponse
-from services.almacenamientos_materiales_service import AlmacenamientosMaterialesService
 from services.almacenamientos_service import AlmacenamientosService
-from services.auth_service import AuthService
+from services.almacenamientos_materiales_service import AlmacenamientosMaterialesService
 from services.flotas_service import FlotasService
 from services.viajes_service import ViajesService
 from services.movimientos_service import MovimientosService
@@ -28,7 +28,7 @@ from utils.logger_util import LoggerUtil
 log = LoggerUtil()
 
 response_json = ResponseUtil().json_response
-router = APIRouter(prefix="/scada", tags=["Automatizador"], dependencies=[Depends(AuthService.get_current_user)]) #
+router = APIRouter(prefix="/scada", tags=["Automatizador"], dependencies=[Depends(require_access(roles=[UserRoleEnum.ADMINISTRADOR, UserRoleEnum.AUTOMATIZADOR]))])
 
 @router.get("/almacenamientos-saldos",
             summary="Obtener listado paginado de almacenamientos saldos con filtro opcional por nombre.",

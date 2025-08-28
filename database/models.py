@@ -92,7 +92,7 @@ class Viajes(Base):
     material_id = Column(Integer,nullable=True)
     viaje_origen = Column(String(300),nullable=True)
     despacho_directo = Column(Boolean, nullable=True)
-    fecha_hora = Column(DateTime(timezone=False), nullable=True)
+    fecha_hora = Column(TIMESTAMP, server_default=func.now(), onupdate=func.now())
     usuario_id = Column(Integer, nullable=True)
     transacciones = relationship("Transacciones", backref="Viajes")
 

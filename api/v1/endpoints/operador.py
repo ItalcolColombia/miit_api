@@ -2,12 +2,14 @@ from decimal import Decimal
 from fastapi import APIRouter, Depends, HTTPException, status
 from datetime import datetime
 
-from schemas.pesadas_schema import VPesadasAcumResponse
-from services.auth_service import AuthService
-from utils.response_util import ResponseUtil
+from core.enums.user_role_enum import UserRoleEnum
+from core.middleware.auth_middleware import require_access, get_current_user
 from core.di.service_injection import get_viajes_service, get_pesadas_service
+from utils.response_util import ResponseUtil
 from services.viajes_service import ViajesService
 from services.pesadas_service import PesadasService
+from schemas.pesadas_schema import VPesadasAcumResponse
+from schemas.usuarios_schema import VUsuariosRolResponse
 from schemas.response_models import CreateResponse, ErrorResponse, ValidationErrorResponse, UpdateResponse
 from schemas.viajes_schema import (
     ViajeBuqueExtCreate,
@@ -21,7 +23,7 @@ log = LoggerUtil()
 
 
 response_json = ResponseUtil.json_response
-router = APIRouter(prefix="/integrador", tags=["Integrador"], dependencies=[Depends(AuthService.get_current_user)])
+router = APIRouter(prefix="/integrador", tags=["Integrador"],  dependencies=[Depends(require_access(roles=UserRoleEnum.AUTOMATIZADOR))])
 
 
 @router.post("/buque-registro",
@@ -35,10 +37,11 @@ router = APIRouter(prefix="/integrador", tags=["Integrador"], dependencies=[Depe
              })
 async def create_buque(
         flota: ViajeBuqueExtCreate,
+        current_user: VUsuariosRolResponse = Depends(get_current_user),
         service: ViajesService = Depends(get_viajes_service)):
     log.info(f"Payload recibido: Buque {flota}")
     try:
-        await service.create_buque_nuevo(flota)
+        await service.create_buque_nuevo(flota, current_user.id)
         log.info(f"Buque {flota.puerto_id} registrado")
         return response_json(
             status_code=status.HTTP_201_CREATED,
@@ -139,7 +142,7 @@ async def buque_in(
                 status.HTTP_400_BAD_REQUEST: {"model": ErrorResponse},
                 status.HTTP_422_UNPROCESSABLE_ENTITY: {"model": ValidationErrorResponse},
             })
-async def load_release(
+async def load_release_puerto(
         no_bl: str,
         service: ViajesService = Depends(get_viajes_service)):
     log.info(f"Payload recibido: BL {no_bl} - Levante de Carga")
@@ -174,7 +177,7 @@ async def load_release(
                 status.HTTP_400_BAD_REQUEST: {"model": ErrorResponse},
                 status.HTTP_422_UNPROCESSABLE_ENTITY: {"model": ValidationErrorResponse},
             })
-async def load_release(
+async def load_release_operador(
         no_bl: str,
         service: ViajesService = Depends(get_viajes_service)):
     log.info(f"Payload recibido: BL {no_bl} - Levante de Carga")
@@ -211,11 +214,12 @@ async def load_release(
              })
 async def create_camion(
         flota: ViajeCamionExtCreate,
+        current_user: VUsuariosRolResponse = Depends(get_current_user),
         service: ViajesService = Depends(get_viajes_service)):
     log.info(f"Payload recibido: Flota {flota}")
     try:
 
-        await service.create_camion_nuevo(flota)
+        await service.create_camion_nuevo(flota, current_user.id)
         log.info(f"Flota {flota.puerto_id} registrada")
         return response_json(
             status_code=status.HTTP_201_CREATED,

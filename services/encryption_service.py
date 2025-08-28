@@ -2,8 +2,7 @@ from cryptography.fernet import Fernet, InvalidToken
 from starlette import status
 
 from core.exceptions.base_exception import BasedException
-from core.contracts import encryption
-from core.settings import get_settings
+from core.config.settings import get_settings
 from utils.logger_util import LoggerUtil
 
 SALT = get_settings().ENCRYPTION_KEY

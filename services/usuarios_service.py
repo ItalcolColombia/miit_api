@@ -134,12 +134,13 @@ class UsuariosService:
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
 
-    async def create_user(self, user: UsuarioCreate) -> UsuariosResponse:
+    async def create_user(self, user: UsuarioCreate, user_id : int) -> UsuariosResponse:
         """
         Create a new user in the database.
 
         Args:
             user (UsuarioCreate): The user data to create, including username and password.
+            user_id (int): The ID of the user performing the creation, extracted from JWT.
 
         Returns:
             UsuariosResponse: The created user object.
@@ -154,7 +155,9 @@ class UsuariosService:
 
             # Hashear la contraseña
             user.clave = AnyUtils.generate_password_hash(user.clave)
-            user.fecha_modificado = func.now()
+            user.fecha_hora = func.now()
+            user.usuario_id = user_id
+
 
             # Crear el usuario
             return await self._repo.create(user)

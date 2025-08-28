@@ -1,7 +1,7 @@
 import httpx
 from typing import Dict, Any, Optional
 from fastapi import status
-from core.external_api import get_token
+from core.config.external_api import get_token
 from core.exceptions.entity_exceptions import BasedException
 from utils.logger_util import LoggerUtil
 

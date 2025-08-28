@@ -13,7 +13,7 @@ from fastapi_pagination import add_pagination
 
 from core.middleware.time_middleware import ProcessTimeHeaderMiddleware
 from api.v1.routes import routers as v1_routers
-from core.settings import get_settings
+from core.config.settings import get_settings
 from core.handlers.exception_handler import ExceptionHandler
 from core.middleware.logger_middleware import LoggerMiddleware
 from utils.database_util import DatabaseUtil
@@ -26,6 +26,7 @@ API_PORT = get_settings().API_PORT
 API_VERSION_STR = get_settings().API_V1_STR
 API_VERSION = get_settings().API_VERSION_NUM
 API_STAGE = get_settings().API_LOG_LEVEL
+ALLOWED_HOSTS = get_settings().ALLOWED_HOSTS
 
 SECRET_KEY = get_settings().JWT_SECRET_KEY
 
@@ -48,7 +49,7 @@ app = FastAPI(
     ],
     docs_url="/docs",
     redoc_url="/redoc",
-    openapi_url="/openapi.json",
+    openapi_url="/openapi/v1.json",
     swagger_ui_parameters={
         "filter": True,
         "defaultModelsExpandDepth": -1,
@@ -69,7 +70,7 @@ app.add_exception_handler(RequestValidationError, ExceptionHandler.json_decode_e
 # Middlewares
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=[str(origin) for origin in ALLOWED_HOSTS] or ["*"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -78,6 +79,7 @@ app.add_middleware(SessionMiddleware, secret_key=SECRET_KEY)
 app.add_middleware(GZipMiddleware, minimum_size=1000)
 app.add_middleware(LoggerMiddleware)
 app.add_middleware(ProcessTimeHeaderMiddleware)
+
 
 # Rutas
 app.include_router(v1_routers, prefix="/api/" + API_VERSION_STR)
