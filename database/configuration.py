@@ -1,6 +1,6 @@
 # /src/infrastructure/database/database_util.py
 from typing import Optional
-from core.settings import get_settings
+from core.config.settings import get_settings
 from core.enums.database_enum import DatabaseTypeEnum
 
 
