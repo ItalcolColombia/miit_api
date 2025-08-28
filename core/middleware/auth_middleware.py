@@ -10,6 +10,7 @@ from fastapi import Depends, status
 from core.exceptions.auth_exception import InvalidCredentialsException, InvalidTokenCredentialsException
 from typing import Annotated, Optional
 from core.config.settings import get_settings
+from core.config import context
 from services.auth_service import AuthService
 
 from utils.logger_util import LoggerUtil
@@ -59,7 +60,7 @@ async def get_current_user(
                     status_code=status.HTTP_403_FORBIDDEN
                 )
             # Set user_id in context
-            current_user_id.set(user.id)
+            context.current_user_id.set(user.id)
             return user
         else:
             return AuthService.get_su()
