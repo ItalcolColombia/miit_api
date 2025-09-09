@@ -371,13 +371,13 @@ class ViajesService:
             updated_buque = await self.flotas_service.update_status(flota,estado_puerto, estado_operador)
 
             # Solo notificar si el cambio de estado es para finalizado
-           # if not estado_puerto:
-            #    notification_data = {
-            #        "voyage": puerto_id,
-            #        "status": "Finished"
-            #    }
-            #    await self.feedback_service.post(notification_data,f"{get_settings().TG_API_URL}/api/v1/Metalsoft/FinalizaBuque")
-            #    log.info(f"Notificación enviada para flota {flota.referencia} con estado_puerto: {estado_puerto}")
+            if not estado_puerto:
+                notification_data = {
+                   "voyage": puerto_id,
+                    "status": "Finished"
+               }
+                await self.feedback_service.post(notification_data,f"{get_settings().TG_API_URL}/api/v1/Metalsoft/FinalizaBuque")
+                log.info(f"Notificación enviada para flota {flota.referencia} con estado_puerto: {estado_puerto}")
 
             return updated_buque
         except EntityNotFoundException as e:
