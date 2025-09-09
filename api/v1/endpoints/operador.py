@@ -133,6 +133,42 @@ async def buque_in(
             message=str(e)
         )
 
+@router.put("/buque-finalizar/{puerto_id}",
+            status_code=status.HTTP_200_OK,
+            summary="Modificar estado de un buque por partida",
+            description="Evento realizado por la automatización al dar por finalizado el recibo de buque.",
+            response_model=UpdateResponse,
+            responses={
+                status.HTTP_400_BAD_REQUEST: {"model": ErrorResponse},
+                status.HTTP_422_UNPROCESSABLE_ENTITY: {"model": ValidationErrorResponse},
+            })
+async def end_buque(
+        puerto_id: str,
+        service: ViajesService = Depends(get_viajes_service)):
+    log.info(f"Payload recibido: Flota {puerto_id} - Partida")
+    try:
+
+        await service.chg_estado_flota(puerto_id, estado_operador=False)
+        log.info(f"La Partida de buque {puerto_id} desde el operador marcada exitosamente.")
+        return response_json(
+            status_code=status.HTTP_200_OK,
+            message=f"estado actualizado",
+        )
+    except HTTPException as http_exc:
+        log.error(f"La partida de buque {puerto_id} desde el operador no pudo marcarse: {http_exc.detail}")
+        return response_json(
+            status_code=http_exc.status_code,
+            message=http_exc.detail
+        )
+
+    except Exception as e:
+        log.error(f"Error al procesar marcado de partida de buque {puerto_id} desde el operador: {e}")
+        return response_json(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            message=str(e)
+        )
+
+
 @router.put("/levante-carga-puerto/{no_bl}",
             status_code=status.HTTP_200_OK,
             summary="Modificar bit del estado_puerto de un BL",
