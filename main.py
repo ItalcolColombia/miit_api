@@ -1,8 +1,9 @@
 from contextlib import asynccontextmanager
+from urllib.request import Request
 
 import uvicorn
 
-from fastapi import FastAPI
+from fastapi import FastAPI, status
 from fastapi.exceptions import RequestValidationError
 from starlette.middleware.cors import CORSMiddleware
 from starlette.middleware.sessions import SessionMiddleware
@@ -11,7 +12,9 @@ from fastapi.middleware.gzip import GZipMiddleware
 from fastapi.responses import JSONResponse
 from fastapi_pagination import add_pagination
 
-from core.middleware.time_middleware import ProcessTimeHeaderMiddleware
+from core.exceptions.base_exception import BasedException
+from core.middleware.auth_middleware import AuthMiddleware
+from core.middleware.time_middleware import TimeMiddleware
 from api.v1.routes import routers as v1_routers
 from core.config.settings import get_settings
 from core.handlers.exception_handler import ExceptionHandler
@@ -30,6 +33,9 @@ ALLOWED_HOSTS = get_settings().ALLOWED_HOSTS
 
 SECRET_KEY = get_settings().JWT_SECRET_KEY
 
+# Logger Setup
+log = LoggerUtil()
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     # Startup logic
@@ -38,7 +44,6 @@ async def lifespan(app: FastAPI):
     # Shutdown logic
     log.info("Application shutdown")
 app = FastAPI(
-
     title="Servicio Interconsulta MIIT",
     description="API para el manejo de información en el repositorio central por parte de los stackholders: operador portuario y automatizador. ",
     version=API_VERSION,
@@ -59,13 +64,12 @@ app = FastAPI(
     lifespan=lifespan
 )
 
-# Logger Setup
 
-log = LoggerUtil()
-
-#Exceptions Handlers
+# Manejadores de excepciones
+app.add_exception_handler(BasedException, ExceptionHandler.http_exception_handler)
 app.add_exception_handler(StarletteHTTPException, ExceptionHandler.http_exception_handler)
 app.add_exception_handler(RequestValidationError, ExceptionHandler.json_decode_error_handler)
+
 
 # Middlewares
 app.add_middleware(
@@ -75,11 +79,13 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+
 app.add_middleware(SessionMiddleware, secret_key=SECRET_KEY)
 app.add_middleware(GZipMiddleware, minimum_size=1000)
+app.add_middleware(AuthMiddleware)
 app.add_middleware(LoggerMiddleware)
-app.add_middleware(ProcessTimeHeaderMiddleware)
-
+app.add_middleware(TimeMiddleware)
 
 # Rutas
 app.include_router(v1_routers, prefix="/api/" + API_VERSION_STR)

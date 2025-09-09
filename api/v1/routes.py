@@ -7,7 +7,7 @@ routers = APIRouter()
 
 def include_main_routes():
     """Include the main application routes."""
-    router_list = [auth.router, etl.router, operador.router]
+    router_list: list[APIRouter] = [auth.router, etl.router, operador.router]
     for router in router_list:
         routers.include_router(router)
 

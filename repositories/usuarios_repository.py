@@ -3,6 +3,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 from sqlalchemy.exc import ProgrammingError, SQLAlchemyError
 from fastapi import HTTPException, status
+
+from core.contracts.auditor import Auditor
 from repositories.base_repository import IRepository
 from schemas.usuarios_schema import UsuariosResponse, VUsuariosRolResponse, VRolesPermResponse
 from database.models import Usuarios, VUsuariosRoles, VRolesPermisos
@@ -15,9 +17,9 @@ log = LoggerUtil()
 class UsuariosRepository(IRepository[Usuarios, UsuariosResponse]):
     db: AsyncSession
 
-    def __init__(self, model: type[Usuarios], schema: type[UsuariosResponse], db: AsyncSession) -> None:
+    def __init__(self, model: type[Usuarios], schema: type[UsuariosResponse], db: AsyncSession, auditor: Auditor) -> None:
         self.db = db
-        super().__init__(model, schema, db)
+        super().__init__(model, schema, db, auditor)
 
     async def get_by_username(self, username: str) -> Optional[VUsuariosRolResponse]:
 

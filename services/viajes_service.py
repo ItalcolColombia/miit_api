@@ -343,13 +343,14 @@ class ViajesService:
                 status_code=status.HTTP_409_CONFLICT
             )
 
-    async def chg_estado_flota(self, puerto_id: str, estado: bool) -> FlotasResponse:
+    async def chg_estado_flota(self, puerto_id: str, estado_puerto: Optional[bool] = None, estado_operador: Optional[bool] = None) -> FlotasResponse:
         """
         Change the status of a flota associated with a viaje.
 
         Args:
             puerto_id (str): The puerto_id of the viaje.
-            estado (bool): The new status for the flota.
+            estado_puerto (bool): The puerto status value for the flota.
+            estado_operador (bool): The operador status value for the flota.
 
         Returns:
             FlotasResponse: The updated flota object.
@@ -367,24 +368,24 @@ class ViajesService:
             if not flota:
                 raise EntityNotFoundException(f"Flota con id '{viaje.flota_id}' no existe")
 
-            updated_buque = await self.flotas_service.update_status(flota, estado)
+            updated_buque = await self.flotas_service.update_status(flota,estado_puerto, estado_operador)
 
             # Solo notificar si el cambio de estado es para finalizado
-            if not estado:
-                notification_data = {
-                    "voyage": puerto_id,
-                    "status": "Finished"
-                }
-                await self.feedback_service.post(notification_data,f"{get_settings().TG_API_URL}/api/v1/Metalsoft/FinalizaBuque")
-                log.info(f"Notificación enviada para flota {flota.referencia} con estado {estado}")
+           # if not estado_puerto:
+            #    notification_data = {
+            #        "voyage": puerto_id,
+            #        "status": "Finished"
+            #    }
+            #    await self.feedback_service.post(notification_data,f"{get_settings().TG_API_URL}/api/v1/Metalsoft/FinalizaBuque")
+            #    log.info(f"Notificación enviada para flota {flota.referencia} con estado_puerto: {estado_puerto}")
 
             return updated_buque
         except EntityNotFoundException as e:
             raise e
         except Exception as e:
-            log.error(f"Error al cambiar estado de flota con puerto_id {puerto_id}: {e}")
+            log.error(f"Error al cambiar estado de flota con puerto_id {puerto_id}: {str(e)}")
             raise BasedException(
-                message=f"Error al cambiar el estado de flota con puerto_id {puerto_id}",
+                message=f"Error al cambiar el estado de flota con puerto_id {puerto_id} : {str(e)}",
                 status_code=status.HTTP_424_FAILED_DEPENDENCY
             )
 

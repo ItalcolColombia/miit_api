@@ -1,6 +1,8 @@
 from typing import Optional
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
+
+from core.contracts.auditor import Auditor
 from repositories.base_repository import IRepository
 from schemas.almacenamientos_schema import AlmacenamientoResponse
 from database.models import Almacenamientos
@@ -8,9 +10,9 @@ from database.models import Almacenamientos
 class AlmacenamientosRepository(IRepository[Almacenamientos, AlmacenamientoResponse]):
     db: AsyncSession
 
-    def __init__(self, model: type[Almacenamientos], schema: type[AlmacenamientoResponse], db: AsyncSession) -> None:
+    def __init__(self, model: type[Almacenamientos], schema: type[AlmacenamientoResponse], db: AsyncSession, auditor: Auditor) -> None:
         self.db = db
-        super().__init__(model, schema, db)
+        super().__init__(model, schema, db, auditor)
 
     async def get_alm_id_by_name(self, alm_name: str) -> Optional[int]:
         """

@@ -5,7 +5,7 @@ from fastapi_pagination import Page
 from core.di.service_injection import get_viajes_service, get_mat_service, get_alm_service, get_mov_service, \
     get_pesadas_service, get_transacciones_service, get_flotas_service, get_alm_mat_service
 from core.enums.user_role_enum import UserRoleEnum
-from core.middleware.auth_middleware import require_access,get_current_user
+from services.auth_service import AuthService
 from schemas.almacenamientos_schema import AlmacenamientoResponse
 from schemas.almacenamientos_materiales_schema import VAlmMaterialesResponse
 from schemas.materiales_schema import MaterialesResponse
@@ -28,7 +28,7 @@ from utils.logger_util import LoggerUtil
 log = LoggerUtil()
 
 response_json = ResponseUtil().json_response
-router = APIRouter(prefix="/scada", tags=["Automatizador"], dependencies=[Depends(require_access(roles=[UserRoleEnum.ADMINISTRADOR, UserRoleEnum.AUTOMATIZADOR]))])
+router = APIRouter(prefix="/scada", tags=["Automatizador"], dependencies=[Depends(AuthService.require_access(roles=[UserRoleEnum.ADMINISTRADOR, UserRoleEnum.AUTOMATIZADOR]))])
 
 @router.get("/almacenamientos-saldos",
             summary="Obtener listado paginado de almacenamientos saldos con filtro opcional por nombre.",
@@ -105,22 +105,22 @@ async def end_buque(
     log.info(f"Payload recibido: Flota {puerto_id} - Partida")
     try:
 
-        await service.chg_estado_flota(puerto_id, False)
-        log.info(f"La Partida de buque {puerto_id} marcada exitosamente.")
+        await service.chg_estado_flota(puerto_id, estado_puerto=False)
+        log.info(f"La Partida de buque {puerto_id} desde el puerto marcada exitosamente.")
         return response_json(
             status_code=status.HTTP_200_OK,
             message=f"estado actualizado",
         )
 
     except HTTPException as http_exc:
-        log.error(f"La partida de buque {puerto_id} no pudo marcarse: {http_exc.detail}")
+        log.error(f"La partida de buque {puerto_id} desde el puerto no pudo marcarse: {http_exc.detail}")
         return response_json(
             status_code=http_exc.status_code,
             message=http_exc.detail
         )
 
     except Exception as e:
-        log.error(f"Error al procesar marcado de partida de buque {puerto_id}: {e}")
+        log.error(f"Error al procesar marcado de partida de buque {puerto_id} desde el puerto: {e}")
         return response_json(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             message=str(e)

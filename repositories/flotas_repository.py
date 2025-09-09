@@ -1,20 +1,19 @@
 from typing import Optional
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
-from sqlalchemy.orm.exc import NoResultFound
 
-from core.exceptions.entity_exceptions import EntityNotFoundException
+from core.contracts.auditor import Auditor
 from repositories.base_repository import IRepository
-from schemas.flotas_schema import FlotasResponse, FlotaCreate, FlotaUpdate
+from schemas.flotas_schema import FlotasResponse
 from database.models import Flotas
 
 
 class FlotasRepository(IRepository[Flotas, FlotasResponse]):
     db: AsyncSession
 
-    def __init__(self, model: type[Flotas], schema: type[FlotasResponse], db: AsyncSession) -> None:
+    def __init__(self, model: type[Flotas], schema: type[FlotasResponse], db: AsyncSession, auditor: Auditor) -> None:
         self.db = db
-        super().__init__(model, schema, db)
+        super().__init__(model, schema, db, auditor)
 
     async def get_flota_by_ref(self, ref: str) -> Optional[Flotas]:
         stmt = select(self.model).filter(self.model.referencia == ref)

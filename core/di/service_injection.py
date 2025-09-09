@@ -45,6 +45,7 @@ from .repository_injection import (
     get_transacciones_repository
 )
 
+
 async def get_auth_service(
     user_repository: UsuariosRepository = Depends(get_user_repository)
 ) -> AuthService:
@@ -123,7 +124,6 @@ async def get_transacciones_service(
         pesadas_service=pesadas_service,
         mov_service=mov_service,
     )
-
 
 async def get_user_service(
     user_repository: UsuariosRepository = Depends(get_user_repository)

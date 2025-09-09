@@ -4,6 +4,8 @@ from sqlalchemy.schema import UniqueConstraint
 from sqlalchemy import Identity
 from sqlalchemy.sql import func
 from sqlalchemy.orm import relationship, declarative_base, backref
+from sqlalchemy.sql.sqltypes import JSON
+
 from utils.any_utils import AnyUtils
 
 Base = declarative_base()
@@ -74,9 +76,10 @@ class Flotas(Base):
     tipo = Column(String(6))
     referencia = Column(String(300), unique=True, index=True)
     puntos = Column(Integer, nullable=True)
-    estado = Column(Boolean)
     fecha_hora = Column(TIMESTAMP, server_default=func.now(), onupdate=func.now())
     usuario_id = Column(Integer, nullable=True)
+    estado_puerto = Column(Boolean)
+    estado_operador = Column(Boolean)
 
 
 
@@ -205,20 +208,28 @@ class Pesadas(Base):
     usuario_id = Column(Integer, nullable=True)
 
 
+class LogsAuditoria(Base):
+    __tablename__ = 'logs_auditoria'
+    id = Column(Integer, primary_key=True, index=True)
+    entidad = Column(String, nullable=False)
+    entidad_id = Column(Integer, nullable=False)
+    accion = Column(String, nullable=False)
+    valor_anterior = Column(JSON, nullable=True)
+    valor_nuevo = Column(JSON, nullable=True)
+    fecha_hora = Column(TIMESTAMP, server_default=func.now(), onupdate=func.now())
+    usuario_id = Column(Integer, nullable=True)
 
 class VFlotas(Base):
     __tablename__ = "v_flotas"
     id = Column(Integer, primary_key=True, index=True)
     tipo = Column(String(6))
     referencia = Column(String(300), unique=True, index=True)
-    consecutivo = Column(Double, nullable=False)
-    peso = Column(Numeric(10,2), nullable=False)
-    fecha_llegada = Column(DateTime(timezone=False), nullable=True)
-    fecha_salida = Column(DateTime(timezone=False), nullable=True)
-    material_id = Column(Integer,nullable=True)
-    material= Column(String(300), nullable=True)
-    estado = Column(Boolean, nullable=True)
-    despacho_directo = Column(Boolean, nullable=True)
+    puntos = Column(Integer,nullable=True)
+    estado_operador = Column(Boolean, nullable=True)
+    estado_puerto = Column(Boolean, nullable=True)
+    fecha_hora = Column(TIMESTAMP, server_default=func.now(), onupdate=func.now())
+    usuario_id = Column(Integer, nullable=True)
+    usuario = Column(String(200))
 
 
 class VViajes(Base):
@@ -236,7 +247,10 @@ class VViajes(Base):
     material = Column(String)
     viaje_origen = Column(String)
     despacho_directo = Column(Boolean)
-    estado = Column(Boolean)
+    estado_puerto = Column(Boolean, nullable=True)
+    estado_operador = Column(Boolean, nullable=True)
+    fecha_hora = Column(TIMESTAMP, server_default=func.now(), onupdate=func.now())
+    usuario_id = Column(Integer, nullable=True)
 
 class VPesadasAcumulado(Base):
     __tablename__ = "v_pesadas_acumulado"

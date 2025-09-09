@@ -1,16 +1,18 @@
 from typing import Optional
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
+
+from core.contracts.auditor import Auditor
 from repositories.base_repository import IRepository
-from schemas.materiales_schema import MaterialesResponse, MaterialesCreate, MaterialesUpdate
-from database.models import Materiales  # Import your Material model
+from schemas.materiales_schema import MaterialesResponse
+from database.models import Materiales
 
 class MaterialesRepository(IRepository[Materiales, MaterialesResponse]):
     db: AsyncSession
 
-    def __init__(self, model: type[Materiales], schema: type[MaterialesResponse], db: AsyncSession) -> None:
+    def __init__(self, model: type[Materiales], schema: type[MaterialesResponse], db: AsyncSession, auditor: Auditor) -> None:
         self.db = db
-        super().__init__(model, schema, db)
+        super().__init__(model, schema, db, auditor)
 
     async def get_material_id_by_name(self, material_name: str) -> Optional[int]:
         """

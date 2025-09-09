@@ -3,20 +3,20 @@ from fastapi import APIRouter, Depends, HTTPException, status, Query
 from fastapi_pagination import Page, Params
 from core.di.service_injection import get_user_service
 from core.enums.user_role_enum import UserRoleEnum
-from core.middleware.auth_middleware import require_access, get_current_user
+from services.auth_service import AuthService
 from services.usuarios_service import UsuariosService
 from schemas.usuarios_schema import UsuarioCreate, UsuariosResponse, UsuarioUpdate, VUsuariosRolResponse
 from utils.response_util import ResponseUtil
 
 
 response_json = ResponseUtil().json_response
-router = APIRouter(prefix="/admin", tags=["Administrador"], dependencies=[Depends(require_access(roles=[UserRoleEnum.SUPER_ADMINISTRATOR, UserRoleEnum.ADMINISTRADOR]))]) #
+router = APIRouter(prefix="/admin", tags=["Administrador"], dependencies=[Depends(AuthService.require_access(roles=[UserRoleEnum.SUPER_ADMINISTRATOR, UserRoleEnum.ADMINISTRADOR]))]) #
 
 
 @router.post("/create", response_model=UsuariosResponse, status_code=status.HTTP_201_CREATED)
 async def register_user(
 	user_data: UsuarioCreate,
-    current_user: VUsuariosRolResponse = Depends(get_current_user),
+    current_user: VUsuariosRolResponse = Depends(AuthService.get_current_user),
 	user_service: UsuariosService = Depends(get_user_service)
 ):
 	created_user = await user_service.create_user(user_data, current_user.id)

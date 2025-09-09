@@ -1,5 +1,7 @@
 from fastapi import Depends
 from sqlalchemy.ext.asyncio import AsyncSession
+from core.contracts.auditor import Auditor
+from services.logs_auditoria_service import DatabaseAuditor
 
 from .database_injection import get_db
 from database.models import (
@@ -43,59 +45,76 @@ from schemas.transacciones_schema import TransaccionResponse
 from schemas.usuarios_schema import UsuariosResponse
 
 
+
+async def get_auditor_service(
+        session: AsyncSession = Depends(get_db)
+) -> Auditor:
+    return DatabaseAuditor(session)
+
 async def get_user_repository(
-    session: AsyncSession = Depends(get_db)
+        session: AsyncSession = Depends(get_db),
+        auditor: Auditor = Depends(get_auditor_service)
 ) -> UsuariosRepository:
-    return UsuariosRepository(Usuarios, UsuariosResponse, session)
+    return UsuariosRepository(Usuarios, UsuariosResponse, session, auditor)
 
 async def get_viajes_repository(
-    session: AsyncSession = Depends(get_db)
+        session: AsyncSession = Depends(get_db),
+        auditor: Auditor = Depends(get_auditor_service)
 ) -> ViajesRepository:
-    return ViajesRepository(Viajes, ViajesResponse, session)
+    return ViajesRepository(Viajes, ViajesResponse, session, auditor)
 
 async def get_alm_repository(
-    session: AsyncSession = Depends(get_db)
+        session: AsyncSession = Depends(get_db),
+        auditor: Auditor = Depends(get_auditor_service)
 ) -> AlmacenamientosRepository:
-    return AlmacenamientosRepository(Almacenamientos, AlmacenamientoResponse, session)
+    return AlmacenamientosRepository(Almacenamientos, AlmacenamientoResponse, session, auditor)
 
 async def get_alm_mat_repository(
-    session: AsyncSession = Depends(get_db)
+        session: AsyncSession = Depends(get_db),
+        auditor: Auditor = Depends(get_auditor_service)
 ) -> AlmacenamientosMaterialesRepository:
-    return AlmacenamientosMaterialesRepository(AlmacenamientosMateriales, AlmacenamientoMaterialesResponse, session)
+    return AlmacenamientosMaterialesRepository(AlmacenamientosMateriales, AlmacenamientoMaterialesResponse, session, auditor)
 
 
 async def get_flotas_repository(
-        session: AsyncSession = Depends(get_db)
+        session: AsyncSession = Depends(get_db),
+        auditor: Auditor = Depends(get_auditor_service)
 ) -> FlotasRepository:
-    return FlotasRepository(Flotas, FlotasResponse, session)
+    return FlotasRepository(Flotas, FlotasResponse, session, auditor)
 
 
 async def get_bls_repository(
-        session: AsyncSession = Depends(get_db)
+        session: AsyncSession = Depends(get_db),
+        auditor: Auditor = Depends(get_auditor_service)
 ) -> BlsRepository:
-    return BlsRepository(Bls, BlsResponse, session)
+    return BlsRepository(Bls, BlsResponse, session, auditor)
 
 async def get_clientes_repository(
-        session: AsyncSession = Depends(get_db)
+        session: AsyncSession = Depends(get_db),
+        auditor: Auditor = Depends(get_auditor_service)
 ) -> ClientesRepository:
-    return ClientesRepository(Clientes, ClientesResponse, session)
+    return ClientesRepository(Clientes, ClientesResponse, session, auditor)
 
 async def get_materiales_repository(
-    session: AsyncSession = Depends(get_db)
+        session: AsyncSession = Depends(get_db),
+        auditor: Auditor = Depends(get_auditor_service)
 ) -> MaterialesRepository:
-    return MaterialesRepository(Materiales, MaterialesResponse, session)
+    return MaterialesRepository(Materiales, MaterialesResponse, session, auditor)
 
 async def get_movimientos_repository(
-    session: AsyncSession = Depends(get_db)
+        session: AsyncSession = Depends(get_db),
+        auditor: Auditor = Depends(get_auditor_service)
 ) -> MovimientosRepository:
-    return MovimientosRepository(Movimientos, MovimientosResponse, session)
+    return MovimientosRepository(Movimientos, MovimientosResponse, session, auditor)
 
 async def get_pesadas_repository(
-    session: AsyncSession = Depends(get_db)
+        session: AsyncSession = Depends(get_db),
+        auditor: Auditor = Depends(get_auditor_service)
 ) -> PesadasRepository:
-    return PesadasRepository(Pesadas, PesadaResponse, session)
+    return PesadasRepository(Pesadas, PesadaResponse, session, auditor)
 
 async def get_transacciones_repository(
-    session: AsyncSession = Depends(get_db)
+        session: AsyncSession = Depends(get_db),
+        auditor: Auditor = Depends(get_auditor_service)
 ) -> TransaccionesRepository:
-    return TransaccionesRepository(Transacciones, TransaccionResponse, session)
+    return TransaccionesRepository(Transacciones, TransaccionResponse, session, auditor)

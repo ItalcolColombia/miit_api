@@ -1,10 +1,10 @@
 from typing import List, Optional
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select,func
-from fastapi_pagination.ext.sqlalchemy import paginate
-from fastapi_pagination import Page
+from sqlalchemy import select
+
+from core.contracts.auditor import Auditor
 from repositories.base_repository import IRepository
-from schemas.viajes_schema import ViajesResponse, ViajeCreate, ViajeUpdate, ViajesActResponse, VViajesResponse
+from schemas.viajes_schema import ViajesResponse, ViajesActResponse
 from database.models import Viajes, VViajes
 from sqlalchemy.orm.exc import NoResultFound
 from utils.logger_util import LoggerUtil
@@ -15,9 +15,9 @@ log = LoggerUtil()
 class ViajesRepository(IRepository[Viajes, ViajesResponse]):
     db: AsyncSession
 
-    def __init__(self, model: type[Viajes], schema: type[ViajesResponse], db: AsyncSession) -> None:
+    def __init__(self, model: type[Viajes], schema: type[ViajesResponse], db: AsyncSession, auditor:Auditor) -> None:
         self.db = db
-        super().__init__(model, schema, db)
+        super().__init__(model, schema, db, auditor)
 
     async def get_buques_disponibles(self) -> List[ViajesActResponse] | None:
         """

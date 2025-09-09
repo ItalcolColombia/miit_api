@@ -188,13 +188,14 @@ class FlotasService:
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
 
-    async def update_status(self, flota: Flotas, estado: bool) -> FlotasResponse:
+    async def update_status(self, flota: Flotas, estado_puerto: Optional[bool] = None, estado_operador: Optional[bool] = None) -> FlotasResponse:
         """
         Update the 'estado' for an existing flota.
 
         Args:
             flota (Flotas): The flota object whose status needs to be updated.
-            estado (bool): The new boolean value for the flota's status (e.g., True for active, False for inactive).
+            estado_puerto (bool): The boolean value for the flota's status in ETL (e.g., True for active, False for inactive).
+            estado_operador (bool): The boolean value for the flota's status in the operador API (e.g., True for active, False for inactive).
 
         Returns:
             FlotasResponse: The updated flota object.
@@ -204,12 +205,18 @@ class FlotasService:
         """
         try:
 
-            update_fields = {
-                "estado": estado,
-            }
+            # Se crea diccionario
+            update_fields = {}
+
+            # Se valida el estado a actualizar
+            if estado_puerto is not None:
+                update_fields["estado_puerto"] = estado_puerto
+
+            if estado_operador is not None:
+                update_fields["estado_operador"] = estado_operador
+
             update_data = FlotaUpdate(**update_fields)
             updated = await self._repo.update(flota.id, update_data)
-            log.info(f"Estado modificado para flota {flota.referencia} a {estado}")
             return FlotasResponse.model_validate(updated)
         except Exception as e:
             log.error(f"Error al cambiar estado de flota: {flota.referencia} - {e}")

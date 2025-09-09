@@ -3,7 +3,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from datetime import datetime
 
 from core.enums.user_role_enum import UserRoleEnum
-from core.middleware.auth_middleware import require_access, get_current_user
+from services.auth_service import AuthService
 from core.di.service_injection import get_viajes_service, get_pesadas_service
 from utils.response_util import ResponseUtil
 from services.viajes_service import ViajesService
@@ -23,7 +23,7 @@ log = LoggerUtil()
 
 
 response_json = ResponseUtil.json_response
-router = APIRouter(prefix="/integrador", tags=["Integrador"],  dependencies=[Depends(require_access(roles=UserRoleEnum.AUTOMATIZADOR))])
+router = APIRouter(prefix="/integrador", tags=["Integrador"],  dependencies=[Depends(AuthService.require_access(roles=[UserRoleEnum.ADMINISTRADOR, UserRoleEnum.INTEGRADOR]))])
 
 
 @router.post("/buque-registro",
@@ -37,7 +37,7 @@ router = APIRouter(prefix="/integrador", tags=["Integrador"],  dependencies=[Dep
              })
 async def create_buque(
         flota: ViajeBuqueExtCreate,
-        current_user: VUsuariosRolResponse = Depends(get_current_user),
+        current_user: VUsuariosRolResponse = Depends(AuthService.get_current_user),
         service: ViajesService = Depends(get_viajes_service)):
     log.info(f"Payload recibido: Buque {flota}")
     try:
@@ -214,7 +214,7 @@ async def load_release_operador(
              })
 async def create_camion(
         flota: ViajeCamionExtCreate,
-        current_user: VUsuariosRolResponse = Depends(get_current_user),
+        current_user: VUsuariosRolResponse = Depends(AuthService.get_current_user),
         service: ViajesService = Depends(get_viajes_service)):
     log.info(f"Payload recibido: Flota {flota}")
     try:

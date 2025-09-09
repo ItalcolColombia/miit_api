@@ -68,12 +68,5 @@ class LoggerMiddleware(BaseHTTPMiddleware):
         except Exception as e:
             import traceback
             tb = "".join(traceback.format_exception(type(e), e, e.__traceback__))
-
-            #log.error(f"Error processing request {method} {url}: {str(e)}", exc_info=True)
-
-            log.error(f"Middleware caught exception: {e}\n{tb}")
-
-            return JSONResponse(
-                status_code=500,
-                content={"detail": "Internal Server Error"},
-            )
+            log.error(f"Middleware caught exception: {type(e).__name__}: {str(e)}\n{tb}")
+            raise

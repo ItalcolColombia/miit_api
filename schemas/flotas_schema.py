@@ -8,20 +8,24 @@ class FlotasResponse(BaseSchema):
     tipo: str
     referencia: str
     puntos: Optional[int] = None
-    estado: Optional[bool] = True
     fecha_hora: Optional[datetime] = None
     usuario_id: Optional[int] = None
+    estado_puerto: Optional[bool] = True
+    estado_operador: Optional[bool] = True
 
-    model_config = ConfigDict(from_attributes=True)
+
+model_config = ConfigDict(from_attributes=True)
 
 
 class FlotaCreate(BaseSchema):
     tipo: Optional[str]
     referencia: str = Field(..., max_length=255)
     puntos: Optional[int] = None
-    estado: Optional[bool] = True
     fecha_hora: Optional[datetime] = None
     usuario_id: Optional[int] = None
+    estado_puerto: Optional[bool] = True
+    estado_operador: Optional[bool] = True
+
 
     model_config = ConfigDict(
         extra='ignore',
@@ -30,7 +34,8 @@ class FlotaCreate(BaseSchema):
                 "tipo": "buque",
                 "referencia": "LIBERTY ISLAND",
                 "puntos": None,
-                "estado": True,
+                "estado_puerto": True,
+                "estado_operador": True,
             }
         }
     )
@@ -38,7 +43,8 @@ class FlotaCreate(BaseSchema):
 class FlotaUpdate(BaseSchema):
     referencia: Optional[str] = Field(None, max_length=255)
     puntos: Optional[int] = None
-    estado: Optional[bool] = None
     fecha_hora: Optional[datetime] = None
     usuario_id: Optional[int] = None
+    estado_puerto: Optional[bool] = True
+    estado_operador: Optional[bool] = True
 

@@ -6,17 +6,21 @@ from sqlalchemy.future import select
 from fastapi_pagination.ext.sqlalchemy import paginate
 from fastapi_pagination import Page, Params
 from sqlalchemy.exc import NoResultFound
+from core.contracts.auditor import Auditor
 from core.exceptions.entity_exceptions import EntityNotFoundException
+from core.config.context import current_user_id
+from schemas.logs_auditoria_schema import LogsAuditoriaCreate
 from utils.any_utils import AnyUtils
 
 ModelType = TypeVar("ModelType")
 SchemaType = TypeVar("SchemaType")
 
 class IRepository(Generic[ModelType, SchemaType]):
-    def __init__(self, model: type[ModelType], schema: type[SchemaType], db: AsyncSession) -> None:
+    def __init__(self, model: type[ModelType], schema: type[SchemaType], db: AsyncSession, auditor: Auditor) -> None:
         self.model = model
         self.schema = schema
         self.db = db
+        self.auditor = auditor
 
     async def get_all(self) -> List[SchemaType]:
         query = select(self.model)
@@ -74,11 +78,31 @@ class IRepository(Generic[ModelType, SchemaType]):
             raise ValueError(f"Invalid attribute in filter: {e}")
 
     async def create(self, obj: BaseModel) -> BaseModel:
+        # Create a new object with data from the Pydantic model
+        obj_data = obj.model_dump()
+
+        # Explicitly set user_id if the model has a user_id column
+        if hasattr(self.model, 'usuario_id'):
+            obj_data['usuario_id'] = current_user_id.get()
         # Asynchronously adding and committing a new object to the DB
-        db_obj = self.model(**obj.model_dump())  # Assuming obj is a BaseModel with `model_dump`
+        db_obj = self.model(**obj_data)
         self.db.add(db_obj)
         await self.db.commit()  # Commit transaction
         await self.db.refresh(db_obj)  # Refresh object state after commit
+
+        # Build audit object
+        audit_data = LogsAuditoriaCreate(
+            entidad=self.model.__tablename__,
+            entidad_id=str(db_obj.id),
+            accion='CREATE',
+            valor_anterior=None,
+            valor_nuevo=AnyUtils.serialize_orm_object(db_obj),
+            usuario_id=current_user_id.get()
+        )
+
+        # Insert the audit object register
+        await self.auditor.log_audit(audit_log_data=audit_data)
+
         return self.schema.model_validate(db_obj)
 
     async def count(self) -> int:
@@ -92,14 +116,44 @@ class IRepository(Generic[ModelType, SchemaType]):
             result = await self.db.execute(select(self.model).filter(self.model.id == entity_id))
             db_obj = result.scalar_one()
 
+            #Capture affected columns
+            update_data = obj.model_dump(exclude_unset=True)
+            affected_columns = list(update_data.keys())
+            affected_columns.append('usuario_id')
+
+            valor_prev = {
+                key: getattr(db_obj, key) for key in affected_columns if hasattr(db_obj, key)
+            }
+            #valor_prev['usuario_id'] = getattr(db_obj, 'usuario_id')
+
             # Update fields
-            for key, value in obj.model_dump(exclude_unset=True).items():
+            for key, value in update_data.items():
+                # Hard-coding value encryption when is update password
                 if key == 'clave' and value:
                     value = AnyUtils.generate_password_hash(value)
                 setattr(db_obj, key, value)
 
+            # Explicitly set user_id if the model has a user_id column
+            if hasattr(db_obj, 'usuario_id'):
+                setattr(db_obj, 'usuario_id', current_user_id.get())
+
+            # Capture new values for affected columns
+            valor_new = {
+                key: getattr(db_obj, key) for key in affected_columns if hasattr(db_obj, key)
+            }
             await self.db.commit()  # Commit changes
             await self.db.refresh(db_obj)  # Refresh object state
+
+            # Build and insert object register
+            await self.auditor.log_audit(LogsAuditoriaCreate(
+                entidad=self.model.__tablename__,
+                entidad_id=str(db_obj.id),
+                accion='UPDATE',
+                valor_anterior=valor_prev,
+                valor_nuevo=valor_new,
+                usuario_id=current_user_id.get()
+            ))
+
             return self.schema.model_validate(db_obj)
         except NoResultFound:
             raise EntityNotFoundException(self.model.__name__, entity_id)
@@ -109,8 +163,24 @@ class IRepository(Generic[ModelType, SchemaType]):
             # Fetch and delete the object asynchronously
             result = await self.db.execute(select(self.model).filter(self.model.id == entity_id))
             db_obj = result.scalar_one()
+            db_obj_old = db_obj
+
+
             await self.db.delete(db_obj)
             await self.db.commit()  # Commit the deletion
+
+            # Build audit object
+            audit_data = LogsAuditoriaCreate(
+                entidad=self.model.__tablename__,
+                entidad_id=str(db_obj.id),
+                accion='DELETE',
+                valor_anterior=AnyUtils.serialize_orm_object(db_obj_old),
+                usuario_id=current_user_id.get()
+            )
+
+            # Insert the audit object register
+            await self.auditor.log_audit(audit_log_data=audit_data)
+
             return True
         except NoResultFound:
             raise EntityNotFoundException(self.model.__name__, entity_id)

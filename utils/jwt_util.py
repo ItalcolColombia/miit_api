@@ -8,6 +8,10 @@ from jwt.exceptions import (
     ExpiredSignatureError,
     InvalidKeyError,
     InvalidTokenError,
+    InvalidAudienceError,
+    InvalidIssuerError,
+    InvalidSignatureError,
+    DecodeError,
 )
 
 from core.exceptions.base_exception import BasedException
@@ -53,12 +57,22 @@ class JWTBearer(HTTPBearer):
         credentials: HTTPAuthorizationCredentials = await super(JWTBearer, self).__call__(request)
         if credentials:
             if not credentials.scheme == "Bearer":
-                raise HTTPException(status_code=403, detail="Invalid authentication scheme.")
-            if not JWTUtil.verify_token(credentials.credentials):
-                raise HTTPException(status_code=403, detail="Invalid token or expired token.")
-            return credentials.credentials
+                raise BasedException(status_code=status.HTTP_403_FORBIDDEN, message="Esquema de autenticación inválido.")
+            try:
+                JWTUtil.verify_token(credentials.credentials)
+                return credentials.credentials
+            except UnauthorizedToken as e:
+                raise BasedException(
+                    message=str(e),
+                    status_code=status.HTTP_401_UNAUTHORIZED
+                )
+            except Exception as e:
+                raise BasedException(
+                    message=f"Error al validar el token: {str(e)}",
+                    status_code=status.HTTP_401_UNAUTHORIZED
+                )
         else:
-            raise HTTPException(status_code=403, detail="Invalid authorization code.")
+            raise BasedException(status_code=status.HTTP_403_FORBIDDEN, message="Código de autorización inválido.")
 
 
 class JWTUtil:
@@ -87,6 +101,9 @@ class JWTUtil:
 
         Returns:
             str: The generated JWT token.
+
+        Raises:
+            BasedException: if an error occurs in the token creation.
         """
     
         try:
@@ -101,11 +118,10 @@ class JWTUtil:
             encoded_jwt = jwt.encode(to_encode, JWT_SECRET_KEY, algorithm=JWT_ALGORITHM)
             return encoded_jwt
         except Exception as e:
-            # General exception handling
-            print(f"Ocurrió un error al crear el token: {e}")
-            raise HTTPException(
+            log.error(f"Error al crear token: {type(e).__name__}: {str(e)}")
+            raise BasedException(
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                detail=f"Error al crear token"
+                message=f"Error al crear token: {str(e)}",
             )
 
     @staticmethod
@@ -124,19 +140,23 @@ class JWTUtil:
 
                Raises:
                    UnauthorizedToken: If the token is expired, invalid, or has an incorrect signature.
-                   HTTPException: If an unexpected error occurs during verification.
+                   BasedException: If an unexpected error occurs during verification.
                """
-        to_encode = data.copy()
-        if expires_delta:
-            expire = datetime.now(timezone.utc) + expires_delta
-        else:
-            expire = datetime.now(timezone.utc) + timedelta(days=JWT_REFRESH_TOKEN_EXPIRE_DAYS)
-        to_encode.update({"iat": int(datetime.now().timestamp()),
-                          "exp": expire,
-                          "aud": JWT_AUDIENCE,
-                          "iss": JWT_ISSUER })
-        encoded_jwt = jwt.encode(to_encode, JWT_SECRET_KEY, algorithm=JWT_ALGORITHM)
-        return encoded_jwt
+        try:
+            to_encode = data.copy()
+            if expires_delta:
+                expire = datetime.now(timezone.utc) + expires_delta
+            else:
+                expire = datetime.now(timezone.utc) + timedelta(days=JWT_REFRESH_TOKEN_EXPIRE_DAYS)
+            to_encode.update({"iat": int(datetime.now().timestamp()),
+                              "exp": expire,
+                              "aud": JWT_AUDIENCE,
+                              "iss": JWT_ISSUER })
+            encoded_jwt = jwt.encode(to_encode, JWT_SECRET_KEY, algorithm=JWT_ALGORITHM)
+            return encoded_jwt
+        except Exception as e:
+            log.error(f"Error al crear refresh token: {type(e).__name__}: {str(e)}")
+            raise UnauthorizedToken(f"Error al crear refresh token: {str(e)}")
 
     @staticmethod
     def verify_token(token: str) -> dict:
@@ -153,7 +173,8 @@ class JWTUtil:
 
         Raises:
             UnauthorizedToken: If the token is expired, invalid, or has an incorrect signature.
-            HTTPException: If an unexpected error occurs during verification.
+
+            BasedException: If an unexpected error occurs during verification.
         """
 
         try:
@@ -167,13 +188,18 @@ class JWTUtil:
             return payload
         except ExpiredSignatureError:
             raise UnauthorizedToken("El token ha expirado.")
+        except InvalidSignatureError:
+            raise UnauthorizedToken("La firma del token es inválida.")
+        except DecodeError:
+            raise UnauthorizedToken("Error al decodificar el token.")
+        except InvalidAudienceError:
+            raise UnauthorizedToken("El audience del token es inválido.")
+        except InvalidIssuerError:
+            raise UnauthorizedToken("El issuer del token es inválido.")
         except InvalidTokenError:
             raise UnauthorizedToken("El token es inválido.")
         except InvalidKeyError:
             raise UnauthorizedToken("La clave de firma es inválida.")
         except Exception as e:
-            log.error(f"Error al validar token: {e}")
-            raise HTTPException(
-                status_code=500,
-                detail=f"Error al validar el token: {str(e)}"
-            )
+            log.error(f"Error al validar token: {type(e).__name__}: {str(e)}")
+            raise UnauthorizedToken(f"Error al validar el token: {str(e)}")

@@ -1,5 +1,3 @@
-# src/core/exceptions/base/base_exception_handler.py
-
 from http import HTTPStatus
 
 from fastapi import HTTPException, Request, status
@@ -7,6 +5,10 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
+from core.exceptions.base_exception import BasedException
+from utils.logger_util import LoggerUtil
+
+log = LoggerUtil()
 
 class ExceptionHandler:
     """
@@ -22,7 +24,7 @@ class ExceptionHandler:
     @staticmethod
     async def http_exception_handler(
         request: Request,  exc: StarletteHTTPException
-    ) -> JSONResponse | None:
+    ) -> JSONResponse:
         """
         Static asynchronous method responsible for handling generic HTTP exceptions.
 
@@ -36,33 +38,40 @@ class ExceptionHandler:
             exc (HTTPException): The exception instance containing status and detail.
 
         Returns:
-            JSONResponse | None: A JSON response containing the error details.
+            JSONResponse: A JSON response containing the error details.
         """
 
-        if exc.status_code == 404:
+        headers = getattr(exc, "headers", None)
+        print(f"Handling exception: {type(exc).__name__}, Status: {exc.status_code}, Detail: {exc.detail}")
+        log.error(f"Excepción HTTP capturada: {exc.detail}, Código: {exc.status_code}, Tipo: {type(exc).__name__}")
+
+        if exc.status_code == status.HTTP_404_NOT_FOUND:
             return JSONResponse(
-                status_code=404,
+                status_code=status.HTTP_404_NOT_FOUND,
                 content={
                     "status_code": str(exc.status_code),
                     "status_name": HTTPStatus(exc.status_code).phrase,
                     "message": "El endpoint solicitado no exite o la URL es incorrecta",
                 },
+                headers=headers,
             )
+
         # Otros HTTPException se devuelven tal cual o personalizados
         return JSONResponse(
             status_code=exc.status_code,
             content={
                 "status_code": str(exc.status_code),
                 "status_name": HTTPStatus(exc.status_code).phrase,
-                "message": exc.detail,
+                "message": str(exc.detail),
             },
+            headers=headers,  # Se asigna header si existe
         )
 
     @staticmethod
     async def json_decode_error_handler(
         request: Request,
         exc: RequestValidationError,
-    ) -> JSONResponse | None:
+    ) -> JSONResponse:
         """
         Static asynchronous method responsible for handling JSON decoding errors.
 
@@ -74,7 +83,7 @@ class ExceptionHandler:
             exc (RequestValidationError): The exception instance containing validation errors.
 
         Returns:
-            JSONResponse | None: A JSON response containing the error details.
+            JSONResponse: A JSON response containing the error details.
         """
 
         for error in exc.errors():
@@ -95,7 +104,7 @@ class ExceptionHandler:
     async def validation_error_handler(
             request: Request,
             exc: RequestValidationError,
-    ) -> JSONResponse | None:
+    ) -> JSONResponse:
         """
                Static asynchronous method responsible for handling validation errors in the request body.
 
@@ -108,7 +117,7 @@ class ExceptionHandler:
                    exc (RequestValidationError): The exception instance containing validation errors.
 
                Returns:
-                   JSONResponse | None: A JSON response containing the error details.
+                   JSONResponse: A JSON response containing the error details.
         """
         status_code = status.HTTP_422_UNPROCESSABLE_ENTITY
 
@@ -116,7 +125,8 @@ class ExceptionHandler:
         for error in exc.errors():
             field = error["loc"][-1]
             message = error["msg"]
-            error_messages.append(f"{field.capitalize()}: {message}")
+            error_messages.append(f"{field()}: {message}")
+        log.error(f"Errores de validación: {error_messages}")
 
         return JSONResponse(
             status_code=status_code,
@@ -127,4 +137,3 @@ class ExceptionHandler:
                 "details": error_messages
             },
         )
-
