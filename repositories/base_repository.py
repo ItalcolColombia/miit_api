@@ -170,8 +170,8 @@ class IRepository(Generic[ModelType, SchemaType]):
                 entidad=self.model.__tablename__,
                 entidad_id=str(db_obj.id),
                 accion='UPDATE',
-                valor_anterior=valor_prev,
-                valor_nuevo=valor_new,
+                valor_anterior=AnyUtils.serialize_data(valor_prev),
+                valor_nuevo=AnyUtils.serialize_data(valor_new),
                 usuario_id=current_user_id.get()
             ))
 
@@ -195,7 +195,7 @@ class IRepository(Generic[ModelType, SchemaType]):
                 entidad=self.model.__tablename__,
                 entidad_id=str(db_obj.id),
                 accion='DELETE',
-                valor_anterior=AnyUtils.serialize_orm_object(db_obj_old),
+                valor_anterior=AnyUtils.serialize_data(db_obj_old),
                 usuario_id=current_user_id.get()
             )
 
