@@ -295,7 +295,7 @@ class ViajesService:
         try:
             # 1. Validar si puerto_id ya existe
             if await self.get_viaje_by_puerto_id(viaje_create.puerto_id):
-                raise EntityAlreadyRegisteredException(f"Ya existe un viaje con puerto_id '{viaje_create.puerto_id}'")
+                raise EntityAlreadyRegisteredException(f"Ya existe una cita con id '{viaje_create.puerto_id}'")
 
             # 2. Crear la flota si no existe
             nueva_flota = FlotaCreate.model_validate(viaje_create)
@@ -323,7 +323,7 @@ class ViajesService:
             # 7. Consultar el viaje recién añadido
             created_viaje = await self.get_viaje_by_puerto_id(viaje_create.puerto_id)
             if not created_viaje:
-                raise EntityNotFoundException("Error al recuperar el viaje recién creado")
+                raise EntityNotFoundException("Error al recuperar la cita recién creada")
 
             return ViajesResponse(**created_viaje.__dict__)
         except EntityAlreadyRegisteredException as e:
@@ -331,9 +331,9 @@ class ViajesService:
         except EntityNotFoundException as e:
             raise e
         except Exception as e:
-            log.error(f"Error creando camion nuevo con puerto_id {viaje_create.puerto_id}: {e}")
+            log.error(f"Error creando camion nuevo con cita id {viaje_create.puerto_id}: {e}")
             raise BasedException(
-                message="Error al crear el viaje de camion",
+                message=f"Error al crear el viaje de camion:  {str(e)}",
                 status_code=status.HTTP_409_CONFLICT
             )
 
@@ -374,7 +374,7 @@ class ViajesService:
             if not estado_puerto:
                 notification_data = {
                   "truckPlate": flota.referencia,
-                  "truckTransaction": str(tran.id),
+                  "truckTransaction": viaje.puerto_id,
                   "weighingPitId": tran.pit,
                   "weight": int(tran.peso_real)
                }

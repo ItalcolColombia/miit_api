@@ -125,7 +125,7 @@ class ExtApiService:
                 status_code=status.HTTP_503_SERVICE_UNAVAILABLE
             )
         except Exception as e:
-            log.error(f"Error inesperado al enviar notificación: : {str(e)}",)
+            log.error(f"Error inesperado al enviar notificación: {str(e)}",)
             raise BasedException(
                 message=f"Error inesperado al enviar la notificación: {str(e)}",
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR
