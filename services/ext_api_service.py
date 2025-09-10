@@ -116,7 +116,7 @@ class ExtApiService:
             log.info(f"Notificación enviada con éxito: {data}")
             return response_data
         except httpx.HTTPStatusError as e:
-            log.error(f"Fallo en la notificación a la API (status: {e.response.status_code}): {e.response.text}")
+            log.error(f"Fallo en la notificación a la API {e.response.status_code}: {e.response.text}")
             raise
         except httpx.RequestError as e:
             log.error(f"Error de conexión al intentar notificar a la API: {e}")
@@ -125,9 +125,9 @@ class ExtApiService:
                 status_code=status.HTTP_503_SERVICE_UNAVAILABLE
             )
         except Exception as e:
-            log.error(f"Error inesperado al enviar notificación: {e}")
+            log.error(f"Error inesperado al enviar notificación: : {str(e)}",)
             raise BasedException(
-                message="Error inesperado al enviar la notificación.",
+                message=f"Error inesperado al enviar la notificación: {str(e)}",
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
 

@@ -1,9 +1,11 @@
+import json
 from datetime import datetime
 from decimal import Decimal
 from fastapi_pagination import Page, Params
 from sqlalchemy import select
 from starlette import status
 
+import httpx
 from core.exceptions.base_exception import BasedException
 from core.config.settings import get_settings
 from database.models import VViajes
@@ -275,13 +277,12 @@ class ViajesService:
                 status_code=status.HTTP_409_CONFLICT
             )
 
-    async def create_camion_nuevo(self, viaje_create: ViajeCamionExtCreate, user_id : int) -> ViajesResponse:
+    async def create_camion_nuevo(self, viaje_create: ViajeCamionExtCreate) -> ViajesResponse:
         """
         Create a new camion viaje, including associated flota and material if valid.
 
         Args:
             viaje_create (ViajeCamionExtCreate): The camion viaje data to create.
-            user_id (int): The ID of the user performing the creation, extracted from JWT.
 
         Returns:
             ViajesResponse: The created camion viaje object.
@@ -298,7 +299,6 @@ class ViajesService:
 
             # 2. Crear la flota si no existe
             nueva_flota = FlotaCreate.model_validate(viaje_create)
-            nueva_flota["usuario_id"] = user_id
             await self.flotas_service.create_flota_if_not_exists(nueva_flota)
 
             # 3. Obtener flota (ya creada o existente)
@@ -376,11 +376,27 @@ class ViajesService:
                   "truckPlate": flota.referencia,
                   "truckTransaction": str(tran.id),
                   "weighingPitId": tran.pit,
-                  "weight": tran.peso_real
+                  "weight": int(tran.peso_real)
                }
 
-                await self.feedback_service.post(AnyUtils.serialize_data(notification_data),f"{get_settings().TG_API_URL}/api/v1/Metalsoft/SendTruckFinalizationLoading")
-                log.info(f"Notificación enviada para flota {flota.referencia} con estado_puerto: {estado_puerto}")
+                body = AnyUtils.serialize_data(notification_data)
+
+                try:
+                    await self.feedback_service.post(body,
+                                                     f"{get_settings().TG_API_URL}/api/v1/Metalsoft/SendTruckFinalizationLoading")
+                    log.info(f"Notificación enviada para flota {flota.referencia} con estado_puerto: {estado_puerto}")
+                except httpx.HTTPStatusError as e:
+                    try:
+                        error_details = e.response.json()  # Parse API's JSON error
+                    except json.JSONDecodeError:
+                        error_details = {"message": e.response.text}
+                    log.error(
+                        f"API externa error (status: {e.response.status_code}): {e.response.text}")
+                    raise BasedException(
+                        message=f"API externa error: {error_details.get('message', e.response.text)}",
+                        status_code=e.response.status_code,
+                    )
+
 
 
             if flota.tipo: 'buque'

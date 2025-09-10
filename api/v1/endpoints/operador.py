@@ -249,12 +249,11 @@ async def load_release_operador(
              })
 async def create_camion(
         flota: ViajeCamionExtCreate,
-        current_user: VUsuariosRolResponse = Depends(AuthService.get_current_user),
         service: ViajesService = Depends(get_viajes_service)):
     log.info(f"Payload recibido: Flota {flota}")
     try:
 
-        await service.create_camion_nuevo(flota, current_user.id)
+        await service.create_camion_nuevo(flota)
         log.info(f"Flota {flota.puerto_id} registrada")
         return response_json(
             status_code=status.HTTP_201_CREATED,
