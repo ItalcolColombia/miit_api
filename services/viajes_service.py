@@ -407,9 +407,23 @@ class ViajesService:
                    "voyage": puerto_id,
                     "status": "Finished"
                }
-                await self.feedback_service.post(notification_data,f"{get_settings().TG_API_URL}/api/v1/Metalsoft/FinalizaBuque")
-                log.info(f"Notificación enviada para flota {flota.referencia} con estado_puerto: {estado_puerto}")
+                body = AnyUtils.serialize_data(notification_data)
 
+                try:
+                    await self.feedback_service.post(body,
+                                                     f"{get_settings().TG_API_URL}/api/v1/Metalsoft/FinalizaBuque")
+                    log.info(f"Notificación enviada para flota {flota.referencia} con estado_puerto: {estado_puerto}")
+                except httpx.HTTPStatusError as e:
+                    try:
+                        error_details = e.response.json()  # Parse API's JSON error
+                    except json.JSONDecodeError:
+                        error_details = {"message": e.response.text}
+                    log.error(
+                        f"API externa error (status: {e.response.status_code}): {e.response.text}")
+                    raise BasedException(
+                        message=f"API externa error: {error_details.get('message', e.response.text)}",
+                        status_code=e.response.status_code,
+                    )
 
             return updated_flota
         except EntityNotFoundException as e:
