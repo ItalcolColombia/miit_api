@@ -271,7 +271,7 @@ class ViajesService:
         except Exception as e:
             log.error(f"Error creando buque nuevo con puerto_id {viaje_create.puerto_id}: {e}")
             raise BasedException(
-                message="Error al crear el viaje de buque",
+                message=f"Error al crear el viaje de buque: {e}",
                 status_code=status.HTTP_409_CONFLICT
             )
 
