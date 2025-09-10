@@ -37,11 +37,10 @@ router = APIRouter(prefix="/integrador", tags=["Integrador"],  dependencies=[Dep
              })
 async def create_buque(
         flota: ViajeBuqueExtCreate,
-        current_user: VUsuariosRolResponse = Depends(AuthService.get_current_user),
         service: ViajesService = Depends(get_viajes_service)):
     log.info(f"Payload recibido: Buque {flota}")
     try:
-        await service.create_buque_nuevo(flota, current_user.id)
+        await service.create_buque_nuevo(flota)
         log.info(f"Buque {flota.puerto_id} registrado")
         return response_json(
             status_code=status.HTTP_201_CREATED,

@@ -1,5 +1,7 @@
+import json
 from datetime import datetime
 import random
+from decimal import Decimal
 from typing import Any, Optional, Dict
 from sqlalchemy.inspection import inspect
 from sqlalchemy.orm import InstrumentedAttribute,ColumnProperty, RelationshipProperty
@@ -100,7 +102,7 @@ class AnyUtils:
     @staticmethod
     def serialize_orm_object(obj: Any) -> dict | None:
         """
-        Convert a SQLAlchemy ORM object to a dictionary, optionally excluding specified fields.
+        Serialize a SQLAlchemy ORM object to a JSON-serializable dictionary.
 
         Args:
             obj: The SQLAlchemy ORM object to serialize.
@@ -114,32 +116,74 @@ class AnyUtils:
         if obj is None:
             return None
 
-
         try:
+            # Build a dictionary with only serializable column data
+            result = {}
+
             # Get the mapper for the object to inspect its columns and relationships
             mapper = class_mapper(type(obj))
             columns = [col.key for col in mapper.columns]
 
-            # Build a dictionary with only serializable column data
-            result = {}
             for column in columns:
                 if hasattr(obj, column):
                     value = getattr(obj, column)
-                    # Handle datetime objects
-                    if hasattr(value, 'isoformat'):
-                        value = value.isoformat()
-                    # Handle JSON columns (already dict/list)
+                    if isinstance(value, datetime):
+                        result[column] = value.isoformat()
+                    elif isinstance(value, Decimal):
+                        result[column] = str(value)
                     elif isinstance(value, (dict, list)):
-                        value = value
-                    # Skip relationships/lazy-loaded attributes to avoid session issues
-                    elif not isinstance(value, (int, float, str, bool, type(None))):
-                        value = str(value)  # Fallback to string representation
-                    result[column] = value
-
-            # Optionally include ID and other metadata
-            if hasattr(obj, 'id'):
-                result['id'] = obj.id
-
+                        result[column] = value
+                    elif isinstance(value, (int, float, str, bool)) or value is None:
+                        result[column] = value
+                    else:
+                        result[column] = str(value)
             return result
         except Exception as e:
             raise ValueError(f"Failed to serialize ORM object: {str(e)}")
+
+    @staticmethod
+    def serialize_data(data: Dict[str, Any]) -> Dict[str, Any]:
+        """Ensure data is JSON-serializable."""
+
+        def convert(obj):
+            if isinstance(obj, datetime):
+                return obj.isoformat()  # Convert datetime to ISO format
+            if isinstance(obj, Decimal):
+                return str(obj)  # Convert Decimal to string to preserve precision
+            raise TypeError(f"Object of type {type(obj)} is not JSON serializable")
+
+        return json.loads(json.dumps(data, default=convert))
+
+    @staticmethod
+    def serialize_dict(data: Dict[str, Any] | None) -> Dict[str, Any] | None:
+        """
+        Serialize a dictionary to a JSON-serializable format, handling specific types.
+
+        Args:
+            data: The dictionary containing column names and values to serialize, or None.
+
+        Returns:
+            Dict | None: A JSON-serializable dictionary with processed values, or None if input is None.
+
+        Raises:
+            ValueError: If serialization fails due to an unhandled type or exception.
+        """
+        if data is None:
+            return None
+
+        try:
+            result = {}
+            for key, value in data.items():
+                if isinstance(value, datetime):
+                    result[key] = value.isoformat()  # Convert datetime to ISO string
+                elif isinstance(value, Decimal):
+                    result[key] = str(value)  # Convert Decimal to string
+                elif isinstance(value, (dict, list)):
+                    result[key] = value  # Keep JSON-compatible types as-is
+                elif isinstance(value, (int, float, str, bool, )) or value is None:
+                    result[key] = value  # Keep primitive types as-is
+                else:
+                    result[key] = str(value)  # Fallback to string for other types
+            return result
+        except Exception as e:
+            raise ValueError(f"Failed to serialize dictionary: {str(e)}")

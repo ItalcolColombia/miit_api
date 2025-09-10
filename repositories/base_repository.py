@@ -78,17 +78,39 @@ class IRepository(Generic[ModelType, SchemaType]):
             raise ValueError(f"Invalid attribute in filter: {e}")
 
     async def create(self, obj: BaseModel) -> BaseModel:
-        # Create a new object with data from the Pydantic model
-        obj_data = obj.model_dump()
+        """
+        Create a new entity in the database and log the action in LogsAuditoria.
 
-        # Explicitly set user_id if the model has a user_id column
-        if hasattr(self.model, 'usuario_id'):
-            obj_data['usuario_id'] = current_user_id.get()
+        Args:
+            obj: Pydantic model containing the data to create the entity.
+
+        Returns:
+            BaseModel: The created entity, validated against the schema.
+
+        Raises:
+            ValueError: If user_id is None and the model requires it.
+        """
+
+
+        # Capture affected columns
+        obj_data = obj.model_dump(exclude_unset=True)
+        affected_columns = list(obj_data.keys())
+        affected_columns.append('usuario_id')
+
+        # Explicitly set usuario_id column
+        if hasattr(obj_data, 'usuario_id'):
+            setattr(obj_data, 'usuario_id', current_user_id.get())
+
         # Asynchronously adding and committing a new object to the DB
         db_obj = self.model(**obj_data)
         self.db.add(db_obj)
         await self.db.commit()  # Commit transaction
         await self.db.refresh(db_obj)  # Refresh object state after commit
+
+        # Capture values for affected columns
+        valor_new = {
+            key: getattr(db_obj, key) for key in affected_columns if hasattr(db_obj, key)
+        }
 
         # Build audit object
         audit_data = LogsAuditoriaCreate(
@@ -96,7 +118,7 @@ class IRepository(Generic[ModelType, SchemaType]):
             entidad_id=str(db_obj.id),
             accion='CREATE',
             valor_anterior=None,
-            valor_nuevo=AnyUtils.serialize_orm_object(db_obj),
+            valor_nuevo=AnyUtils.serialize_data(valor_new),
             usuario_id=current_user_id.get()
         )
 
@@ -124,7 +146,6 @@ class IRepository(Generic[ModelType, SchemaType]):
             valor_prev = {
                 key: getattr(db_obj, key) for key in affected_columns if hasattr(db_obj, key)
             }
-            #valor_prev['usuario_id'] = getattr(db_obj, 'usuario_id')
 
             # Update fields
             for key, value in update_data.items():
@@ -133,7 +154,7 @@ class IRepository(Generic[ModelType, SchemaType]):
                     value = AnyUtils.generate_password_hash(value)
                 setattr(db_obj, key, value)
 
-            # Explicitly set user_id if the model has a user_id column
+            # Explicitly set usuario_id  column
             if hasattr(db_obj, 'usuario_id'):
                 setattr(db_obj, 'usuario_id', current_user_id.get())
 

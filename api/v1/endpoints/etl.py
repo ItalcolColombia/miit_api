@@ -195,6 +195,42 @@ async def set_points_camion(
             message=f"Error interno: {e}"
         )
 
+@router.put("/camion-finalizar/{puerto_id}",
+            status_code=status.HTTP_200_OK,
+            summary="Modificar estado de un camion por cargue",
+            description="Evento realizado por la automatización al dar por finalizado el recibo de buque.",
+            response_model=UpdateResponse,
+            responses={
+                status.HTTP_400_BAD_REQUEST: {"model": ErrorResponse},
+                status.HTTP_422_UNPROCESSABLE_ENTITY: {"model": ValidationErrorResponse},
+            })
+async def end_buque(
+        puerto_id: str,
+        service: ViajesService = Depends(get_viajes_service)):
+    log.info(f"Payload recibido: Flota {puerto_id} - Partida")
+    try:
+
+        await service.chg_estado_flota(puerto_id, estado_puerto=False)
+        log.info(f"Cargue de camion {puerto_id} desde el puerto marcada exitosamente.")
+        return response_json(
+            status_code=status.HTTP_200_OK,
+            message=f"estado actualizado",
+        )
+
+    except HTTPException as http_exc:
+        log.error(f"La partida de buque {puerto_id} desde el puerto no pudo marcarse: {http_exc.detail}")
+        return response_json(
+            status_code=http_exc.status_code,
+            message=http_exc.detail
+        )
+
+    except Exception as e:
+        log.error(f"Error al procesar marcado de partida de buque {puerto_id} desde el puerto: {e}")
+        return response_json(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            message=str(e)
+        )
+
 @router.get("/materiales-listado",
             summary="Obtener listado de materiales",
             description="Método de consulta por la automatización para obtener listado de materiales empleados en el puerto",

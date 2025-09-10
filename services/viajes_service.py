@@ -23,19 +23,22 @@ from core.exceptions.entity_exceptions import (
     EntityAlreadyRegisteredException,
     EntityNotFoundException,
 )
+from services.transacciones_service import TransaccionesService
+from utils.any_utils import AnyUtils
 
 from utils.logger_util import LoggerUtil
 log = LoggerUtil()
 
 class ViajesService:
 
-    def __init__(self, viajes_repository: ViajesRepository, mat_service : MaterialesService, flotas_service : FlotasService, feedback_service : ExtApiService, bl_service : BlsService, client_service : ClientesService) -> None:
+    def __init__(self, viajes_repository: ViajesRepository, mat_service : MaterialesService, flotas_service : FlotasService, feedback_service : ExtApiService, transacciones_service : TransaccionesService, bl_service : BlsService, client_service : ClientesService) -> None:
         self._repo = viajes_repository
         self.mat_service = mat_service
         self.flotas_service = flotas_service
         self.bls_service = bl_service
         self.clientes_service = client_service
         self.feedback_service = feedback_service
+        self.transacciones_service= transacciones_service
 
     async def create(self, viaje: ViajeCreate) -> ViajesResponse:
         """
@@ -217,13 +220,12 @@ class ViajesService:
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
 
-    async def create_buque_nuevo(self, viaje_create: ViajeBuqueExtCreate, user_id : int) -> ViajesResponse:
+    async def create_buque_nuevo(self, viaje_create: ViajeBuqueExtCreate) -> ViajesResponse:
         """
         Create a new buque viaje, including associated flota if it doesn't exist.
 
         Args:
             viaje_create (ViajeBuqueExtCreate): The buque viaje data to create.
-            user_id (int): The ID of the user performing the creation, extracted from JWT.
 
         Returns:
             ViajesResponse: The created buque viaje object.
@@ -239,15 +241,8 @@ class ViajesService:
                 raise EntityAlreadyRegisteredException(f"Ya existe un viaje con puerto_id '{viaje_create.puerto_id}'")
 
             # 2. Crear la flota si no existe
-            nueva_flota_data = viaje_create.model_dump()
-            nueva_flota_data["usuario_id"] = user_id
-            db_flota = FlotaCreate(**nueva_flota_data)
-            await self.flotas_service.create_flota_if_not_exists(db_flota)
-
-            #nueva_flota = FlotaCreate.model_validate(viaje_create)
-            #await self.flotas_service.create_flota_if_not_exists(nueva_flota)
-
-
+            nueva_flota = FlotaCreate.model_validate(viaje_create)
+            await self.flotas_service.create_flota_if_not_exists(nueva_flota)
 
             # 3. Obtener flota (ya creada o existente)
             flota = await self.flotas_service.get_flota_by_ref(ref=viaje_create.referencia)
@@ -258,7 +253,6 @@ class ViajesService:
             # 4. Ajustar el schema al requerido
             viaje_data = viaje_create.model_dump(exclude={"referencia", "estado"})
             viaje_data["flota_id"] = flota.id
-            viaje_data["usuario_id"] = user_id
 
             # 5. Crear registro en la base de datos
             db_viaje = ViajeCreate(**viaje_data)
@@ -364,11 +358,32 @@ class ViajesService:
             if not viaje:
                 raise EntityNotFoundException(f"Viaje con puerto_id: '{puerto_id}' no existe")
 
+            tran = await  self.transacciones_service.get_tran_by_viaje(viaje.id)
+            if not tran:
+                raise EntityNotFoundException(f"Transacción con viaje_id: '{viaje.id}' no existe")
+
             flota = await self.flotas_service.get_flota(viaje.flota_id)
             if not flota:
                 raise EntityNotFoundException(f"Flota con id '{viaje.flota_id}' no existe")
 
-            updated_buque = await self.flotas_service.update_status(flota,estado_puerto, estado_operador)
+            updated_flota = await self.flotas_service.update_status(flota,estado_puerto, estado_operador)
+
+            if flota.tipo: 'camion'
+
+            # Solo notificar si el cambio de estado es para finalizado
+            if not estado_puerto:
+                notification_data = {
+                  "truckPlate": flota.referencia,
+                  "truckTransaction": str(tran.id),
+                  "weighingPitId": tran.pit,
+                  "weight": tran.peso_real
+               }
+
+                await self.feedback_service.post(AnyUtils.serialize_data(notification_data),f"{get_settings().TG_API_URL}/api/v1/Metalsoft/SendTruckFinalizationLoading")
+                log.info(f"Notificación enviada para flota {flota.referencia} con estado_puerto: {estado_puerto}")
+
+
+            if flota.tipo: 'buque'
 
             # Solo notificar si el cambio de estado es para finalizado
             if not estado_puerto:
@@ -379,7 +394,8 @@ class ViajesService:
                 await self.feedback_service.post(notification_data,f"{get_settings().TG_API_URL}/api/v1/Metalsoft/FinalizaBuque")
                 log.info(f"Notificación enviada para flota {flota.referencia} con estado_puerto: {estado_puerto}")
 
-            return updated_buque
+
+            return updated_flota
         except EntityNotFoundException as e:
             raise e
         except Exception as e:

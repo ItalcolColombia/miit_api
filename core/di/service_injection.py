@@ -86,22 +86,6 @@ async def get_mat_service(
 async def get_ext_api_service() -> ExtApiService:
     return ExtApiService()
 
-async def get_viajes_service(
-    viajes_repository: Annotated[ViajesRepository, Depends(get_viajes_repository)],
-    materiales_service: Annotated[MaterialesService, Depends(get_mat_service)],
-    bls_service: Annotated[BlsService, Depends(get_bls_service)],
-    clientes_service: Annotated[ClientesService, Depends(get_clientes_service)],
-    flotas_service: Annotated[FlotasService, Depends(get_flotas_service)],
-    feedback_service: Annotated[ExtApiService, Depends(get_ext_api_service)],
-) -> ViajesService:
-    return ViajesService(
-        viajes_repository=viajes_repository,
-        mat_service=materiales_service,
-        flotas_service=flotas_service,
-        feedback_service=feedback_service,
-        bl_service=bls_service,
-        client_service=clientes_service,
-    )
 
 async def get_mov_service(
     movimientos_repository: MovimientosRepository = Depends(get_movimientos_repository)
@@ -123,6 +107,25 @@ async def get_transacciones_service(
         tran_repository=trans_repository,
         pesadas_service=pesadas_service,
         mov_service=mov_service,
+    )
+
+async def get_viajes_service(
+    viajes_repository: Annotated[ViajesRepository, Depends(get_viajes_repository)],
+    materiales_service: Annotated[MaterialesService, Depends(get_mat_service)],
+    bls_service: Annotated[BlsService, Depends(get_bls_service)],
+    clientes_service: Annotated[ClientesService, Depends(get_clientes_service)],
+    flotas_service: Annotated[FlotasService, Depends(get_flotas_service)],
+    feedback_service: Annotated[ExtApiService, Depends(get_ext_api_service)],
+    transacciones_service: Annotated[TransaccionesService, Depends(get_transacciones_service)],
+) -> ViajesService:
+    return ViajesService(
+        viajes_repository=viajes_repository,
+        mat_service=materiales_service,
+        flotas_service=flotas_service,
+        feedback_service=feedback_service,
+        bl_service=bls_service,
+        client_service=clientes_service,
+        transacciones_service=transacciones_service
     )
 
 async def get_user_service(

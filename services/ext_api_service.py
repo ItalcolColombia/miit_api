@@ -1,8 +1,10 @@
+
 import httpx
 from typing import Dict, Any, Optional
 from fastapi import status
 from core.config.external_api import get_token
 from core.exceptions.entity_exceptions import BasedException
+from utils.any_utils import AnyUtils
 from utils.logger_util import LoggerUtil
 
 log = LoggerUtil()
@@ -91,6 +93,12 @@ class ExtApiService:
                 )
             # Obtener token válido (refresca si expiró)
             jwt_token = await get_token()
+            if not jwt_token:
+                log.error("No se pudo obtener un token JWT válido.")
+                raise BasedException(
+                    message="No se pudo obtener un token JWT válido.",
+                    status_code=status.HTTP_401_UNAUTHORIZED
+                )
 
             headers = {
                 "Authorization": f"Bearer {jwt_token}",
@@ -98,7 +106,7 @@ class ExtApiService:
             }
 
             response = await self._http_client.post(
-                url,
+                url=url,
                 json=data,
                 headers=headers
             )
@@ -157,8 +165,8 @@ class ExtApiService:
             }
 
             response = await self._http_client.put(
-                url,
-                json=data,
+                url=url,
+                json=AnyUtils.serialize_dict(data),
                 headers=headers
             )
             response.raise_for_status()
@@ -216,8 +224,8 @@ class ExtApiService:
             }
 
             response = await self._http_client.patch(
-                url,
-                json=data,
+                url=url,
+                json=AnyUtils.serialize_dict(data),
                 headers=headers
             )
             response.raise_for_status()
