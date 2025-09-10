@@ -111,7 +111,7 @@ async def buque_in(
         service: ViajesService = Depends(get_viajes_service)):
     log.info(f"Payload recibido: Flota {puerto_id} - Arribo")
     try:
-        await service.chg_estado_flota(puerto_id, True)
+        await service.chg_estado_flota(puerto_id, estado_operador=True)
         log.info(f"Arribo de buque {puerto_id} marcado exitosamente.")
         return response_json(
             status_code=status.HTTP_200_OK,
