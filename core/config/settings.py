@@ -16,7 +16,7 @@ class Settings(BaseSettings):
     API_HOST: str = "0.0.0.0"
     API_PORT: int = "8000"
     API_V1_STR: str = "v1"
-    API_VERSION_NUM: str = "0.0.16"
+    API_VERSION_NUM: str = "0.0.17"
     API_LOG_LEVEL: str = "DEBUG"
     APP_LOG_DIR: str = "/var/www/metalteco/log/app_logs"
     ALLOWED_HOSTS: list[str] = ["*"]
