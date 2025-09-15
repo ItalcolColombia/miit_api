@@ -3,6 +3,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from datetime import datetime
 
 from core.enums.user_role_enum import UserRoleEnum
+from core.exceptions.entity_exceptions import EntityNotFoundException
 from services.auth_service import AuthService
 from core.di.service_injection import get_viajes_service, get_pesadas_service
 from utils.response_util import ResponseUtil
@@ -147,7 +148,7 @@ async def end_buque(
     log.info(f"Payload recibido: Flota {puerto_id} - Partida")
     try:
 
-        await service.chg_estado_flota(puerto_id, estado_operador=False)
+        await service.chg_estado_flota(puerto_id, estado_puerto=False)
         log.info(f"La Partida de buque {puerto_id} desde el operador marcada exitosamente.")
         return response_json(
             status_code=status.HTTP_200_OK,
@@ -370,7 +371,8 @@ async def get_acum_pesadas(
             status_code=http_exc.status_code,
             message=http_exc.detail
         )
-
+    except EntityNotFoundException as e:
+        raise e
     except Exception as e:
         log.error(f"Error al consultar pesadas de flota {puerto_id}: {e}")
         return response_json(

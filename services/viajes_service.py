@@ -518,7 +518,7 @@ class ViajesService:
                     f"La flota es del tipo '{flota.tipo}' diferente al tipo esperado 'camion'")
 
             update_fields = {
-                "fecha_salida": fecha,
+                "fecha_llegada": fecha,
             }
             update_data = ViajeUpdate(**update_fields)
             updated = await self._repo.update(viaje.id, update_data)

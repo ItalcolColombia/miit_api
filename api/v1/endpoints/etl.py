@@ -103,7 +103,7 @@ async def end_buque(
     log.info(f"Payload recibido: Flota {puerto_id} - Partida")
     try:
 
-        await service.chg_estado_flota(puerto_id, estado_puerto=False)
+        await service.chg_estado_flota(puerto_id, estado_operador=False)
         log.info(f"La Partida de buque {puerto_id} desde el puerto marcada exitosamente.")
         return response_json(
             status_code=status.HTTP_200_OK,
@@ -202,13 +202,13 @@ async def set_points_camion(
                 status.HTTP_400_BAD_REQUEST: {"model": ErrorResponse},
                 status.HTTP_422_UNPROCESSABLE_ENTITY: {"model": ValidationErrorResponse},
             })
-async def end_buque(
+async def end_camion(
         puerto_id: str,
         service: ViajesService = Depends(get_viajes_service)):
     log.info(f"Payload recibido: Flota {puerto_id} - Partida")
     try:
 
-        await service.chg_estado_flota(puerto_id, estado_puerto=False)
+        await service.chg_estado_flota(puerto_id, estado_operador=False)
         log.info(f"Cargue de camion {puerto_id} desde el puerto marcada exitosamente.")
         return response_json(
             status_code=status.HTTP_200_OK,
