@@ -207,7 +207,7 @@ class TransaccionesService:
         except Exception as e:
             log.error(f"Error al crear transacción para viaje_id {tran_data.viaje_id}: {e}")
             raise BasedException(
-                message="Error inesperado al crear la transacción.",
+                message=f"Error inesperado al crear la transacción: {str(e)}",
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
 

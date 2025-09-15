@@ -209,14 +209,14 @@ async def end_camion(
     try:
 
         await service.chg_estado_flota(puerto_id, estado_operador=False)
-        log.info(f"Cargue de camion {puerto_id} desde el puerto marcada exitosamente.")
+        log.info(f"Finalización de cargue para cita {puerto_id} registrada exitosamente.")
         return response_json(
             status_code=status.HTTP_200_OK,
-            message=f"estado actualizado",
+            message=f"Finalización de cargue para cita {puerto_id} registrada exitosamente.",
         )
 
     except HTTPException as http_exc:
-        log.error(f"La partida de buque {puerto_id} desde el puerto no pudo marcarse: {http_exc.detail}")
+        log.error(f"Finalización de cargue para cita {puerto_id} falló: {http_exc.detail}")
         return response_json(
             status_code=http_exc.status_code,
             message=http_exc.detail

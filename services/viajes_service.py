@@ -428,14 +428,14 @@ class ViajesService:
             updated_flota = await self.flotas_service.update_status(flota,estado_puerto, estado_operador)
 
             # Solo notificar si el cambio de estado es para finalizado
-            if estado_operador:
+            if estado_operador is not None:
                 tran = None
                 if flota.tipo == "camion":
                     tran = await self.transacciones_service.get_tran_by_viaje(viaje.id)
                     if not tran:
                         raise EntityNotFoundException(f"Transacción para la cita: '{viaje.id}' no existe")
 
-                await self.send_notification(flota, viaje, tran, estado_puerto, flota.tipo)
+                await self.send_notification(flota, viaje, tran)
 
             return updated_flota
         except EntityNotFoundException as e:
@@ -578,8 +578,7 @@ class ViajesService:
                 status_code=status.HTTP_409_CONFLICT
             )
 
-    async def send_notification(self, flota_tipo: str, flota, viaje, tran, estado_puerto: Optional[bool] = None
-        ) -> None:
+    async def send_notification(self, flota, viaje, tran) -> None:
         """
         Helper method to send notifications for camion or buque changes.
 
@@ -587,40 +586,38 @@ class ViajesService:
             flota: The flota object.
             viaje: The viaje object.
             tran: The transaction object (for camion).
-            estado_puerto (bool): The puerto status.
-            flota_tipo (str): The type of flota ('camion' or 'buque').
 
         Raises:
             BasedException: If the notification to external API fails.
         """
 
-        if flota_tipo == "camion":
+        if flota.tipo == "camion":
+
             notification = NotificationCargue(
                 truckPlate=flota.referencia,
                 truckTransaction=viaje.puerto_id,
                 weighingPitId=tran.pit,
-                weight=int(tran.peso_real)
-            )
+                weight=tran.peso_real
+            ).dict()
             endpoint = f"{get_settings().TG_API_URL}/api/v1/Metalsoft/CamionCargue"
         else:
             notification = NotificationBuque(
                 voyage=flota.puerto_id,
                 status="Finished"
-            )
+            ).dict()
             endpoint = f"{get_settings().TG_API_URL}/api/v1/Metalsoft/FinalizaBuque"
 
-        body = AnyUtils.serialize_data(notification)
         try:
-            await self.feedback_service.post(body, endpoint)
-            log.info(f"Notificación enviada para flota {flota.referencia} con estado_puerto: {estado_puerto}")
+            await self.feedback_service.post(AnyUtils.serialize_dict(notification), endpoint)
+            log.info(f"Notificación de cargue enviada para flota {flota.referencia}")
         except httpx.HTTPStatusError as e:
             try:
                 error_details = e.response.json()
             except json.JSONDecodeError:
                 error_details = e.response.text
-            log.error(f"API externa error: {e.response.status_code}): {e.response.text}")
+            log.error(f"Notificación de cargue falló. API externa error: {e.response.status_code}): {e.response.text}")
             raise BasedException(
-                message=f"API externa error: {error_details.get('message', e.response.text)}",
+                message=f"Notificación de cargue falló. API externa error: {error_details.get('message', e.response.text)}",
                 status_code=e.response.status_code
             ) from e
 

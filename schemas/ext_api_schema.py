@@ -1,6 +1,6 @@
-from datetime import datetime
+from decimal import Decimal
 from typing import Optional
-from pydantic import Field, ConfigDict
+from pydantic import  ConfigDict
 from schemas.base_schema import BaseSchema
 
 
@@ -8,7 +8,7 @@ class NotificationCargue(BaseSchema):
     truckPlate: Optional[str]
     truckTransaction: str
     weighingPitId: Optional[int] = None
-    weight: Optional[int] = None
+    weight: Optional[Decimal] = None
 
 
     model_config = ConfigDict(
