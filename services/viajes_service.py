@@ -428,7 +428,7 @@ class ViajesService:
             updated_flota = await self.flotas_service.update_status(flota,estado_puerto, estado_operador)
 
             # Solo notificar si el cambio de estado es para finalizado
-            if not estado_operador:
+            if estado_operador:
                 tran = None
                 if flota.tipo == "camion":
                     tran = await self.transacciones_service.get_tran_by_viaje(viaje.id)
