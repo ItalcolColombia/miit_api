@@ -128,7 +128,7 @@ class ExceptionHandler:
         for error in exc.errors():
             field = error["loc"][-1]
             message = error["msg"]
-            error_messages.append(f"{field()}: {message}")
+            error_messages.append(f"{field.capitalize()}: {message}")
         log.error(f"Errores de validación: {error_messages}")
 
         return response_json(
