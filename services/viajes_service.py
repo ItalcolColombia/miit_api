@@ -601,7 +601,7 @@ class ViajesService:
                 weighingPitId=tran.pit,
                 weight=int(tran.peso_real)
             )
-            endpoint = f"{get_settings().TG_API_URL}/api/v1/Metalsoft/SendTruckFinalizationLoading"
+            endpoint = f"{get_settings().TG_API_URL}/api/v1/Metalsoft/CamionCargue"
         else:
             notification = NotificationBuque(
                 voyage=flota.puerto_id,
