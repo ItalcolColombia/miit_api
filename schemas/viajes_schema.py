@@ -128,12 +128,6 @@ class ViajeCamionExtCreate(BaseModel):
             raise ValueError("Peso debe ser positivo")
         return value
 
-    @field_validator('puntos')
-    def puntos_valido(cls, value):
-        if value <= 1:
-            raise ValueError("Puntos debe ser mayor a  1")
-        return value
-
     class Config:
         json_schema_extra = {
             "example": {

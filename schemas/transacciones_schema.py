@@ -49,8 +49,8 @@ class TransaccionCreate(BaseSchema):
 
     @field_validator('tipo')
     def tipo_valido(cls, value):
-        if len(value) > 6:
-            raise ValueError("Tipo debe tener máximo 6 caracteres")
+        if len(value) > 9:
+            raise ValueError("Tipo debe tener máximo 8 carácteres")
         return value
 
     @field_validator('peso_meta')
