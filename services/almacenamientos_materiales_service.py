@@ -88,12 +88,12 @@ class AlmacenamientosMaterialesService:
                 status_code=status.HTTP_409_CONFLICT
             )
 
-    async def get_pag_alm_mat(self, name: Optional[str] = None, params: Params = Params()) -> Page[VAlmMaterialesResponse]:
+    async def get_pag_alm_mat(self, alm_id: Optional[int] = None, params: Params = Params()) -> Page[VAlmMaterialesResponse]:
         """
         Retrieve a paginated list of alm_materiales, optionally filtered by name.
 
         Args:
-            name (Optional[str]): The almacenamiento name to filter (optional).
+            alm_id (Optional[str]): The almacenamiento name to filter (optional).
             params (Params): Pagination parameters.
 
         Returns:
@@ -106,15 +106,15 @@ class AlmacenamientosMaterialesService:
             query = (
                 select(VAlmMateriales)
             )
-            if name is not None:
-                query = query.where(VAlmMateriales.almacenamiento == name)
+            if alm_id is not None:
+                query = query.where(VAlmMateriales.almacenamiento_id == alm_id)
             return await self._repo.get_all_paginated(query=query, params=params)
 
         except Exception as e:
-            log.error(f"Error al obtener alm_materiales con nombre (opcional) {name}: {e}")
+            log.error(f"Error al obtener datos de almacenamiento: {alm_id}: {e}")
             raise BasedException(
-                message="Error al obtener alm_materiales",
+                message=f"Error al obtener datos de almacenamiento: {str(e)}",
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR
-            )
+        )
 
 

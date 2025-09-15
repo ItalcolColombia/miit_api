@@ -95,12 +95,10 @@ class IRepository(Generic[ModelType, SchemaType]):
         # Capture affected columns
         obj_data = obj.model_dump(exclude_unset=True)
         affected_columns = list(obj_data.keys())
-        affected_columns.append('usuario_id')
 
         # Explicitly set usuario_id column
-        if hasattr(obj_data, 'usuario_id'):
-            setattr(obj_data, 'usuario_id', current_user_id.get())
-
+        if hasattr(self.model, 'usuario_id'):
+            obj_data['usuario_id'] = current_user_id.get()
         # Asynchronously adding and committing a new object to the DB
         db_obj = self.model(**obj_data)
         self.db.add(db_obj)

@@ -1,13 +1,12 @@
-from http.client import HTTPException
-from urllib import request
+from fastapi import HTTPException, Request
+from starlette.middleware.base import BaseHTTPMiddleware
+
 
 from fastapi.security import HTTPBearer
-from core.di.repository_injection import get_user_repository
 from core.di.service_injection import get_user_service
+from core.exceptions.base_exception import BasedException
 from services.usuarios_service import UsuariosService
 from utils.jwt_util import JWTUtil
-from repositories.usuarios_repository import UsuariosRepository
-from services.auth_service import AuthService
 from fastapi import Depends, status
 from core.exceptions.auth_exception import InvalidCredentialsException, InvalidTokenCredentialsException
 from core.config.settings import get_settings
@@ -18,23 +17,22 @@ from http import HTTPStatus
 from starlette.responses import Response, JSONResponse
 
 
-from starlette.middleware.base import BaseHTTPMiddleware
 
 from utils.logger_util import LoggerUtil
+from utils.response_util import ResponseUtil
+
+# Env variables Setup
+API_VERSION = get_settings().API_V1_STR
+# Utils Setup
+json_response = ResponseUtil().json_response
+
 log = LoggerUtil()
 
 security = HTTPBearer()
 
 
 class AuthMiddleware(BaseHTTPMiddleware):
-    PUBLIC_PATHS = {
-        "/docs",
-        "/openapi/v1.json",
-        "/redoc",
-        "/api/v1/auth",
-        "/api/v1/auth/login",
-        "/api/v1/auth/refresh",
-    }
+
 
     def __init__(self, app: ASGIApp ):
         super().__init__(app)
@@ -51,12 +49,18 @@ class AuthMiddleware(BaseHTTPMiddleware):
 
     async def dispatch(self, req: Request, call_next,
                        user_service: UsuariosService = Depends(get_user_service)) -> Response:
-        # Check if the request path is public
-        if req.url.path in self.PUBLIC_PATHS:
-            log.info(f"Bypassing authentication for public path: {req.url.path}")
-            return await call_next(req)
-
         try:
+            public_paths = [
+                f"/api/{API_VERSION}/auth",
+                "/docs",
+                "/redoc",
+                f"/openapi/{API_VERSION}.json",
+            ]
+
+            # Public patch Checking
+            if any(req.url.path.startswith(path) for path in public_paths):
+                return await call_next(req)
+
             # Check access permissions for non-public paths
             check_access: Response | None = await self.__check_access(req, user_service)
             if check_access is not None:
@@ -66,23 +70,23 @@ class AuthMiddleware(BaseHTTPMiddleware):
             return await call_next(req)
 
         except InvalidTokenCredentialsException as ite:
-            log.error("Invalid Token {}", str(ite))
-            return JSONResponse(
+            log.error("Invalid Token", str(ite))
+            return json_response(
                 status_code=status.HTTP_401_UNAUTHORIZED,
-                content={"detail": "Invalid token"},
+                message="Invalid token",
                 headers={"WWW-Authenticate": "Bearer"},
             )
         except InvalidCredentialsException as ice:
             log.error("Invalid Credentials {}", str(ice))
-            return JSONResponse(
+            return json_response(
                 status_code=status.HTTP_401_UNAUTHORIZED,
-                content={"detail": str(ice)},
+                message={"detail": str(ice)},
             )
         except Exception as e:
             log.error("Error in AuthMiddleware: {}", str(e))
-            return JSONResponse(
+            return json_response(
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                content={"detail": f"Server error: {str(e)}"},
+                message=f"Error servidor: {str(e)}",
             )
 
     @staticmethod
@@ -91,9 +95,10 @@ class AuthMiddleware(BaseHTTPMiddleware):
             # Extract the token from the Authorization header
             auth_header: str = req.headers.get("Authorization")
             if not auth_header or not auth_header.startswith("Bearer "):
-                return JSONResponse(
+                return json_response(
                     status_code=status.HTTP_401_UNAUTHORIZED,
-                    content={"detail": "Authorization header missing or malformed"}
+                    message="Falta o está mal formado el encabezado de autorización",
+                    headers={"WWW-Authenticate": "Bearer"},
                 )
 
             access_token = auth_header.split(" ")[1]
@@ -104,9 +109,9 @@ class AuthMiddleware(BaseHTTPMiddleware):
             userid: str | None = payload.get("uid")
 
             if username is None:
-                return JSONResponse(
+                return json_response(
                     status_code=status.HTTP_401_UNAUTHORIZED,
-                    content={"detail": "Invalid Client ID"}
+                    message="Usuario no valido",
                 )
 
             # Log username for debugging
@@ -126,9 +131,9 @@ class AuthMiddleware(BaseHTTPMiddleware):
                 user_id = 999
             else:
                 if userid is None:
-                    return JSONResponse(
+                    return json_response(
                         status_code=status.HTTP_401_UNAUTHORIZED,
-                        content={"detail": "Invalid Access Token"}
+                        message="Token de acesso invalido"
                     )
                 user_id = userid
 
@@ -136,23 +141,18 @@ class AuthMiddleware(BaseHTTPMiddleware):
             log.info(f"User authenticated: {username}, user_id: {user_id}")
             return None
 
-        except InvalidTokenCredentialsException as ite:
-            log.error(f"Invalid token: {str(ite)}")
-            return JSONResponse(
-                status_code=status.HTTP_401_UNAUTHORIZED,
-                content={"detail": str(ite)}
-            )
-        except InvalidCredentialsException as e:
-            log.error(f"Invalid credentials: {str(e)}")
-            return JSONResponse(
-                status_code=status.HTTP_401_UNAUTHORIZED,
-                content={"detail": str(e)}
+        except HTTPException as e:
+            log.error(f"Token validation error: {e.detail}")
+            return json_response(
+                status_code= e.status_code,
+                message = str(e.detail),
+                headers= e.headers
             )
         except Exception as e:
             log.error(f"Error in __check_access: {str(e)}", exc_info=True)
-            return JSONResponse(
+            return json_response(
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                content={"detail": f"Error: {str(e)}"}
+                message=f"Error: {str(e)}"
             )
         # token = request.headers.get("Authorization")
         # user_id = None

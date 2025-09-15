@@ -22,7 +22,7 @@ class InvalidCredentialsException(BasedException):
     """
 
     def __init__(
-        self, message: str, status_code: int = status.HTTP_404_NOT_FOUND
+        self, message: str, status_code: int = status.HTTP_401_UNAUTHORIZED
     ):
         """
         Constructor method for InvalidCredentialsException.

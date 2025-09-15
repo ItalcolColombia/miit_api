@@ -99,7 +99,7 @@ async def set_load(
 
 @router.put("/buque-arribo/{puerto_id}",
             status_code=status.HTTP_200_OK,
-            summary="Modificar estado de un buque por arribo",
+            summary="Modificar viaje del buque para actualizar estado por arribo",
             description="Evento realizado por el operador post confirmación del arribo de la motonave a través de la interfaz de PBCU.",
             response_model=UpdateResponse,
             responses={
@@ -111,7 +111,7 @@ async def buque_in(
         service: ViajesService = Depends(get_viajes_service)):
     log.info(f"Payload recibido: Flota {puerto_id} - Arribo")
     try:
-        await service.chg_estado_flota(puerto_id, estado_operador=True)
+        await service.chg_estado_flota(puerto_id, estado_puerto=True)
         log.info(f"Arribo de buque {puerto_id} marcado exitosamente.")
         return response_json(
             status_code=status.HTTP_200_OK,

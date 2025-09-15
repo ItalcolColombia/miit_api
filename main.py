@@ -14,6 +14,7 @@ from fastapi_pagination import add_pagination
 
 from core.exceptions.base_exception import BasedException
 from core.middleware.auth_middleware import AuthMiddleware
+from core.middleware.error_middleware import ErrorMiddleware
 from core.middleware.time_middleware import TimeMiddleware
 from api.v1.routes import routers as v1_routers
 from core.config.settings import get_settings
@@ -84,6 +85,7 @@ app.add_middleware(
 app.add_middleware(SessionMiddleware, secret_key=SECRET_KEY)
 app.add_middleware(GZipMiddleware, minimum_size=1000)
 app.add_middleware(AuthMiddleware)
+app.add_middleware(ErrorMiddleware)
 app.add_middleware(LoggerMiddleware)
 app.add_middleware(TimeMiddleware)
 

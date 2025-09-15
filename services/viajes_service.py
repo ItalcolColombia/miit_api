@@ -12,6 +12,7 @@ from database.models import VViajes
 from typing import List, Optional
 from repositories.viajes_repository import ViajesRepository
 from schemas.bls_schema import BlsCreate, BlsExtCreate, BlsResponse, BlsUpdate
+from schemas.ext_api_schema import NotificationCargue, NotificationBuque
 from services.bls_service import BlsService
 from services.clientes_service import ClientesService
 from services.ext_api_service import ExtApiService
@@ -249,8 +250,7 @@ class ViajesService:
             # 3. Obtener flota (ya creada o existente)
             flota = await self.flotas_service.get_flota_by_ref(ref=viaje_create.referencia)
             if not flota:
-                raise EntityNotFoundException(
-                    f"No se pudo obtener flota con tipo '{viaje_create.tipo}' y ref '{viaje_create.referencia}'")
+                raise EntityNotFoundException(f"No se pudo obtener flota con tipo '{viaje_create.tipo}' y ref '{viaje_create.referencia}'")
 
             # 4. Ajustar el schema al requerido
             viaje_data = viaje_create.model_dump(exclude={"referencia", "estado"})
@@ -266,15 +266,80 @@ class ViajesService:
                 raise EntityNotFoundException("Error al recuperar el viaje recién creado")
 
             return ViajesResponse(**created_viaje.__dict__)
-        except EntityAlreadyRegisteredException as e:
-            raise e
-        except EntityNotFoundException as e:
+        except (EntityAlreadyRegisteredException, EntityNotFoundException) as e:
             raise e
         except Exception as e:
-            log.error(f"Error creando buque nuevo con puerto_id {viaje_create.puerto_id}: {e}")
+            log.error(f"Error inesperado al crear buque y/o viaje con puerto_id {viaje_create.puerto_id}: {e}", exc_info=True)
             raise BasedException(
-                message=f"Error al crear el viaje de buque: {e}",
-                status_code=status.HTTP_409_CONFLICT
+                message=str(e),
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
+
+    async def create_buque_load(self, bl_input: BlsExtCreate) -> BlsResponse:
+        """
+        Create a new BL (Bill of Lading) for a buque viaje.
+
+        Args:
+            bl_input (BlsExtCreate): The BL data to create.
+
+        Returns:
+            BlsResponse: The created BL object.
+
+        Raises:
+            EntityNotFoundException: If viaje, material, or client is not found.
+            EntityAlreadyRegisteredException: If BL number already exists.
+            BasedException: If creation fails due to database or other errors.
+        """
+        try:
+            # Verifica que el viaje asociado exista
+            viaje = await self.get_viaje_by_puerto_id(bl_input.puerto_id)
+            if not viaje:
+                raise EntityNotFoundException(f"No existe un viaje con puerto_id='{bl_input.puerto_id}'")
+
+            # Verifica que no exista un BL con el mismo número
+            existing_bl = await self.bls_service.get_bl_by_num(bl_input.no_bl)
+            if existing_bl:
+                raise EntityAlreadyRegisteredException(f"El número de BL '{bl_input.no_bl}' ya fue registrado")
+
+            # Obtiene el ID del material
+            material_id = await self.mat_service.get_mat_by_name(bl_input.material_name)
+            if material_id is None:
+                raise EntityNotFoundException(f"El material '{bl_input.material_name}' no existe")
+
+            # Obtiene el ID del cliente
+            cliente_find = await self.clientes_service.get_cliente_by_name(bl_input.cliente_name)
+            if cliente_find is None:
+                raise EntityNotFoundException(f"El cliente '{bl_input.cliente_name}' no existe")
+
+            # Prepara los datos para la creación
+            bl_data = bl_input.model_dump(exclude={"material_name", "puerto_id", "cliente_name"})
+            bl_data.update({
+                "cliente_id": cliente_find.id,
+                "material_id": material_id,
+                "viaje_id": viaje.id,
+            })
+
+            # Crea la instancia de BL
+            db_bl = BlsCreate(**bl_data)
+            await self.bls_service.create(db_bl)
+
+            # Retorna la entidad creada
+            created_bl = await self.bls_service.get_bl_by_num(bl_input.no_bl)
+            if not created_bl:
+                raise BasedException(
+                    message="Error al recuperar el BL recién creado",
+                    status_code=status.HTTP_404_NOT_FOUND
+                )
+            return BlsResponse.model_validate(created_bl)
+        except EntityNotFoundException as e:
+            raise e
+        except EntityAlreadyRegisteredException as e:
+            raise e
+        except Exception as e:
+            log.error(f"Error creando BL con no_bl {bl_input.no_bl}: {e}")
+            raise BasedException(
+                message=f"Error al crear el BL :{e}",
+                status_code=status.HTTP_424_FAILED_DEPENDENCY
             )
 
     async def create_camion_nuevo(self, viaje_create: ViajeCamionExtCreate) -> ViajesResponse:
@@ -326,15 +391,13 @@ class ViajesService:
                 raise EntityNotFoundException("Error al recuperar la cita recién creada")
 
             return ViajesResponse(**created_viaje.__dict__)
-        except EntityAlreadyRegisteredException as e:
-            raise e
-        except EntityNotFoundException as e:
+        except (EntityAlreadyRegisteredException, EntityNotFoundException) as e:
             raise e
         except Exception as e:
-            log.error(f"Error creando camion nuevo con cita id {viaje_create.puerto_id}: {e}")
+            log.error(f"Error inesperado a crear camion y/o cita con puerto_id {viaje_create.puerto_id}: {e}", exc_info=True)
             raise BasedException(
-                message=f"Error al crear el viaje de camion:  {str(e)}",
-                status_code=status.HTTP_409_CONFLICT
+                message=str(e),
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
 
     async def chg_estado_flota(self, puerto_id: str, estado_puerto: Optional[bool] = None, estado_operador: Optional[bool] = None) -> FlotasResponse:
@@ -358,72 +421,21 @@ class ViajesService:
             if not viaje:
                 raise EntityNotFoundException(f"Viaje con puerto_id: '{puerto_id}' no existe")
 
-            tran = await  self.transacciones_service.get_tran_by_viaje(viaje.id)
-            if not tran:
-                raise EntityNotFoundException(f"Transacción con viaje_id: '{viaje.id}' no existe")
-
             flota = await self.flotas_service.get_flota(viaje.flota_id)
             if not flota:
                 raise EntityNotFoundException(f"Flota con id '{viaje.flota_id}' no existe")
 
             updated_flota = await self.flotas_service.update_status(flota,estado_puerto, estado_operador)
 
-            if flota.tipo: 'camion'
-
             # Solo notificar si el cambio de estado es para finalizado
-            if not estado_puerto:
-                notification_data = {
-                  "truckPlate": flota.referencia,
-                  "truckTransaction": viaje.puerto_id,
-                  "weighingPitId": tran.pit,
-                  "weight": int(tran.peso_real)
-               }
+            if not estado_operador:
+                tran = None
+                if flota.tipo == "camion":
+                    tran = await self.transacciones_service.get_tran_by_viaje(viaje.id)
+                    if not tran:
+                        raise EntityNotFoundException(f"Transacción para la cita: '{viaje.id}' no existe")
 
-                body = AnyUtils.serialize_data(notification_data)
-
-                try:
-                    await self.feedback_service.post(body,
-                                                     f"{get_settings().TG_API_URL}/api/v1/Metalsoft/SendTruckFinalizationLoading")
-                    log.info(f"Notificación enviada para flota {flota.referencia} con estado_puerto: {estado_puerto}")
-                except httpx.HTTPStatusError as e:
-                    try:
-                        error_details = e.response.json()  # Parse API's JSON error
-                    except json.JSONDecodeError:
-                        error_details = {"message": e.response.text}
-                    log.error(
-                        f"API externa error (status: {e.response.status_code}): {e.response.text}")
-                    raise BasedException(
-                        message=f"API externa error: {error_details.get('message', e.response.text)}",
-                        status_code=e.response.status_code,
-                    )
-
-
-
-            if flota.tipo: 'buque'
-
-            # Solo notificar si el cambio de estado es para finalizado
-            if not estado_puerto:
-                notification_data = {
-                   "voyage": puerto_id,
-                    "status": "Finished"
-               }
-                body = AnyUtils.serialize_data(notification_data)
-
-                try:
-                    await self.feedback_service.post(body,
-                                                     f"{get_settings().TG_API_URL}/api/v1/Metalsoft/FinalizaBuque")
-                    log.info(f"Notificación enviada para flota {flota.referencia} con estado_puerto: {estado_puerto}")
-                except httpx.HTTPStatusError as e:
-                    try:
-                        error_details = e.response.json()  # Parse API's JSON error
-                    except json.JSONDecodeError:
-                        error_details = {"message": e.response.text}
-                    log.error(
-                        f"API externa error (status: {e.response.status_code}): {e.response.text}")
-                    raise BasedException(
-                        message=f"API externa error: {error_details.get('message', e.response.text)}",
-                        status_code=e.response.status_code,
-                    )
+                await self.send_notification(flota, viaje, tran, estado_puerto, flota.tipo)
 
             return updated_flota
         except EntityNotFoundException as e:
@@ -566,72 +578,53 @@ class ViajesService:
                 status_code=status.HTTP_409_CONFLICT
             )
 
-    async def create_buque_load(self, bl_input: BlsExtCreate) -> BlsResponse:
+    async def send_notification(self, flota_tipo: str, flota, viaje, tran, estado_puerto: Optional[bool] = None
+        ) -> None:
         """
-        Create a new BL (Bill of Lading) for a buque viaje.
+        Helper method to send notifications for camion or buque changes.
 
         Args:
-            bl_input (BlsExtCreate): The BL data to create.
-
-        Returns:
-            BlsResponse: The created BL object.
+            flota: The flota object.
+            viaje: The viaje object.
+            tran: The transaction object (for camion).
+            estado_puerto (bool): The puerto status.
+            flota_tipo (str): The type of flota ('camion' or 'buque').
 
         Raises:
-            EntityNotFoundException: If viaje, material, or client is not found.
-            EntityAlreadyRegisteredException: If BL number already exists.
-            BasedException: If creation fails due to database or other errors.
+            BasedException: If the notification to external API fails.
         """
-        try:
-            # Verifica que el viaje asociado exista
-            viaje = await self.get_viaje_by_puerto_id(bl_input.puerto_id)
-            if not viaje:
-                raise EntityNotFoundException(f"No existe un viaje con puerto_id='{bl_input.puerto_id}'")
 
-            # Verifica que no exista un BL con el mismo número
-            existing_bl = await self.bls_service.get_bl_by_num(bl_input.no_bl)
-            if existing_bl:
-                raise EntityAlreadyRegisteredException(f"El número de BL '{bl_input.no_bl}' ya fue registrado")
-
-            # Obtiene el ID del material
-            material_id = await self.mat_service.get_mat_by_name(bl_input.material_name)
-            if material_id is None:
-                raise EntityNotFoundException(f"El material '{bl_input.material_name}' no existe")
-
-            # Obtiene el ID del cliente
-            cliente_find = await self.clientes_service.get_cliente_by_name(bl_input.cliente_name)
-            if cliente_find is None:
-                raise EntityNotFoundException(f"El cliente '{bl_input.cliente_name}' no existe")
-
-            # Prepara los datos para la creación
-            bl_data = bl_input.model_dump(exclude={"material_name", "puerto_id", "cliente_name"})
-            bl_data.update({
-                "cliente_id": cliente_find.id,
-                "material_id": material_id,
-                "viaje_id": viaje.id,
-            })
-
-            # Crea la instancia de BL
-            db_bl = BlsCreate(**bl_data)
-            await self.bls_service.create(db_bl)
-
-            # Retorna la entidad creada
-            created_bl = await self.bls_service.get_bl_by_num(bl_input.no_bl)
-            if not created_bl:
-                raise BasedException(
-                    message="Error al recuperar el BL recién creado",
-                    status_code=status.HTTP_404_NOT_FOUND
-                )
-            return BlsResponse.model_validate(created_bl)
-        except EntityNotFoundException as e:
-            raise e
-        except EntityAlreadyRegisteredException as e:
-            raise e
-        except Exception as e:
-            log.error(f"Error creando BL con no_bl {bl_input.no_bl}: {e}")
-            raise BasedException(
-                message=f"Error al crear el BL :{e}",
-                status_code=status.HTTP_424_FAILED_DEPENDENCY
+        if flota_tipo == "camion":
+            notification = NotificationCargue(
+                truckPlate=flota.referencia,
+                truckTransaction=viaje.puerto_id,
+                weighingPitId=tran.pit,
+                weight=int(tran.peso_real)
             )
+            endpoint = f"{get_settings().TG_API_URL}/api/v1/Metalsoft/SendTruckFinalizationLoading"
+        else:
+            notification = NotificationBuque(
+                voyage=flota.puerto_id,
+                status="Finished"
+            )
+            endpoint = f"{get_settings().TG_API_URL}/api/v1/Metalsoft/FinalizaBuque"
+
+        body = AnyUtils.serialize_data(notification)
+        try:
+            await self.feedback_service.post(body, endpoint)
+            log.info(f"Notificación enviada para flota {flota.referencia} con estado_puerto: {estado_puerto}")
+        except httpx.HTTPStatusError as e:
+            try:
+                error_details = e.response.json()
+            except json.JSONDecodeError:
+                error_details = e.response.text
+            log.error(f"API externa error: {e.response.status_code}): {e.response.text}")
+            raise BasedException(
+                message=f"API externa error: {error_details.get('message', e.response.text)}",
+                status_code=e.response.status_code
+            ) from e
+
+
 
 
 

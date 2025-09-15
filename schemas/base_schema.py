@@ -33,3 +33,15 @@ class CustomErrorResponse(BaseModel):
                 "message": "Validation error"
             }
         }
+
+class ValidationErrorDetail(BaseModel):
+    field: str = Field(..., description="The field that caused the validation error")
+    error: str = Field(..., description="The error message for the field")
+
+    class Config:
+        json_schema_extra = {
+            "example": {
+                "field": "id",
+                "error": "Field required"
+            }
+        }

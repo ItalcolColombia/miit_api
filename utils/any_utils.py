@@ -1,4 +1,4 @@
-import json
+import  orjson
 from datetime import datetime
 import random
 from decimal import Decimal
@@ -152,7 +152,7 @@ class AnyUtils:
                 return str(obj)  # Convert Decimal to string to preserve precision
             raise TypeError(f"Object of type {type(obj)} is not JSON serializable")
 
-        return json.loads(json.dumps(data, default=convert))
+        return orjson.loads(orjson.dumps(data, default=convert))
 
     @staticmethod
     def serialize_dict(data: Dict[str, Any] | None) -> Dict[str, Any] | None:

@@ -2,18 +2,16 @@ from typing import List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, status, Query
 from fastapi_pagination import Page
-from core.di.service_injection import get_viajes_service, get_mat_service, get_alm_service, get_mov_service, \
+from core.di.service_injection import get_viajes_service, get_mat_service, get_mov_service, \
     get_pesadas_service, get_transacciones_service, get_flotas_service, get_alm_mat_service
 from core.enums.user_role_enum import UserRoleEnum
 from services.auth_service import AuthService
-from schemas.almacenamientos_schema import AlmacenamientoResponse
 from schemas.almacenamientos_materiales_schema import VAlmMaterialesResponse
 from schemas.materiales_schema import MaterialesResponse
 from schemas.movimientos_schema import MovimientosResponse
 from schemas.pesadas_schema import PesadaResponse, PesadaCreate
 from schemas.transacciones_schema import TransaccionResponse, TransaccionCreate
 from schemas.viajes_schema import VViajesResponse
-from services.almacenamientos_service import AlmacenamientosService
 from services.almacenamientos_materiales_service import AlmacenamientosMaterialesService
 from services.flotas_service import FlotasService
 from services.viajes_service import ViajesService
@@ -30,8 +28,8 @@ log = LoggerUtil()
 response_json = ResponseUtil().json_response
 router = APIRouter(prefix="/scada", tags=["Automatizador"], dependencies=[Depends(AuthService.require_access(roles=[UserRoleEnum.ADMINISTRADOR, UserRoleEnum.AUTOMATIZADOR]))])
 
-@router.get("/almacenamientos-saldos",
-            summary="Obtener listado paginado de almacenamientos saldos con filtro opcional por nombre.",
+@router.get("/almacenamientos-listado",
+            summary="Obtener listado paginado de almacenamientos con filtro opcional por nombre.",
             description="Retorna almacenamientos en modo páginado, filtrados opcionalmente por nombre específico",
             response_model=Page[VAlmMaterialesResponse],
             responses={
@@ -41,12 +39,12 @@ router = APIRouter(prefix="/scada", tags=["Automatizador"], dependencies=[Depend
 )
 async def get_almacenamientos_paginado(
     alm_mat_service: AlmacenamientosMaterialesService = Depends(get_alm_mat_service),
-    nombre_alm: Optional[str] = Query(None, description="Nombre específico a buscar")
+    id_alm: Optional[int] = Query(None, description="Id almacenamiento específico a buscar")
 ):
-    if nombre_alm is None:
-        log.info(f"Payload recibido: Obtener alm. con nombre {nombre_alm}")
+    if id_alm is None:
+        log.info(f"Payload recibido: Obtener datos almacenamiento {id_alm}")
     try:
-        return await alm_mat_service.get_pag_alm_mat(nombre_alm)
+        return await alm_mat_service.get_pag_alm_mat(id_alm)
 
     except HTTPException as http_exc:
         log.warning(f"No se encontraron alm_mat: {http_exc.detail}")
@@ -92,7 +90,7 @@ async def get_buques_listado(
 
 @router.put("/buque-finalizar/{puerto_id}",
             status_code=status.HTTP_200_OK,
-            summary="Modificar estado de un buque por partida",
+            summary="Modificar viaje del buque para actualizar estado por partida",
             description="Evento realizado por la automatización al dar por finalizado el recibo de buque.",
             response_model=UpdateResponse,
             responses={

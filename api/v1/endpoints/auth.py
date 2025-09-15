@@ -29,13 +29,6 @@ async def login(
 
     try:
         token = await auth_service.login(login_data.nick_name, login_data.clave)
-        if not token:
-            raise HTTPException(
-                    status_code=status.HTTP_401_UNAUTHORIZED,
-                    detail="Invalid credentials",
-                    headers={"WWW-Authenticate": "Bearer"},
-                )
-
         log.info(f"Login exitoso de usuario {login_data.nick_name}")
         return response_json(
             status_code=status.HTTP_201_CREATED,
@@ -46,7 +39,7 @@ async def login(
         log.error(f"Login de {login_data.nick_name} no exitoso: {http_exc.detail}")
         return response_json(
             status_code=http_exc.status_code,
-            message=http_exc.detail
+            message=http_exc.detail,
         )
 
     except Exception as e:

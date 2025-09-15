@@ -16,15 +16,38 @@ class BaseResponse(BaseSchema):
         status_code (str): The HTTP status code (e.g., "200", "404").
         status_name (str): The name of the HTTP status (e.g., "OK", "Not Found").
         message (Optional[str]): A descriptive message about the response.
+        meta (Optional[Dict[str, Any]]): Metadata included in the response.
         data (Optional[Dict[str, Any]]): Additional data included in the response.
     """
 
     status_code: str = Field(..., description="The HTTP status code")
     status_name: str = Field(..., description="The name of the HTTP status")
+    timestamp: datetime = Field(default_factory=datetime.timestamp, description="Response generation timestamp")
     message: Optional[str] = Field(None, description="A descriptive message")
+    meta: Optional[Dict[str, Any]] = Field(None, description="Metadata (e.g., request_id)")
     data: Optional[Dict[str, Any]] = Field(None, description="Additional data")
 
 
+class SuccessResponse(BaseResponse):
+    """
+    Response model for generic successful operations (e.g., GET requests).
+
+    Extends BaseResponse with a default configuration for successful responses, typically
+    returning a 200 OK status.
+
+    Attributes:
+        Inherits all attributes from BaseResponse.
+    """
+    class Config:
+        json_schema_extra = {
+            "example": {
+                "status_code": "200",
+                "status_name": "OK",
+                "timestamp": "2025-09-12T10:40:00Z",
+                "message": "Request successful",
+                "data": {}
+            }
+        }
 
 class CreateResponse(BaseResponse):
     """
@@ -42,6 +65,7 @@ class CreateResponse(BaseResponse):
             "example": {
                 "status_code": "201",
                 "status_name": "Created",
+                "timestamp": "2025-09-12T10:40:00Z",
                 "message": "Creación exitosa",
                 "data": {}
             }
@@ -63,6 +87,7 @@ class UpdateResponse(BaseResponse):
             "example": {
                 "status_code": "200",
                 "status_name": "OK",
+                "timestamp": "2025-09-12T10:40:00Z",
                 "message": "Actualización exitosa",
                 "data": {}
             }
@@ -84,6 +109,7 @@ class ErrorResponse(BaseResponse):
             "example": {
                 "status_code": "400",
                 "status_name": "Bad Request",
+                "timestamp": "2025-09-12T10:40:00Z",
                 "message": "Detalles Error",
                 "data": {}
             }
@@ -108,8 +134,10 @@ class ValidationErrorResponse(BaseResponse):
             "example": {
                 "status_code": "422",
                 "status_name": "Unprocessable Entity",
+                "timestamp": "2025-09-12T10:40:00Z",
                 "message": "Error de validación",
+                "meta": {"request_id": "abc123"},
                 "details": ["Id: Field required"],
-                "data": {}
+                "data": None
             }
         }

@@ -21,7 +21,7 @@ class ViajesRepository(IRepository[Viajes, ViajesResponse]):
 
     async def get_buques_disponibles(self) -> List[ViajesActResponse] | None:
         """
-                Filter buques which estado = True
+                Filter buques which _operador = True
 
                 Returns:
                     A list of Buques objects matching the filter, otherwise, returns a null.
@@ -29,7 +29,7 @@ class ViajesRepository(IRepository[Viajes, ViajesResponse]):
         query = (
             select(VViajes)
             .where(VViajes.tipo == 'buque')
-            .where(VViajes.estado == True)
+            .where(VViajes.estado_operador == True)
         )
         result = await self.db.execute(query)
         viajes = result.scalars().all()

@@ -168,13 +168,14 @@ class FlotasService:
             FlotasResponse: The existing or newly created flota object.
 
         Raises:
+            EntityAlreadyRegisteredException: If flota reference already exists.
             BasedException: For unexpected errors during the creation or retrieval process.
         """
         try:
             # Check if a Flota already exists
             flota_existente = await self._repo.get_flota_by_ref(flota_data.referencia)
             if flota_existente:
-                log.info(f"Flota ya existente con referencia: {flota_data.referencia}")
+                log.info(f"Flota ya existe con referencia: {flota_data.referencia}")
                 return FlotasResponse.model_validate(flota_existente)
 
             # Create a new flota
@@ -182,9 +183,9 @@ class FlotasService:
             log.info(f"Se creó flota: {flota_creada.referencia}")
             return FlotasResponse.model_validate(flota_creada)
         except Exception as e:
-            log.error(f"Error al crear o consultar flota: {flota_data.referencia} - {e}")
+            log.error(f"Error al crear o consultar flota: {flota_data.referencia} - {e}", exc_info=True)
             raise BasedException(
-                message="Error inesperado al crear o consultar la flota.",
+                message=f"Error inesperado al crear o consultar  flota: {str(e)}",
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
 

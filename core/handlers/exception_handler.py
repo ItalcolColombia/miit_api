@@ -6,9 +6,13 @@ from fastapi.responses import JSONResponse
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from core.exceptions.base_exception import BasedException
+from schemas.response_models import ErrorResponse
 from utils.logger_util import LoggerUtil
+from utils.response_util import ResponseUtil
 
 log = LoggerUtil()
+
+response_json = ResponseUtil.json_response
 
 class ExceptionHandler:
     """
@@ -42,29 +46,33 @@ class ExceptionHandler:
         """
 
         headers = getattr(exc, "headers", None)
-        print(f"Handling exception: {type(exc).__name__}, Status: {exc.status_code}, Detail: {exc.detail}")
         log.error(f"Excepción HTTP capturada: {exc.detail}, Código: {exc.status_code}, Tipo: {type(exc).__name__}")
 
         if exc.status_code == status.HTTP_404_NOT_FOUND:
-            return JSONResponse(
+            return response_json(
                 status_code=status.HTTP_404_NOT_FOUND,
-                content={
-                    "status_code": str(exc.status_code),
-                    "status_name": HTTPStatus(exc.status_code).phrase,
-                    "message": "El endpoint solicitado no exite o la URL es incorrecta",
-                },
+                message= "El endpoint solicitado no exite o la URL es incorrecta",
                 headers=headers,
             )
 
         # Otros HTTPException se devuelven tal cual o personalizados
-        return JSONResponse(
+        return response_json(
             status_code=exc.status_code,
-            content={
-                "status_code": str(exc.status_code),
-                "status_name": HTTPStatus(exc.status_code).phrase,
-                "message": str(exc.detail),
-            },
-            headers=headers,  # Se asigna header si existe
+            message="El endpoint solicitado no exite o la URL es incorrecta",
+            data=exc.detail,
+            headers=headers,
+        )
+
+    @staticmethod
+    async def based_exception_handler(request: Request, exc: BasedException) -> JSONResponse:
+        log.error(f"Excepción no controlada: {type(exc).__name__}, Status: {exc.status_code}, Detail: {exc.detail}, URL: {request.url}")
+        headers = getattr(exc, "headers", None)
+
+        return response_json(
+            status_code=exc.status_code,
+            message="El endpoint solicitado no exite o la URL es incorrecta",
+            data=exc.detail,
+            headers=headers,
         )
 
     @staticmethod
@@ -86,17 +94,12 @@ class ExceptionHandler:
             JSONResponse: A JSON response containing the error details.
         """
 
-        for error in exc.errors():
-            if error["type"] == "json_invalid":
-                status_code = status.HTTP_400_BAD_REQUEST
-                return JSONResponse(
-                    status_code=status_code,
-                    content={
-                        "status_code": str(status_code),
-                        "status_name": HTTPStatus(status_code).phrase,
-                        "message": "No se puede procesar la solicitud debido a un formato incorrecto.",
-                    },
-                )
+        if any(err["type"] == "json_invalid" for err in exc.errors()):
+            return response_json(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                message="La petición tiene un formato JSON invalido.",
+            )
+
         # Si no es del tipo invalid json se asume que es error de validación
         return await ExceptionHandler.validation_error_handler(request, exc)
 
@@ -128,12 +131,8 @@ class ExceptionHandler:
             error_messages.append(f"{field()}: {message}")
         log.error(f"Errores de validación: {error_messages}")
 
-        return JSONResponse(
+        return response_json(
             status_code=status_code,
-            content={
-                "status_code": str(status_code),
-                "status_name": HTTPStatus(status_code).phrase,
-                "message": "Error de validación",
-                "details": error_messages
-            },
+            message= "Error de validación",
+            data= error_messages,
         )

@@ -22,7 +22,8 @@ class ResponseUtil:
             status_code: int,
             message: str | None = None,
             data: Optional[Dict[str, Any]] = None,
-            token: Optional[str]  = None
+            token: Optional[str]  = None,
+            headers: Optional[Dict[str, str]] = None
     ) -> JSONResponse:
         """
         Public method responsible for generating a standardized JSON response.
@@ -34,13 +35,12 @@ class ResponseUtil:
             status_code (int): The HTTP status code for the response.
             message (str, optional): A message describing the response. Defaults to None.
             data (Dict[str, str], optional): Additional data to include in the response. Defaults to None.
+            token (str, optional): Authentication token to include in the response. Defaults to None.
+            headers (Dict[str, str], optional): HTTP headers to include in the response. Defaults to None.
+
 
         Returns:
             JSONResponse: A formatted JSON response containing the specified status code, message, and data.
-            :param data:
-            :param message:
-            :param status_code:
-            :param token:
         """
 
         response_content: Dict[str, Union[str, Dict[str, str]]] = {
