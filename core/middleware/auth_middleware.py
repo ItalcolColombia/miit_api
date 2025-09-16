@@ -69,21 +69,11 @@ class AuthMiddleware(BaseHTTPMiddleware):
             # Proceed to the next middleware or endpoint
             return await call_next(req)
 
-        except InvalidTokenCredentialsException as ite:
-            log.error("Invalid Token", str(ite))
-            return json_response(
-                status_code=status.HTTP_401_UNAUTHORIZED,
-                message="Invalid token",
-                headers={"WWW-Authenticate": "Bearer"},
-            )
-        except InvalidCredentialsException as ice:
-            log.error("Invalid Credentials {}", str(ice))
-            return json_response(
-                status_code=status.HTTP_401_UNAUTHORIZED,
-                message={"detail": str(ice)},
-            )
+
+        except (InvalidTokenCredentialsException, InvalidCredentialsException):
+            pass
         except Exception as e:
-            log.error("Error in AuthMiddleware: {}", str(e))
+            log.error("Error in AuthMiddleware:", str(e))
             return json_response(
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
                 message=f"Error servidor: {str(e)}",
@@ -141,12 +131,11 @@ class AuthMiddleware(BaseHTTPMiddleware):
             log.info(f"User authenticated: {username}, user_id: {user_id}")
             return None
 
-        except HTTPException as e:
-            log.error(f"Token validation error: {e.detail}")
+        except BasedException as e:
+            log.error(f"Token verify error: {str(e.detail)}")
             return json_response(
                 status_code= e.status_code,
                 message = str(e.detail),
-                headers= e.headers
             )
         except Exception as e:
             log.error(f"Error in __check_access: {str(e)}", exc_info=True)

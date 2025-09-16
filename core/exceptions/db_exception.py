@@ -65,3 +65,34 @@ class DatabaseInvalidConfigurationException(BasedException):
             message,
             status_code,
         )
+
+class DatabaseSQLAlchemyException(BasedException):
+    """
+    Class responsible for handling SQLAlchemy database exceptions.
+
+    This exception is raised when the application encounters an error during
+    database operations using SQLAlchemy, such as query failures or transaction errors.
+
+    Class Args:
+        message (str): The error message describing the SQLAlchemy exception.
+        status_code (int): The HTTP status code associated with the exception (default: 500 Internal Server Error).
+    """
+
+    def __init__(
+        self, message: str = "Error de BD:",
+        status_code: int = status.HTTP_500_INTERNAL_SERVER_ERROR
+    ):
+        """
+        Constructor method for SQLAlchemyDatabaseException.
+
+        Initializes the exception with a message and an optional status code.
+
+        Args:
+            message (str, optional): The error message describing the exception (default: generic database error message).
+            status_code (int, optional): The HTTP status code to return (default: 500 Internal Server Error).
+        """
+
+        super().__init__(
+            message,
+            status_code,
+        )

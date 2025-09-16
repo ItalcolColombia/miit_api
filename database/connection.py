@@ -7,6 +7,7 @@ from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession
 from sqlalchemy.orm import declarative_base, sessionmaker
 
+from core.exceptions.db_exception import DatabaseSQLAlchemyException
 from database.configuration import (
     DatabaseConfigurationUtil,
 )
@@ -59,6 +60,10 @@ class DatabaseConfiguration:
         async with cls._async_session() as session:
             try:
                 yield session
+            except DatabaseSQLAlchemyException:
+                raise
+            except Exception:
+                raise
             finally:
                 await session.close()
 
