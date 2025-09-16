@@ -5,6 +5,7 @@ import os
 
 from colorlog import ColoredFormatter
 from starlette import status
+from whenever._whenever import Instant
 
 from core.exceptions.base_exception import BasedException
 from core.config.settings import get_settings
@@ -50,11 +51,12 @@ class LoggerUtil:
             self.__valid_log_levels = ["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"]
 
             # Directory and path for the log file
+            log_date = Instant.now().py_datetime().strftime("%Y-%m-%d")
             _project_root = os.path.abspath(os.path.dirname(__file__))
             _log_dir = self.__app_log_dir
             os.makedirs(_log_dir, exist_ok=True)
 
-            _log_file_name = f"{self.__api_name}.log"
+            _log_file_name = f"{log_date}.log"
             _log_file = os.path.join(_log_dir, _log_file_name)
 
             # Console format and message format
