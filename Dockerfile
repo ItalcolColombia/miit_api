@@ -50,6 +50,10 @@ RUN pip install --no-cache-dir -r requirements.txt
 #Copiar configuración supervisord
 COPY supervisord.conf /etc/supervisord.conf
 
+#Copiar y dar permisos al script de inicio
+COPY start.sh /var/www/metalsoft/miit_api/start.sh
+RUN chmod +x /var/www/metalsoft/miit_api/start.sh
+
 # Crea el directorio de log de la API
 RUN mkdir -p /var/www/metalsoft/log/miit_api && chmod -R 777 /var/www/metalsoft/log/miit_api
 
