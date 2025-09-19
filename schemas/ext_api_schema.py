@@ -5,8 +5,8 @@ from schemas.base_schema import BaseSchema
 
 
 class NotificationCargue(BaseSchema):
-    truckPlate: Optional[str]
-    truckTransaction: str
+    truckPlate: Optional[str] = None
+    truckTransaction: Optional[str] = None
     weighingPitId: Optional[int] = None
     weight: Optional[Decimal] = None
 
@@ -34,6 +34,18 @@ class NotificationBuque(BaseSchema):
             "example": {
                 "voyage": "VOY2024049",
                 "status": "Finished",
+            }
+        }
+    )
+
+class NotificationPitCargue(BaseSchema):
+    cargoPit: Optional[int] = None
+
+    model_config = ConfigDict(
+        extra='ignore',
+        json_schema_extra={
+            "example": {
+                "cargoPit": 2,
             }
         }
     )

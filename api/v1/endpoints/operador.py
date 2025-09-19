@@ -10,7 +10,6 @@ from utils.response_util import ResponseUtil
 from services.viajes_service import ViajesService
 from services.pesadas_service import PesadasService
 from schemas.pesadas_schema import VPesadasAcumResponse
-from schemas.usuarios_schema import VUsuariosRolResponse
 from schemas.response_models import CreateResponse, ErrorResponse, ValidationErrorResponse, UpdateResponse
 from schemas.viajes_schema import (
     ViajeBuqueExtCreate,
@@ -258,7 +257,7 @@ async def create_camion(
         log.info(f"Flota {flota.puerto_id} registrada")
         return response_json(
             status_code=status.HTTP_201_CREATED,
-            message=f"registro exitoso",
+            message=f"Registró de cita de camión realizada exitosamente",
         )
 
     except HTTPException as http_exc:
@@ -290,11 +289,12 @@ async def in_camion(
     log.info(f"Payload recibido: Flota {puerto_id} - Ingreso ")
     try:
 
-        await service.chg_camion_ingreso(puerto_id, fecha_ingreso)
+        service_data = await service.chg_camion_ingreso(puerto_id, fecha_ingreso)
         log.info(f"Ingreso de flota {puerto_id} marcada exitosamente.")
         return response_json(
             status_code=status.HTTP_200_OK,
-            message=f"Registró de cita de camión actualizada exitosamente",
+            message=f"Modificación de cita de camión realizada exitosamente",
+            data=service_data
         )
 
     except HTTPException as http_exc:

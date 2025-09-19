@@ -12,7 +12,8 @@ from database.models import VViajes
 from typing import List, Optional
 from repositories.viajes_repository import ViajesRepository
 from schemas.bls_schema import BlsCreate, BlsExtCreate, BlsResponse, BlsUpdate
-from schemas.ext_api_schema import NotificationCargue, NotificationBuque
+from schemas.ext_api_schema import NotificationCargue, NotificationBuque, NotificationPitCargue
+from schemas.transacciones_schema import TransaccionResponse
 from services.bls_service import BlsService
 from services.clientes_service import ClientesService
 from services.ext_api_service import ExtApiService
@@ -490,7 +491,7 @@ class ViajesService:
                 status_code=status.HTTP_424_FAILED_DEPENDENCY
             )
 
-    async def chg_camion_ingreso(self, puerto_id: str, fecha: datetime) -> ViajesResponse:
+    async def chg_camion_ingreso(self, puerto_id: str, fecha: datetime) -> NotificationPitCargue:
         """
         Update the arrival date of a camion viaje.
 
@@ -517,13 +518,22 @@ class ViajesService:
                 raise EntityNotFoundException(
                     f"La flota es del tipo '{flota.tipo}' diferente al tipo esperado 'camion'")
 
+            tran = await self.transacciones_service.get_tran_by_viaje(viaje.id)
+            if not tran:
+                raise EntityNotFoundException(f"Transacción para la cita: '{viaje.id}' no existe")
+
             update_fields = {
                 "fecha_llegada": fecha,
             }
             update_data = ViajeUpdate(**update_fields)
-            updated = await self._repo.update(viaje.id, update_data)
+            await self._repo.update(viaje.id, update_data)
+
+            notification = NotificationPitCargue(
+                cargoPit=tran.pit,
+            ).model_dump(mode='json')
             log.info(f"Ingreso actualizado para viaje: {viaje.puerto_id} a {fecha}")
-            return updated
+
+            return notification
         except EntityNotFoundException as e:
             raise e
         except Exception as e:
@@ -598,13 +608,13 @@ class ViajesService:
                 truckTransaction=viaje.puerto_id,
                 weighingPitId=tran.pit,
                 weight=tran.peso_real
-            ).dict()
+            ).model_dump(mode='json')
             endpoint = f"{get_settings().TG_API_URL}/api/v1/Metalsoft/CamionCargue"
         else:
             notification = NotificationBuque(
                 voyage=flota.puerto_id,
                 status="Finished"
-            ).dict()
+            ).model_dump(mode='json')
             endpoint = f"{get_settings().TG_API_URL}/api/v1/Metalsoft/FinalizaBuque"
 
         try:
