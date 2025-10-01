@@ -25,8 +25,6 @@ async def login(
     login_data: UserAuth,
     auth_service: AuthService = Depends(get_auth_service),
 ):
-    log.info(f"Payload recibido: Login {login_data.nick_name}")
-
     try:
         token = await auth_service.login(login_data.nick_name, login_data.clave)
         log.info(f"Login exitoso de usuario {login_data.nick_name}")

@@ -96,3 +96,24 @@ class DatabaseSQLAlchemyException(BasedException):
             message,
             status_code,
         )
+
+class DatabaseTypeMismatchException(BasedException):
+    """
+    Class responsible for handling SQLAlchemy ProgrammingError due to type mismatches.
+
+    This exception is raised when a database query fails due to a type mismatch,
+    such as comparing a VARCHAR to an INTEGER without proper casting.
+
+    Class Args:
+        message (str): The error message describing the type mismatch.
+        hint (str): Additional information or suggestion to resolve the error.
+        status_code (int): The HTTP status code (default: 422 Unprocessable Entity).
+    """
+    def __init__(
+        self,
+        message: str = "Database query failed due to type mismatch",
+        hint: str = "Explicit type casting may be required",
+        status_code: int = status.HTTP_422_UNPROCESSABLE_ENTITY
+    ):
+        super().__init__(message, status_code)
+        self.hint = hint
