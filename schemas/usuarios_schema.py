@@ -64,8 +64,8 @@ class Token(BaseSchema):
     token_type: str
 
 class UserAuth(BaseSchema):
-    nick_name: str = "admin"
-    clave: str = "admin"
+    nick_name: str = "nombre_usuario"
+    clave: str = "P4$$w0rd"
 
 class VUsuariosRolResponse(BaseModel):
     id: int
