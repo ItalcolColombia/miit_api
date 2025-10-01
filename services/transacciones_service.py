@@ -113,7 +113,7 @@ class TransaccionesService:
 
     async def get_tran_by_viaje(self, viaje: int) -> Optional[TransaccionResponse]:
         """
-        Retrieve a transaction by its ID.
+        Retrieve a transaction record by its viaje ID.
 
         Args:
             viaje (int): The ID of the voyage to retrieve.
@@ -196,8 +196,8 @@ class TransaccionesService:
         """
         try:
             # 1. Validar si transacción ya existe
-            if await self._repo.find_one(viaje_id=tran_data.viaje_id):
-                raise EntityAlreadyRegisteredException(f"Ya existe una transacción del viaje '{tran_data.viaje_id}'")
+            if await self._repo.find_one(viaje_id=tran_data.viaje_id, estado='Proceso' ):
+                raise EntityAlreadyRegisteredException(f"Ya existe transacción en proceso del viaje '{tran_data.viaje_id}'")
 
             # 2. Se crea transacción si esta no existe en la BD
             tran_nueva = await self._repo.create(tran_data)

@@ -1,11 +1,12 @@
-from typing import Optional
+from typing import Optional, List
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 
 from core.contracts.auditor import Auditor
 from repositories.base_repository import IRepository
-from schemas.bls_schema import BlsResponse
-from database.models import Bls
+from schemas.bls_schema import BlsResponse, VBlsResponse
+from database.models import Bls, VBls
+
 
 class BlsRepository(IRepository[Bls, BlsResponse]):
     db: AsyncSession
@@ -16,7 +17,11 @@ class BlsRepository(IRepository[Bls, BlsResponse]):
         super().__init__(model, schema, db, auditor)
 
 
-    async def get_bls_no_bl(self, ref: str) -> Optional[Bls]:
-        stmt = select(self.model).filter(self.model.no_bl == ref)
-        result = await self.db.execute(stmt)
-        return result.scalar_one_or_none()
+    async def get_bls_viaje(self, ref: int) -> List[VBlsResponse] | None:
+        query = (
+            select(VBls)
+            .where(VBls.viaje_id == ref)
+        )
+        result = await self.db.execute(query)
+        return result.scalars().all()
+

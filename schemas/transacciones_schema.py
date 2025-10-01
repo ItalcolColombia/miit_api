@@ -1,12 +1,11 @@
-from pydantic import Field, field_validator, ConfigDict
-from schemas.base_schema import BaseSchema
+from pydantic import BaseModel, Field, field_validator, ConfigDict
 from datetime import datetime
 from typing import Optional
 from decimal import Decimal
 
 
-class TransaccionResponse(BaseSchema):
-    id: int
+class TransaccionResponse(BaseModel):
+    id: Optional[int] = None
     material_id: int
     tipo: str
     viaje_id: Optional[int] = None
@@ -25,24 +24,24 @@ class TransaccionResponse(BaseSchema):
     usuario_id: Optional[int] = None
 
 
-    model_config = ConfigDict(from_attributes=True)
+    class Config:
+        from_attributes = True
 
 
-
-class TransaccionCreate(BaseSchema):
+class TransaccionCreate(TransaccionResponse):
     material_id: int
     tipo: str
-    viaje_id: Optional[int] = None
-    pit: Optional[int] = None
+    viaje_id: int
+    pit: int
     ref1: Optional[str] = None
     ref2: Optional[str] = None
-    fecha_inicio: Optional[datetime] = None
+    fecha_inicio: datetime = None
     fecha_fin: Optional[datetime] = None
-    origen_id: Optional[int] = None
+    origen_id: int
     destino_id: Optional[int] = None
     peso_meta: Decimal = Field( max_digits=10, decimal_places=2)
     peso_real: Optional[Decimal] = Field(None, max_digits=10, decimal_places=2)
-    estado: Optional[str] = "Registrada"
+    estado: Optional[str] = Field(default="Registrada", min_length=1)
     leido: Optional[bool] = False
     fecha_hora: Optional[datetime] = None
     usuario_id: Optional[int] = None
@@ -67,15 +66,13 @@ class TransaccionCreate(BaseSchema):
                 "viaje_id": 11182,
                 "pit": 4,
                 "ref1": "24126",
-                "fecha_hora": datetime(2025, 5, 10, 13, 10),
                 "fecha_inicio": datetime(2025, 5, 10, 13, 25),
-                "fecha_fin": datetime(2025, 5, 10, 13, 41),
                 "origen_id": 102,
                 "peso_meta": 34230
             }
         }
 
-class TransaccionUpdate(BaseSchema):
+class TransaccionUpdate(BaseModel):
     material_id: Optional[int] = None
     tipo: Optional[str] = None
     viaje_id: Optional[int] = None
