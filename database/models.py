@@ -219,6 +219,27 @@ class LogsAuditoria(Base):
     fecha_hora = Column(TIMESTAMP, server_default=func.now(), onupdate=func.now())
     usuario_id = Column(Integer, nullable=True)
 
+class VBls(Base):
+    __tablename__ = "v_bls"
+    id = Column(Integer, primary_key=True, index=True)
+    no_bl = Column(String, index=True)
+    viaje_id = Column(Integer())
+    viaje = Column(String)
+    transaccion = Column(Integer(), nullable=True)
+    referencia = Column(String(300), unique=True, nullable=True)
+    material_id = Column(Integer)
+    material = Column(String)
+    cliente_id = Column(Integer)
+    cliente = Column(String)
+    peso_bl = Column(Numeric(10,2), nullable=False)
+    peso_real = Column(Numeric(10,2), nullable=True)
+    cargue_directo = Column(Boolean, nullable=True)
+    estado_puerto = Column(Boolean, nullable=True)
+    estado_operador = Column(Boolean, nullable=True)
+    fecha_hora = Column(TIMESTAMP, server_default=func.now(), onupdate=func.now())
+    usuario_id = Column(Integer, nullable=True)
+    usuario = Column(String(200))
+
 class VFlotas(Base):
     __tablename__ = "v_flotas"
     id = Column(Integer, primary_key=True, index=True)

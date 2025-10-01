@@ -124,7 +124,7 @@ class ViajeCamionExtCreate(BaseModel):
 
     @field_validator('peso_meta')
     def peso_positivo(cls, value):
-        if value <= 0:
+        if value < 0:
             raise ValueError("Peso debe ser positivo")
         return value
 

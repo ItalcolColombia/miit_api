@@ -11,8 +11,8 @@ from core.config.settings import get_settings
 from database.models import VViajes
 from typing import List, Optional
 from repositories.viajes_repository import ViajesRepository
-from schemas.bls_schema import BlsCreate, BlsExtCreate, BlsResponse, BlsUpdate
-from schemas.ext_api_schema import NotificationCargue, NotificationBuque, NotificationPitCargue
+from schemas.bls_schema import BlsCreate, BlsExtCreate, BlsResponse, BlsUpdate, VBlsResponse
+from schemas.ext_api_schema import NotificationCargue, NotificationBuque, NotificationPitCargue, NotificationBlsPeso
 from schemas.transacciones_schema import TransaccionResponse
 from services.bls_service import BlsService
 from services.clientes_service import ClientesService
@@ -431,12 +431,17 @@ class ViajesService:
             # Solo notificar si el cambio de estado es para finalizado
             if estado_operador is not None:
                 tran = None
+                bl = None
                 if flota.tipo == "camion":
                     tran = await self.transacciones_service.get_tran_by_viaje(viaje.id)
                     if not tran:
                         raise EntityNotFoundException(f"Transacción para la cita: '{viaje.id}' no existe")
+                if flota.tipo == "buque":
+                    bl = await  self.bls_service.get_bl_by_viaje(viaje.id)
+                    if not tran:
+                        raise EntityNotFoundException(f"No se encontró BL(s) para la cita: '{viaje.id}'.")
 
-                await self.send_notification(flota, viaje, tran)
+                await self.send_notification(flota, viaje, tran, bl)
 
             return updated_flota
         except EntityNotFoundException as e:
@@ -588,14 +593,15 @@ class ViajesService:
                 status_code=status.HTTP_409_CONFLICT
             )
 
-    async def send_notification(self, flota, viaje, tran) -> None:
+    async def send_notification(self, flota : FlotasResponse, viaje : ViajesResponse, tran: Optional[TransaccionResponse], bl: Optional[List[VBlsResponse]]) -> None:
         """
         Helper method to send notifications for camion or buque changes.
 
         Args:
-            flota: The flota object.
-            viaje: The viaje object.
-            tran: The transaction object (for camion).
+            flota (str): The flota object.
+            viaje (str): The viaje object.
+            tran (Optional[TransaccionResponse]): The transaction optional object (for camion).
+            bl(Optional[List[VBlsResponse]]): The BL Data optional object.
 
         Raises:
             BasedException: If the notification to external API fails.
@@ -611,9 +617,20 @@ class ViajesService:
             ).model_dump(mode='json')
             endpoint = f"{get_settings().TG_API_URL}/api/v1/Metalsoft/CamionCargue"
         else:
+            #Se mapean los registros de interes del BL
+            dt_bl = [
+                NotificationBlsPeso(
+                    noBL=bl_item.no_bl,
+                    voyage=bl_item.viaje,
+                    weightBl=bl_item.peso_real
+                ).model_dump(mode='json')
+                for bl_item in bl
+            ] if bl else None
+
             notification = NotificationBuque(
-                voyage=flota.puerto_id,
-                status="Finished"
+                voyage=viaje.puerto_id,
+                status="Finished",
+                data= dt_bl
             ).model_dump(mode='json')
             endpoint = f"{get_settings().TG_API_URL}/api/v1/Metalsoft/FinalizaBuque"
 

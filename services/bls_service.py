@@ -3,7 +3,8 @@ from typing import List, Optional
 from starlette import status
 
 from core.exceptions.base_exception import BasedException
-from schemas.bls_schema import BlsResponse, BlsCreate, BlsUpdate
+from core.exceptions.db_exception import DatabaseSQLAlchemyException
+from schemas.bls_schema import BlsResponse, BlsCreate, BlsUpdate, VBlsResponse
 from repositories.bls_repository import BlsRepository
 
 from utils.logger_util import LoggerUtil
@@ -145,7 +146,7 @@ class BlsService:
             BasedException: For unexpected errors during the creation or retrieval process.
         """
         try:
-            bl_existente = await self._repo.get_bls_no_bl(bl_data.no_bl)
+            bl_existente = await self._repo.find_one(no_bl=bl_data.no_bl)
             if bl_existente:
                 log.info(f"BL ya existente con N°: {bl_data.no_bl}")
                 return BlsResponse.model_validate(bl_existente)
@@ -175,12 +176,36 @@ class BlsService:
         """
         try:
             # Find a Bl by their 'number'
-            bl = await self._repo.get_bls_no_bl(number)
+            bl = await self._repo.find_one(no_bl=number)
             return BlsResponse.model_validate(bl) if bl else None
         except Exception as e:
             log.error(f"Error al obtener BL con número {number}: {e}")
             raise BasedException(
                 message="Error inesperado al obtener el BL por número.",
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
+
+    async def get_bl_by_viaje(self, viaje: int) -> List[VBlsResponse]:
+        """
+        Retrieve BL Pesadas by its viaje ID.
+
+        Args:
+            viaje (int): The ID of the voyage to retrieve.
+
+        Returns:
+            Optional[VBlsResponse]: The BL Pesada object filtered by viaje, or None if not found.
+
+        Raises:
+            BasedException: For unexpected errors during the retrieval process.
+        """
+        try:
+            return await self._repo.get_bls_viaje(viaje)
+        except DatabaseSQLAlchemyException:
+            raise
+        except Exception as e:
+            log.error(f"Error al obtener BL con viaje {viaje}: {e}")
+            raise BasedException(
+                message="Error inesperado al obtener el BL por viaje.",
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
    
