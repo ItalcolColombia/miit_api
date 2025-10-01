@@ -1,5 +1,5 @@
 from decimal import Decimal
-from typing import Optional
+from typing import Optional, Dict, Any, List
 from pydantic import  ConfigDict
 from schemas.base_schema import BaseSchema
 
@@ -26,6 +26,7 @@ class NotificationCargue(BaseSchema):
 class NotificationBuque(BaseSchema):
     voyage: Optional[str]
     status: Optional[str]
+    data: Optional[List[Any]] = None,
 
 
     model_config = ConfigDict(
@@ -46,6 +47,22 @@ class NotificationPitCargue(BaseSchema):
         json_schema_extra={
             "example": {
                 "cargoPit": 2,
+            }
+        }
+    )
+
+class NotificationBlsPeso(BaseSchema):
+    noBL: Optional[str] = None
+    voyage: Optional[str] = None
+    weightBl: Optional[Decimal] = None
+
+    model_config = ConfigDict(
+        extra='ignore',
+        json_schema_extra={
+            "example": {
+                "noBL": 'SSPRUEBA001',
+                "voyage": "VOY2024049",
+                "weightBl": Decimal('125498'),
             }
         }
     )

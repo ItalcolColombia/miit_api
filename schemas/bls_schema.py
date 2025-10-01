@@ -46,7 +46,6 @@ class BlsCreate(BaseSchema):
             }
         }
 
-
 class BlsUpdate(BaseSchema):
     viaje_id: Optional[int] = None
     material_id: Optional[int] = None
@@ -58,7 +57,6 @@ class BlsUpdate(BaseSchema):
     estado_operador: Optional[bool] = None
     fecha_hora: Optional[datetime] = None
     usuario_id: Optional[int] = None
-
 
 class BlsExtCreate(BaseSchema):
     puerto_id: str
@@ -86,3 +84,26 @@ class BlsExtCreate(BaseSchema):
                 "estado_operador": False
             }
         }
+
+class VBlsResponse(BaseSchema):
+    id: int
+    no_bl:str
+    transaccion:int
+    viaje_id:int
+    viaje:str
+    referencia: str
+    material_id: int
+    material: str
+    cliente_id : int
+    cliente: str
+    peso_bl: Decimal
+    peso_real: Decimal
+    cargue_directo : bool
+    estado_puerto: bool
+    estado_operador: bool
+    fecha_hora: datetime
+    usuario_id: int
+    usuario:str
+
+    class Config:
+        from_attributes = True
