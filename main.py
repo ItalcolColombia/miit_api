@@ -39,11 +39,15 @@ log = LoggerUtil()
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    # Startup logic
-    await startup_event()
-    yield
-    # Shutdown logic
-    log.info("Application shutdown")
+
+    try:
+        # Startup logic
+        log.info("Application startup")
+        await startup_event()
+        yield
+    finally:
+        # Shutdown
+        log.info("Application shutdown")
 app = FastAPI(
     title="Servicio Interconsulta MIIT",
     description="API para el manejo de información en el repositorio central por parte de los stackholders: operador portuario y automatizador. ",
@@ -99,7 +103,7 @@ add_pagination(app)
 #Urls
 @app.get('/', include_in_schema=False)
 async def root():
-    return JSONResponse({'service': app.title, 'version': API_VERSION_STR, 'env': API_STAGE})
+    return JSONResponse({'service': 'MIIT_API', 'version': API_VERSION_STR, 'env': API_STAGE})
 
 async def startup_event():
     """
