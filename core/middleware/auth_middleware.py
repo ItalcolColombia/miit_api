@@ -51,6 +51,7 @@ class AuthMiddleware(BaseHTTPMiddleware):
                        user_service: UsuariosService = Depends(get_user_service)) -> Response:
         try:
             public_paths = [
+                "/",
                 f"/api/{API_VERSION}/auth",
                 "/docs",
                 "/redoc",
@@ -58,7 +59,7 @@ class AuthMiddleware(BaseHTTPMiddleware):
             ]
 
             # Public patch Checking
-            if any(req.url.path.startswith(path) for path in public_paths):
+            if req.url.path in public_paths:
                 return await call_next(req)
 
             # Check access permissions for non-public paths

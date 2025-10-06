@@ -1,11 +1,13 @@
 from fastapi import APIRouter, Depends, HTTPException, status
 from core.di.service_injection import get_auth_service
+from core.middleware.auth_middleware import security
 from schemas.response_models import ErrorResponse, ValidationErrorResponse
 from services.auth_service import AuthService
 from schemas.usuarios_schema import UserAuth, Token  # You'll need to create these
 from utils.jwt_util import JWTUtil
 from utils.logger_util import LoggerUtil
 from utils.response_util import ResponseUtil
+from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 
 router = APIRouter(prefix="/auth", tags=["Autenticación"])
 
@@ -57,8 +59,8 @@ async def login(
                  status.HTTP_403_FORBIDDEN: {"model": ErrorResponse},
              })
 async def refresh(
-    token: str,
     auth_service: AuthService = Depends(get_auth_service),
+    token: HTTPAuthorizationCredentials = Depends(security),
 ):
     payload = JWTUtil.verify_token(token)
     log.info(f"Payload recibido: Refrescar Token de {payload.get("sub")}")
