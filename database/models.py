@@ -105,6 +105,7 @@ class Materiales(Base):
     __tablename__ = "materiales"
     id = Column(Integer, primary_key=True, index=True)
     nombre = Column(String(100), unique=True, index=True)
+    codigo = Column(String(20), nullable=False)
     tipo = Column(String(50), nullable=False)
     densidad = Column(Numeric(4,2))
     fecha_hora = Column(TIMESTAMP, server_default=func.now(), onupdate=func.now())

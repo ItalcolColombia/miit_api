@@ -5,6 +5,7 @@ from sqlalchemy import select
 from starlette import status
 
 from core.exceptions.base_exception import BasedException
+from core.exceptions.db_exception import DatabaseSQLAlchemyException
 from core.exceptions.entity_exceptions import EntityNotFoundException, EntityAlreadyRegisteredException
 from database.models import Pesadas
 from schemas.pesadas_schema import PesadaResponse, PesadaCreate, PesadaUpdate, VPesadasAcumResponse
@@ -197,7 +198,7 @@ class PesadasService:
                 status_code=status.HTTP_409_CONFLICT
             )
 
-    async def get_pesada_acumulada(self, puerto_id: Optional[str] = None, tran_id: Optional[int] = None) -> VPesadasAcumResponse:
+    async def get_pesadas_acumuladas(self, puerto_id: Optional[str] = None, tran_id: Optional[int] = None) -> List[VPesadasAcumResponse]:
         """
         Retrieve the sum of pesadas related to a puerto_id.
 
@@ -213,14 +214,11 @@ class PesadasService:
             BasedException: For unexpected errors during the retrieval process.
         """
         try:
-            pesada = await self._repo.get_sumatoria_pesadas(puerto_id, tran_id)
-
-            if pesada is None:
-                raise EntityNotFoundException(f"No se encontraron registros de pesadas para la flota '{puerto_id}'")
-
-            return pesada
+            return await self._repo.get_sumatoria_pesadas(puerto_id, tran_id)
         except EntityNotFoundException as e:
             raise e
+        except DatabaseSQLAlchemyException:
+            raise
         except Exception as e:
             log.error(f"Error al obtener suma de pesadas para puerto_id {puerto_id}: {e}")
             raise BasedException(

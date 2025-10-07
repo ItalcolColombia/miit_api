@@ -15,7 +15,7 @@ class PesadasRepository(IRepository[Pesadas, PesadaResponse]):
         super().__init__(model, schema, db, auditor)
 
 
-    async def get_sumatoria_pesadas(self, puerto_ref: Optional[str] = None, tran_id: Optional[int] = None) -> VPesadasAcumResponse | None:
+    async def get_sumatoria_pesadas(self, puerto_ref: Optional[str] = None, tran_id: Optional[int] = None) -> List[VPesadasAcumResponse] | None:
         """
                 Filter pesada sum
 
@@ -32,10 +32,6 @@ class PesadasRepository(IRepository[Pesadas, PesadaResponse]):
             query = query.where(VPesadasAcumulado.transaccion == tran_id)
 
         result = await self.db.execute(query)
-        pesada = result.scalars().all()
+        return result.scalars().all()
 
-        if not pesada:
-            return None
-
-        return VPesadasAcumResponse.model_validate(pesada[0])
 

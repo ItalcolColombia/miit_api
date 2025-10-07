@@ -1,9 +1,12 @@
-from pydantic import BaseModel, Field
+from pydantic import Field
 from datetime import datetime
 from decimal import Decimal
 from typing import Optional
 
-class PesadaBase(BaseModel):
+from schemas.base_schema import BaseSchema
+
+
+class PesadaBase(BaseSchema):
     transaccion_id: Optional[int] = None
     consecutivo: float
     bascula_id: Optional[int] = None
@@ -15,7 +18,7 @@ class PesadaBase(BaseModel):
     usuario_id: Optional[int] = None
 
 
-class PesadaCreate(PesadaBase):
+class PesadaCreate(BaseSchema):
     transaccion_id: Optional[int] = None
     consecutivo: Optional[float] = None
     bascula_id: Optional[int] = None
@@ -58,7 +61,7 @@ class PesadaResponse(PesadaBase):
         from_attributes = True
 
 
-class VPesadasAcumResponse(BaseModel):
+class VPesadasAcumResponse(BaseSchema):
     referencia: str
     consecutivo: int
     transaccion: int
