@@ -7,7 +7,6 @@ from schemas.usuarios_schema import UserAuth, Token  # You'll need to create the
 from utils.jwt_util import JWTUtil
 from utils.logger_util import LoggerUtil
 from utils.response_util import ResponseUtil
-from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 
 router = APIRouter(prefix="/auth", tags=["Autenticación"])
 
@@ -60,7 +59,7 @@ async def login(
              })
 async def refresh(
     auth_service: AuthService = Depends(get_auth_service),
-    token: HTTPAuthorizationCredentials = Depends(security),
+    token = Depends(AuthService.get_token),
 ):
     payload = JWTUtil.verify_token(token)
     log.info(f"Payload recibido: Refrescar Token de {payload.get("sub")}")

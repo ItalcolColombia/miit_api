@@ -265,6 +265,34 @@ class AuthService:
             log.error(f"Error al validar usuario actual: {e}")
             raise InvalidTokenCredentialsException("Error inesperado al validar el token.")
 
+    @staticmethod
+    async def get_token(
+            token: Annotated[str, Depends(JWTBearer())],
+    ) -> None:
+        """
+        Retrieve the current value from the provided JWT token.
+
+        Args:
+            token (Annotated[str, Depends(JWTBearer())]): The JWT token provided in the request.
+
+        Returns:
+            String: The token retrieved.
+
+        Raises:
+            InvalidTokenCredentialsException: If the token is invalid or the user is inactive.
+            InvalidCredentialsException: If the user is not found.
+            BasedException: For other unexpected errors.
+        """
+        try:
+                return token
+
+        except InvalidTokenCredentialsException as e:
+            raise e
+        except InvalidCredentialsException as e:
+            raise e
+        except Exception as e:
+            log.error(f"Error al validar usuario actual: {e}")
+            raise InvalidTokenCredentialsException("Error inesperado al validar el token.")
 
     @staticmethod
     def get_su() -> VUsuariosRolResponse:
