@@ -105,9 +105,6 @@ class AuthMiddleware(BaseHTTPMiddleware):
                     message="Usuario no valido",
                 )
 
-            # Log username for debugging
-            log.info(f"Fetching user with username: {username}")
-
             # Fetch user from repository
             #user = await user_service.get_username(username)
             #if user is None:
@@ -129,7 +126,6 @@ class AuthMiddleware(BaseHTTPMiddleware):
                 user_id = userid
 
             context.current_user_id.set(user_id)
-            log.info(f"User authenticated: {username}, user_id: {user_id}")
             return None
 
         except BasedException as e:
