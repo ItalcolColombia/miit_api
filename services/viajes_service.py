@@ -8,7 +8,7 @@ from starlette import status
 import httpx
 from core.exceptions.base_exception import BasedException
 from core.config.settings import get_settings
-from database.models import VViajes
+from database.models import VViajes, Clientes
 from typing import List, Optional
 from repositories.viajes_repository import ViajesRepository
 from schemas.bls_schema import BlsCreate, BlsExtCreate, BlsResponse, BlsUpdate, VBlsResponse
@@ -310,7 +310,8 @@ class ViajesService:
             # Obtiene el ID del cliente
             cliente_find = await self.clientes_service.get_cliente_by_name(bl_input.cliente_name)
             if cliente_find is None:
-                raise EntityNotFoundException(f"El cliente '{bl_input.cliente_name}' no existe")
+                cliente_find = await self.clientes_service.get_cliente_by_name("CUSTOMER COMPANY NAME")
+                #raise EntityNotFoundException(f"El cliente '{bl_input.cliente_name}' no existe")
 
             # Prepara los datos para la creación
             bl_data = bl_input.model_dump(exclude={"material_name", "puerto_id", "cliente_name"})
