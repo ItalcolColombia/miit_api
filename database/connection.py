@@ -1,9 +1,9 @@
 # /src/infrastructure/database/database_configuration.py
 
 from typing import Any, Generator, AsyncGenerator
-
 from sqlalchemy import create_engine
 from sqlalchemy.ext.declarative import declarative_base
+from asyncpg.exceptions import InvalidCachedStatementError
 from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession
 from sqlalchemy.orm import declarative_base, sessionmaker
 
@@ -47,9 +47,6 @@ class DatabaseConfiguration:
         This method creates a new database session, yields it for use,
         and ensures proper cleanup by closing the session afterward.
 
-        Args:
-            None
-
         Yields:
             AsyncGenerator[Session, None]: A database async session.
 
@@ -60,12 +57,37 @@ class DatabaseConfiguration:
         async with cls._async_session() as session:
             try:
                 yield session
+            except InvalidCachedStatementError as err:
+                await cls.dispose_engine()
             except DatabaseSQLAlchemyException:
                 raise
             except Exception:
                 raise
             finally:
                 await session.close()
+
+    @classmethod
+    async def dispose_engine(cls):
+        """
+           Dispose and recreate the database engine and session.
+
+           This method is called when the connection pool or prepared statements
+           become invalid (e.g. after a database schema change).
+
+           Raises:
+               Exception: If the engine or session factory could not be recreated.
+           """
+        #Disposed the current engine
+        await cls._engine.dispose()
+
+        #Recreates engine and assign session
+        cls._engine = create_async_engine(
+            cls._db_url, echo=False,  future=True, max_overflow=10, pool_size=5
+        )
+
+        cls._async_session = sessionmaker(bind=cls._engine, class_=AsyncSession, autoflush=False,
+                                   expire_on_commit=False, future=True, autocommit=False
+        )
 
     @classmethod
     def create_all(cls) -> None:
