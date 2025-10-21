@@ -16,6 +16,7 @@ class PesadaBase(BaseSchema):
     peso_fino: Optional[Decimal] = None
     fecha_hora: Optional[datetime] = None
     usuario_id: Optional[int] = None
+    leido:bool
 
 
 class PesadaCreate(BaseSchema):
@@ -28,6 +29,7 @@ class PesadaCreate(BaseSchema):
     peso_fino: Optional[Decimal] = Field(None, max_digits=10, decimal_places=2)
     fecha_hora: Optional[datetime] = None
     usuario_id: Optional[int] = None
+    leido: Optional[bool] = False
 
     class Config:
         json_schema_extra = {
@@ -53,6 +55,7 @@ class PesadaUpdate(PesadaCreate):
     peso_fino: Optional[Decimal] = Field(None, max_digits=10, decimal_places=2)
     fecha_hora: Optional[datetime] = None
     usuario_id: Optional[int] = None
+    leido: Optional[bool] = False
 
 class PesadaResponse(PesadaBase):
     id: int

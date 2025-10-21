@@ -4,7 +4,8 @@ from sqlalchemy.schema import UniqueConstraint
 from sqlalchemy import Identity
 from sqlalchemy.sql import func
 from sqlalchemy.orm import relationship, declarative_base, backref
-from sqlalchemy.sql.sqltypes import JSON
+from sqlalchemy.sql.schema import PrimaryKeyConstraint
+from sqlalchemy.sql.sqltypes import JSON, BigInteger
 
 from utils.any_utils import AnyUtils
 
@@ -207,7 +208,22 @@ class Pesadas(Base):
     peso_fino = Column(Numeric(10,2), nullable=True)
     fecha_hora = Column(TIMESTAMP, server_default=func.now(), onupdate=func.now())
     usuario_id = Column(Integer, nullable=True)
+    leido = Column(Boolean, nullable=False, default=False)
 
+
+class PesadasCorte(Base):
+    __tablename__ = "pesadas_corte"
+    id = Column(Integer, primary_key=True, index=True)
+    puerto_id = Column(String(50), nullable=True)
+    transaccion = Column(Integer(), ForeignKey('transacciones.id'))
+    consecutivo = Column(Double(), nullable=False)
+    pit = Column(Integer, nullable=True)
+    material = Column(String(50), nullable=True)
+    peso = Column(Numeric(10,2), nullable=True)
+    ref = Column(String(100), nullable=True)
+    fecha_hora = Column(TIMESTAMP, server_default=func.now(), onupdate=func.now())
+    usuario_id = Column(Integer, nullable=True)
+    enviado = Column(Boolean, nullable=False, default=False)
 
 class LogsAuditoria(Base):
     __tablename__ = 'logs_auditoria'
