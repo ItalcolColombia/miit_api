@@ -279,7 +279,7 @@ class PesadasService:
                 count = int(extract[2]) + 1
                 pesada_id = part_id + str(count)
             else:
-                pesada_id = pesada_data.puerto_id.split('-')[0] + "-" + str(uuid.uuid4())[:8].upper() + "-" + 1
+                pesada_id = pesada_data.puerto_id.split('-')[0] + "-" + str(uuid.uuid4())[:8].upper() + "-" +  str(1)
             return pesada_id
 
         except ValueError as e:
