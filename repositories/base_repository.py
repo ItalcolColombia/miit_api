@@ -1,6 +1,6 @@
 from sqlalchemy import func
 from sqlalchemy.ext.asyncio import AsyncSession
-from typing import Optional, TypeVar, Generic, List
+from typing import Optional, TypeVar, Generic, List, Any, Dict
 from pydantic import BaseModel
 from sqlalchemy.future import select
 from fastapi_pagination.ext.sqlalchemy import paginate
@@ -117,6 +117,53 @@ class IRepository(Generic[ModelType, SchemaType]):
 
         return self.schema.model_validate(db_obj)
 
+    async def create_bulk(self, objects: List[BaseModel]) -> List[SchemaType]:
+        """
+        Create multiple entities in the database in a single transaction and log each creation in LogsAuditoria.
+
+        Args:
+            objects: List of Pydantic models containing the data for entities to create.
+
+        Returns:
+            List[SchemaType]: List of created entities, validated against the schema.
+
+        Raises:
+            ValueError: If user_id is None and the model requires it, or if the input list is empty.
+        """
+        if not objects:
+            return []
+
+        db_objects = []
+        for obj in objects:
+            db_obj = self.model(**obj.model_dump())
+            if hasattr(self.model, 'usuario_id'):
+                setattr(db_obj, 'usuario_id', current_user_id.get())
+            db_objects.append(db_obj)
+
+        try:
+            self.db.add_all(db_objects)
+            await self.db.commit()
+
+            for db_obj in db_objects:
+                await self.db.refresh(db_obj)
+                audit_data = LogsAuditoriaCreate(
+                    entidad=self.model.__tablename__,
+                    entidad_id=str(db_obj.id),
+                    accion='CREATE',
+                    valor_anterior=None,
+                    valor_nuevo=AnyUtils.serialize_orm_object(db_obj),
+                    usuario_id=current_user_id.get()
+                )
+                await self.auditor.log_audit(audit_log_data=audit_data)
+
+            return [self.schema.model_validate(db_obj) for db_obj in db_objects]
+        except Exception as e:
+            await self.db.rollback()
+            raise ValueError(f"Error en create_bulk: {e}")
+
+
+
+
     async def count(self) -> int:
         query = select(func.count()).select_from(self.model)
         result = await self.db.execute(query)
@@ -169,6 +216,71 @@ class IRepository(Generic[ModelType, SchemaType]):
         except NoResultFound:
             raise EntityNotFoundException(self.model.__name__, entity_id)
 
+    async def update_bulk(self, entity_ids: List[int], update_data: Dict[str, Any]) -> List[SchemaType]:
+        """
+        Update multiple entities in the database in a single transaction and log each update in LogsAuditoria.
+
+        Args:
+            entity_ids: List of entity IDs to update.
+            update_data: Dictionary of column names and values to update.
+
+        Returns:
+            List[SchemaType]: List of updated entities, validated against the schema.
+
+        Raises:
+            EntityNotFoundException: If any entity ID is not found.
+            ValueError: If the input list is empty or update_data is invalid.
+        """
+        if not entity_ids or not update_data:
+            return []
+
+        try:
+            # Fetch entities to update
+            query = select(self.model).filter(self.model.id.in_(entity_ids))
+            result = await self.db.execute(query)
+            db_objects = result.scalars().all()
+
+            if len(db_objects) != len(entity_ids):
+                missing_ids = set(entity_ids) - {db_obj.id for db_obj in db_objects}
+                raise EntityNotFoundException(self.model.__name__, missing_ids)
+
+            affected_columns = list(update_data.keys())
+            if hasattr(self.model, 'usuario_id'):
+                affected_columns.append('usuario_id')
+                update_data['usuario_id'] = current_user_id.get()
+
+            for db_obj in db_objects:
+                valor_prev = {
+                    key: getattr(db_obj, key) for key in affected_columns if hasattr(db_obj, key)
+                }
+
+                for key, value in update_data.items():
+                    if key == 'clave' and value:
+                        value = AnyUtils.generate_password_hash(value)
+                    setattr(db_obj, key, value)
+
+                valor_new = {
+                    key: getattr(db_obj, key) for key in affected_columns if hasattr(db_obj, key)
+                }
+
+                await self.auditor.log_audit(LogsAuditoriaCreate(
+                    entidad=self.model.__tablename__,
+                    entidad_id=str(db_obj.id),
+                    accion='UPDATE',
+                    valor_anterior=AnyUtils.serialize_data(valor_prev),
+                    valor_nuevo=AnyUtils.serialize_data(valor_new),
+                    usuario_id=current_user_id.get()
+                ))
+
+            await self.db.commit()
+            for db_obj in db_objects:
+                await self.db.refresh(db_obj)
+
+            return [self.schema.model_validate(db_obj) for db_obj in db_objects]
+        except Exception as e:
+            await self.db.rollback()
+            raise ValueError(f"Error en update_bulk: {e}")
+
     async def delete(self, entity_id: int) -> bool:
         try:
             # Fetch and delete the object asynchronously
@@ -195,3 +307,45 @@ class IRepository(Generic[ModelType, SchemaType]):
             return True
         except NoResultFound:
             raise EntityNotFoundException(self.model.__name__, entity_id)
+
+    async def delete_bulk(self, entity_ids: List[int]) -> bool:
+        """
+        Delete multiple entities from the database in a single transaction and log each deletion in LogsAuditoria.
+
+        Args:
+            entity_ids: List of entity IDs to delete.
+
+        Returns:
+            bool: True if deletion was successful, False if no entities were provided.
+
+        Raises:
+            EntityNotFoundException: If any entity ID is not found.
+        """
+        if not entity_ids:
+            return False
+
+        try:
+            query = select(self.model).filter(self.model.id.in_(entity_ids))
+            result = await self.db.execute(query)
+            db_objects = result.scalars().all()
+
+            if len(db_objects) != len(entity_ids):
+                missing_ids = set(entity_ids) - {db_obj.id for db_obj in db_objects}
+                raise EntityNotFoundException(self.model.__name__, missing_ids)
+
+            for db_obj in db_objects:
+                await self.db.delete(db_obj)
+                audit_data = LogsAuditoriaCreate(
+                    entidad=self.model.__tablename__,
+                    entidad_id=str(db_obj.id),
+                    accion='DELETE',
+                    valor_anterior=AnyUtils.serialize_orm_object(db_obj),
+                    usuario_id=current_user_id.get()
+                )
+                await self.auditor.log_audit(audit_log_data=audit_data)
+
+            await self.db.commit()
+            return True
+        except Exception as e:
+            await self.db.rollback()
+            raise ValueError(f"Error en delete_bulk: {e}")

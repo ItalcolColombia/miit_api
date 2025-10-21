@@ -8,6 +8,7 @@ from repositories.almacenamientos_materiales_repository import AlmacenamientosMa
 from repositories.bls_repository import BlsRepository
 from repositories.clientes_repository import ClientesRepository
 from repositories.flotas_repository import FlotasRepository
+from repositories.pesadas_corte_repository import PesadasCorteRepository
 from repositories.viajes_repository import ViajesRepository
 from repositories.materiales_repository import MaterialesRepository
 from repositories.movimientos_repository import MovimientosRepository
@@ -42,6 +43,7 @@ from .repository_injection import (
     get_materiales_repository,
     get_movimientos_repository,
     get_pesadas_repository,
+    get_pesadas_corte_repository,
     get_transacciones_repository
 )
 
@@ -94,9 +96,10 @@ async def get_mov_service(
 
 
 async def get_pesadas_service(
-    pesadas_repository: PesadasRepository = Depends(get_pesadas_repository)
+    pesadas_repository: PesadasRepository = Depends(get_pesadas_repository),
+    pesadas_corte_repository: PesadasCorteRepository = Depends(get_pesadas_corte_repository)
 ) -> PesadasService:
-    return PesadasService(pesadas_repository)
+    return PesadasService(pesadas_repository, pesadas_corte_repository)
 
 async def get_transacciones_service(
     trans_repository: Annotated[TransaccionesRepository, Depends(get_transacciones_repository)],

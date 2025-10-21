@@ -1,6 +1,7 @@
 from fastapi import Depends
 from sqlalchemy.ext.asyncio import AsyncSession
 from core.contracts.auditor import Auditor
+from schemas.pesadas_corte_schema import PesadasCorteResponse
 from services.logs_auditoria_service import DatabaseAuditor
 
 from .database_injection import get_db
@@ -15,7 +16,7 @@ from database.models import (
     Movimientos,
     Pesadas,
     Transacciones,
-    Viajes
+    Viajes, PesadasCorte
 )
 
 # Repositories
@@ -27,8 +28,9 @@ from repositories.flotas_repository import FlotasRepository
 from repositories.viajes_repository import ViajesRepository
 from repositories.materiales_repository import MaterialesRepository
 from repositories.movimientos_repository import MovimientosRepository
-from  repositories.pesadas_repository import PesadasRepository
-from  repositories.transacciones_repository import TransaccionesRepository
+from repositories.pesadas_repository import PesadasRepository
+from repositories.pesadas_corte_repository import PesadasCorteRepository
+from repositories.transacciones_repository import TransaccionesRepository
 from repositories.usuarios_repository import UsuariosRepository
 
 # Schemas
@@ -112,6 +114,12 @@ async def get_pesadas_repository(
         auditor: Auditor = Depends(get_auditor_service)
 ) -> PesadasRepository:
     return PesadasRepository(Pesadas, PesadaResponse, session, auditor)
+
+async def get_pesadas_corte_repository(
+        session: AsyncSession = Depends(get_db),
+        auditor: Auditor = Depends(get_auditor_service)
+) -> PesadasCorteRepository:
+    return PesadasCorteRepository(PesadasCorte, PesadasCorteResponse, session, auditor)
 
 async def get_transacciones_repository(
         session: AsyncSession = Depends(get_db),

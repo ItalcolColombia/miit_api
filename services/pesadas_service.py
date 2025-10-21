@@ -1,3 +1,4 @@
+import uuid
 from typing import List, Optional
 from fastapi_pagination import Page, Params
 
@@ -8,6 +9,9 @@ from core.exceptions.base_exception import BasedException
 from core.exceptions.db_exception import DatabaseSQLAlchemyException
 from core.exceptions.entity_exceptions import EntityNotFoundException, EntityAlreadyRegisteredException
 from database.models import Pesadas
+from repositories.pesadas_corte_repository import PesadasCorteRepository
+from schemas.pesadas_corte_schema import PesadasCalculate, PesadasCorteCreate, PesadasCorteResponse, PesadasRange, \
+    PesadaCorteRetrieve
 from schemas.pesadas_schema import PesadaResponse, PesadaCreate, PesadaUpdate, VPesadasAcumResponse
 from repositories.pesadas_repository import PesadasRepository
 
@@ -16,8 +20,9 @@ log = LoggerUtil()
 
 class PesadasService:
 
-    def __init__(self, pesada_repository: PesadasRepository) -> None:
+    def __init__(self, pesada_repository: PesadasRepository, pesadas_corte_repository: PesadasCorteRepository) -> None:
         self._repo = pesada_repository
+        self._repo_corte = pesadas_corte_repository
 
     async def create_pesada(self, pesada_data: PesadaCreate) -> PesadaResponse:
         """
@@ -198,7 +203,101 @@ class PesadasService:
                 status_code=status.HTTP_409_CONFLICT
             )
 
-    async def get_pesadas_acumuladas(self, puerto_id: Optional[str] = None, tran_id: Optional[int] = None) -> List[VPesadasAcumResponse]:
+    async def create_pesadas_corte_if_not_exists(self, acum_data: List[PesadasCalculate]) -> List[PesadasCorteCreate]:
+        """
+        Check if a pesadas_corte record with the same transaction ID and consecutivo already exists. If not, create a new one.
+
+        Args:
+            acum_data(PesadasCalculate): The data of accumulated weight.
+
+        Returns:
+            List[PesadasCorteCreate]: The list of existing or newly created pesadas_corte records.
+
+        Raises:
+            EntityAlreadyRegisteredException: If pesadas_corte already exists.
+            BasedException: For unexpected errors during creation or retrieval.
+        """
+        try:
+            if not acum_data:
+                raise ValueError("No hay pesaje por procesar")
+
+            pesadas_corte_data = [
+                PesadasCorteCreate(
+                    **item.model_dump(exclude={'primera', 'ultima', 'referencia'}),
+                    ref=await self.gen_pesada_identificador(
+                        PesadaCorteRetrieve(puerto_id=item.puerto_id, transaccion=item.transaccion)
+                    ),
+                    enviado=True,
+                )
+                for item in acum_data
+            ]
+
+            pesada_creada = await self._repo_corte.create_bulk(pesadas_corte_data)
+            log.info(f"Se registraron pesadas corte para el viaje")
+            return pesada_creada
+
+        except ValueError as e:
+            log.error(f"Validation error for pesadas_corte: {e}")
+            raise BasedException(
+                message=str(e),
+                status_code=status.HTTP_400_BAD_REQUEST
+            )
+        except Exception as e:
+            log.error(f"Error al registrar pesadas_corte : {e}")
+            raise BasedException(
+                message=f"Error inesperado al registrar pesadas_corte: {str(e)}",
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
+
+    async def gen_pesada_identificador(self, pesada_data: PesadaCorteRetrieve) -> str:
+        """
+            Generate a unique identifier for a pesada_corte record.
+
+            Args:
+                pesada_data (PesadaCorteRetrieve): The data used to generate the identifier.
+
+            Returns:
+                str: The generated pesada identifier.
+
+            Raises:
+                BasedException: For validation or unexpected errors.
+        """
+
+        try:
+            pesada_id: str
+
+            # 1. Buscar si la pesada ha sido procesada previamente
+            existing = await self._repo_corte.find_one(
+                puerto_id=pesada_data.puerto_id,
+                transaccion=pesada_data.transaccion,
+            )
+
+            # 2. Genera ID o suma al contador del ID existente
+            if existing:
+                extract = existing.ref.split('-')
+                part_id = '-'.join(extract[:2]) + '-'
+                count = int(extract[2]) + 1
+                pesada_id = part_id + str(count)
+            else:
+                pesada_id = pesada_data.puerto_id.split('-')[0] + "-" + str(uuid.uuid4())[:8].upper() + "-" + 1
+            return pesada_id
+
+        except ValueError as e:
+            log.error(f"Validation error generador id: {e}")
+            raise BasedException(
+                message=str(e),
+                status_code=status.HTTP_400_BAD_REQUEST
+            )
+        except Exception as e:
+            log.error(f"Error al generar o extraer id: {e}")
+            raise BasedException(
+                message=f"Error inesperado al generar o extraer id: {str(e)}",
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
+
+
+
+    async def get_pesadas_acumuladas(self, puerto_id: str, tran_id: Optional[int] = None) -> List[VPesadasAcumResponse]:
         """
         Retrieve the sum of pesadas related to a puerto_id.
 
@@ -214,7 +313,43 @@ class PesadasService:
             BasedException: For unexpected errors during the retrieval process.
         """
         try:
-            return await self._repo.get_sumatoria_pesadas(puerto_id, tran_id)
+
+            # 1. Se obtiene el acumulado de las pesadas
+            acumulado = await self._repo.get_sumatoria_pesadas(puerto_id, tran_id)
+            if not acumulado:
+                raise EntityNotFoundException("No hay pesadas nuevas por reportar.")
+
+            # 2. Se registran límites de las pesadas coincidentes
+            pesada_range = [PesadasRange
+                (primera=acum.primera, ultima=acum.ultima, transaccion=acum.transaccion)
+                for acum in acumulado
+                 if acum.primera is not None and acum.ultima is not None and acum.transaccion is not None
+            ]
+
+            # 3. Se marcan como leídas las pesadas dentro del rango
+            if pesada_range:
+                ids_marcados = await self._repo.mark_pesadas(pesada_range)
+                log.info(f" {len(ids_marcados)} Pesadas marcadas como leído.")
+
+            # Se registra la acumulada en pesadas_corte
+            pesadas_corte_records = await self.create_pesadas_corte_if_not_exists(acumulado)
+            log.info(f"Se han registrado {len(acumulado)} cortes de pesadas.")
+
+            # Se convierte el dic a modelo
+
+            response = [
+                VPesadasAcumResponse(
+                    **item.model_dump(exclude={'no_bl'}),
+                    referencia=item.ref,
+                    usuario=""
+                )
+                for item in pesadas_corte_records
+            ]
+
+            log.info(
+                f"Se han procesado  {len(response)} pesadas cortes de un total de {len(acumulado)} registros acumulados.")
+            return response
+
         except EntityNotFoundException as e:
             raise e
         except DatabaseSQLAlchemyException:
