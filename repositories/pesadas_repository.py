@@ -38,17 +38,12 @@ class PesadasRepository(IRepository[Pesadas, PesadaResponse]):
                 func.min(Pesadas.id).label('primera'),
                 func.max(Pesadas.id).label('ultima'),
                 Pesadas.usuario_id,
-                func.fn_usuario_nombre(Pesadas.usuario_id).label('usuario'),
-                Bls.no_bl
+                func.fn_usuario_nombre(Pesadas.usuario_id).label('usuario')
             )
             .join(Transacciones, Pesadas.transaccion_id == Transacciones.id)
             .join(Materiales, Transacciones.material_id == Materiales.id)
             .join(Viajes, Transacciones.viaje_id == Viajes.id)
             .join(Flotas, Viajes.flota_id == Flotas.id)
-            .outerjoin(Bls, and_(
-                Transacciones.material_id == Bls.material_id,
-                Viajes.id == Bls.viaje_id
-            ))
             .where(Pesadas.leido == False)  # Only include non-read pesadas
             .group_by(
                 Transacciones.id,
@@ -56,8 +51,7 @@ class PesadasRepository(IRepository[Pesadas, PesadaResponse]):
                 Viajes.id,
                 Transacciones.pit,
                 Materiales.codigo,
-                Pesadas.usuario_id,
-                Bls.no_bl
+                Pesadas.usuario_id
             )
             .order_by(Transacciones.id)
         )
