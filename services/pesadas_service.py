@@ -295,7 +295,33 @@ class PesadasService:
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
 
+    async def get_pesadas_acumulada(self, puerto_id: Optional[str] = None, tran_id: Optional[int] = None) -> List[VPesadasAcumResponse]:
+        """
+        Retrieve the sum of pesadas related to a puerto_id.
 
+        Args:
+            puerto_id (str): The optional ID of the puerto to filter pesadas by.
+            tran_id (int): The optional ID of the transaction to filter pesadas by.
+
+        Returns:
+            VPesadasAcumResponse: An object containing the accumulated pesada data.
+
+        Raises:
+            EntityNotFoundException: If no pesadas are found for the given puerto_id.
+            BasedException: For unexpected errors during the retrieval process.
+        """
+        try:
+            return await self._repo.get_sumatoria_pesadas(puerto_id, tran_id)
+        except EntityNotFoundException as e:
+            raise e
+        except DatabaseSQLAlchemyException:
+            raise
+        except Exception as e:
+            log.error(f"Error al obtener suma de pesadas para puerto_id {puerto_id}: {e}")
+            raise BasedException(
+                message="Error inesperado al obtener la suma de pesadas.",
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
 
     async def get_pesadas_acumuladas(self, puerto_id: str, tran_id: Optional[int] = None) -> List[VPesadasAcumResponse]:
         """
