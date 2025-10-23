@@ -311,7 +311,7 @@ class PesadasService:
             BasedException: For unexpected errors during the retrieval process.
         """
         try:
-            return await self._repo.get_sumatoria_pesadas(puerto_id, tran_id)
+            return await self._repo.get_sumatoria_pesada(puerto_id, tran_id)
         except EntityNotFoundException as e:
             raise e
         except DatabaseSQLAlchemyException:
