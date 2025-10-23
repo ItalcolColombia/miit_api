@@ -295,7 +295,7 @@ class PesadasService:
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
 
-    async def get_pesadas_acumulada(self, puerto_id: Optional[str] = None, tran_id: Optional[int] = None) -> List[VPesadasAcumResponse]:
+    async def get_pesada_acumulada(self, puerto_id: Optional[str] = None, tran_id: Optional[int] = None) -> List[VPesadasAcumResponse]:
         """
         Retrieve the sum of pesadas related to a puerto_id.
 
