@@ -526,7 +526,7 @@ class ViajesService:
 
             tran = await self.transacciones_service.get_tran_by_viaje(viaje.id)
             if not tran:
-                raise EntityNotFoundException(f"Transacción para la cita: '{viaje.id}' no existe")
+                raise EntityNotFoundException(f"Transacción para la cita: '{viaje.puerto_id}' no existe")
 
             update_fields = {
                 "fecha_llegada": fecha,
