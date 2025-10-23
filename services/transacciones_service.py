@@ -247,6 +247,7 @@ class TransaccionesService:
                 "fecha_fin": datetime.now(),
                 "peso_real" : pesada.peso,
             }
+
             update_data = TransaccionUpdate(**update_fields)
 
             # 3. Se actualiza la transacción en la base de datos
