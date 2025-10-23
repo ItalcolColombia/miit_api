@@ -636,8 +636,8 @@ class ViajesService:
             endpoint = f"{get_settings().TG_API_URL}/api/v1/Metalsoft/FinalizaBuque"
 
         try:
+            log.info(f"Notificación flota {flota.referencia} con request: {AnyUtils.serialize_dict(notification)}")
             await self.feedback_service.post(AnyUtils.serialize_dict(notification), endpoint)
-            log.info(f"Notificación de cargue enviada para flota {flota.referencia} con request: {AnyUtils.serialize_dict(notification)}")
         except httpx.HTTPStatusError as e:
             try:
                 error_details = e.response.json()
