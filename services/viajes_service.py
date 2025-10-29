@@ -438,8 +438,8 @@ class ViajesService:
                     if not tran:
                         raise EntityNotFoundException(f"Transacción para la cita: '{viaje.id}' no existe")
                 if flota.tipo == "buque":
-                    bl = await  self.bls_service.get_bl_by_viaje(viaje.id)
-                    if not tran:
+                    bl = await self.bls_service.get_bl_by_viaje(viaje.id)
+                    if not bl:
                         raise EntityNotFoundException(f"No se encontró BL(s) para la cita: '{viaje.id}'.")
 
                 await self.send_notification(flota, viaje, tran, bl)
