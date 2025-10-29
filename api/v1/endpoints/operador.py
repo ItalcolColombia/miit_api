@@ -140,59 +140,19 @@ async def buque_in(
             status_code=status.HTTP_200_OK,
             summary="Modificar estado de un buque por partida",
             description="Evento realizado por la automatización al dar por finalizado el recibo de buque.",
-            response_model=EndBuqueResponse,
+            response_model=UpdateResponse,
             responses={
                 status.HTTP_400_BAD_REQUEST: {"model": ErrorResponse},
                 status.HTTP_422_UNPROCESSABLE_ENTITY: {"model": ValidationErrorResponse},
             })
 async def end_buque(
         puerto_id: str,
-        service: ViajesService = Depends(get_viajes_service),
-        tran_service: TransaccionesService = Depends(get_transacciones_service),
-        pesadas_service: PesadasService = Depends(get_pesadas_service),
-        bls_service: BlsService = Depends(get_bls_service)):
+        service: ViajesService = Depends(get_viajes_service)):
     log.info(f"Payload recibido: Flota {puerto_id} - Partida")
     try:
 
         await service.chg_estado_flota(puerto_id, estado_puerto=False)
         log.info(f"La Partida de buque {puerto_id} desde el operador marcada exitosamente.")
-        # Obtener viaje y transacción asociada para retornar última pesada parcial
-        viaje = await service.get_viaje_by_puerto_id(puerto_id)
-        if viaje:
-            tran = None
-            try:
-                # First attempt: try to get BL(s) for the viaje and use its number to resolve the transaction
-                bls = await bls_service.get_bl_by_viaje(viaje.id)
-                if bls:
-                    # try each BL number until we get a transacción
-                    for bl_item in bls:
-                        try:
-                            # use the new FK column bl_id from Transacciones (integer)
-                            tran = await tran_service.get_tran_by_viaje(viaje.id, bl_id=bl_item.id)
-                            if tran:
-                                break
-                        except Exception:
-                            tran = None
-                # Fallback: get transaction by viaje only
-                if not tran:
-                    tran = await tran_service.get_tran_by_viaje(viaje.id)
-            except Exception:
-                tran = None
-
-            last_pesada = None
-            if tran:
-                try:
-                    last_pesada = await pesadas_service.get_last_pesada_for_transaccion(tran.id)
-                except Exception:
-                    last_pesada = None
-
-            data = {"transaccion": tran.model_dump() if tran else None, "ultima_pesada": last_pesada.model_dump() if last_pesada else None}
-            return response_json(
-                status_code=status.HTTP_200_OK,
-                message=f"estado actualizado",
-                data=data
-            )
-
         return response_json(
             status_code=status.HTTP_200_OK,
             message=f"estado actualizado",
@@ -210,7 +170,6 @@ async def end_buque(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             message=str(e)
         )
-
 
 @router.put("/levante-carga-puerto/{no_bl}",
             status_code=status.HTTP_200_OK,
@@ -419,6 +378,37 @@ async def get_acum_pesadas(
         raise e
     except Exception as e:
         log.error(f"Error al consultar pesadas de flota {puerto_id}: {e}")
+        return response_json(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            message=str(e)
+        )
+
+@router.get("/envio-final/{puerto_id}",
+             summary="Envio final: obtener último corte de pesadas con marca F",
+             description="Retorna el último corte registrado en pesadas_corte para el puerto indicado y añade la marca 'F' a la referencia.",
+             response_model=List[VPesadasAcumResponse],
+             responses={
+                 status.HTTP_404_NOT_FOUND: {"model": ErrorResponse},
+                 status.HTTP_500_INTERNAL_SERVER_ERROR: {"model": ErrorResponse},
+             })
+async def envio_final(
+        service: PesadasService = Depends(get_pesadas_service),
+        puerto_id: str = None):
+    try:
+        pesadas = await service.get_envio_final(puerto_id=puerto_id)
+        log.info(f"EnvioFinal: consulta de pesadas para flota {puerto_id} realizada exitosamente.")
+        return pesadas
+
+    except HTTPException as http_exc:
+        log.error(f"EnvioFinal: consulta de flota {puerto_id} no pudo realizarse: {http_exc.detail}")
+        return response_json(
+            status_code=http_exc.status_code,
+            message=http_exc.detail
+        )
+    except EntityNotFoundException as e:
+        raise e
+    except Exception as e:
+        log.error(f"EnvioFinal: Error al consultar pesadas de flota {puerto_id}: {e}")
         return response_json(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             message=str(e)
