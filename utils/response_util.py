@@ -4,6 +4,7 @@ from http import HTTPStatus
 from typing import Optional, Dict, Union, Any
 
 from fastapi.responses import JSONResponse
+from fastapi.encoders import jsonable_encoder
 
 
 class ResponseUtil:
@@ -57,4 +58,6 @@ class ResponseUtil:
         if data is not None:
             response_content["data"] = data
 
-        return JSONResponse(status_code=status_code, content=response_content)
+        # Ensure content is JSON serializable (datetimes, decimals, pydantic models, etc.)
+        encoded = jsonable_encoder(response_content)
+        return JSONResponse(status_code=status_code, content=encoded)

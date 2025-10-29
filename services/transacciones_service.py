@@ -111,12 +111,13 @@ class TransaccionesService:
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
 
-    async def get_tran_by_viaje(self, viaje: int) -> Optional[TransaccionResponse]:
+    async def get_tran_by_viaje(self, viaje: int, bl_id: Optional[int] = None) -> Optional[TransaccionResponse]:
         """
         Retrieve a transaction record by its viaje ID.
 
         Args:
             viaje (int): The ID of the voyage to retrieve.
+            bl_id (Optional[int]): Optional BL ID to filter the transaction.
 
         Returns:
             Optional[TransaccionResponse]: The transaction object, or None if not found.
@@ -125,7 +126,14 @@ class TransaccionesService:
             BasedException: For unexpected errors during the retrieval process.
         """
         try:
-            return await self._repo.find_one(viaje_id=viaje)
+            # If bl_id is provided, try to match transacciones.bl_id == bl_id (new column)
+            if bl_id is not None:
+                tran = await self._repo.find_one_ordered(viaje_id=viaje, bl_id=bl_id)
+                if tran:
+                    return tran
+
+            # Fallback: return the most recent transaccion for the viaje
+            return await self._repo.find_one_ordered(viaje_id=viaje)
         except Exception as e:
             log.error(f"Error al obtener transacción con viaje {viaje}: {e}")
             raise BasedException(
@@ -283,5 +291,3 @@ class TransaccionesService:
                 message=f"Error inesperado al finalizar la transacción : {e}",
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
-
-

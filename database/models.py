@@ -178,6 +178,7 @@ class Transacciones(Base):
     leido = Column(Boolean, nullable=False)
     fecha_hora = Column(TIMESTAMP, server_default=func.now(), onupdate=func.now())
     usuario_id = Column(Integer, nullable=True)
+    bl_id = Column(Integer(), ForeignKey('bls.id'))
     movimientos = relationship("Movimientos", backref="Transacciones")
     pesadas = relationship("Pesadas", backref="Transacciones")
 

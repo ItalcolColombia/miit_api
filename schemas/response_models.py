@@ -3,6 +3,8 @@ from schemas.base_schema import BaseSchema
 from datetime import datetime
 from decimal import Decimal
 from typing import Optional, Dict, List, Any
+from schemas.transacciones_schema import TransaccionResponse
+from schemas.pesadas_corte_schema import PesadasCorteResponse
 
 
 class BaseResponse(BaseSchema):
@@ -139,5 +141,27 @@ class ValidationErrorResponse(BaseResponse):
                 "meta": {"request_id": "abc123"},
                 "details": ["Id: Field required"],
                 "data": None
+            }
+        }
+
+
+class EndBuqueData(BaseSchema):
+    transaccion: Optional[TransaccionResponse] = None
+    ultima_pesada: Optional[PesadasCorteResponse] = None
+
+
+class EndBuqueResponse(BaseResponse):
+    data: Optional[EndBuqueData] = None
+
+    class Config:
+        json_schema_extra = {
+            "example": {
+                "status_code": "200",
+                "status_name": "OK",
+                "message": "estado actualizado",
+                "data": {
+                    "transaccion": None,
+                    "ultima_pesada": None
+                }
             }
         }

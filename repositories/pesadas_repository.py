@@ -1,12 +1,12 @@
 from typing import List, Optional
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import func, select, and_
+from sqlalchemy import func, select
 
 from core.contracts.auditor import Auditor
 from repositories.base_repository import IRepository
-from schemas.pesadas_corte_schema import PesadasCalculate, PesadasCorteCreate, PesadasRange
+from schemas.pesadas_corte_schema import PesadasCalculate, PesadasRange
 from schemas.pesadas_schema import PesadaResponse, VPesadasAcumResponse
-from database.models import Pesadas, Viajes, Flotas, Transacciones, Materiales, Bls, PesadasCorte, VPesadasAcumulado
+from database.models import Pesadas, Viajes, Flotas, Transacciones, Materiales, VPesadasAcumulado
 
 
 class PesadasRepository(IRepository[Pesadas, PesadaResponse]):
@@ -106,7 +106,9 @@ class PesadasRepository(IRepository[Pesadas, PesadaResponse]):
                 )
             )
             result = await self.db.execute(query)
-            pesada_ids = [row[0] for row in result.fetchall()]
+            # use scalars() to extract ids and extend the list (do not overwrite previous ids)
+            ids = result.scalars().all()
+            pesada_ids.extend(ids)
 
         if pesada_ids:
             await self.update_bulk(

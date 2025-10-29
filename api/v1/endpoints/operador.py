@@ -7,12 +7,14 @@ from datetime import datetime
 from core.enums.user_role_enum import UserRoleEnum
 from core.exceptions.entity_exceptions import EntityNotFoundException
 from services.auth_service import AuthService
-from core.di.service_injection import get_viajes_service, get_pesadas_service
+from core.di.service_injection import get_viajes_service, get_pesadas_service, get_transacciones_service, get_bls_service
 from utils.response_util import ResponseUtil
 from services.viajes_service import ViajesService
 from services.pesadas_service import PesadasService
+from services.transacciones_service import TransaccionesService
+from services.bls_service import BlsService
 from schemas.pesadas_schema import VPesadasAcumResponse
-from schemas.response_models import CreateResponse, ErrorResponse, ValidationErrorResponse, UpdateResponse
+from schemas.response_models import CreateResponse, ErrorResponse, ValidationErrorResponse, UpdateResponse, EndBuqueResponse
 from schemas.viajes_schema import (
     ViajeBuqueExtCreate,
     ViajeCamionExtCreate
@@ -138,19 +140,59 @@ async def buque_in(
             status_code=status.HTTP_200_OK,
             summary="Modificar estado de un buque por partida",
             description="Evento realizado por la automatización al dar por finalizado el recibo de buque.",
-            response_model=UpdateResponse,
+            response_model=EndBuqueResponse,
             responses={
                 status.HTTP_400_BAD_REQUEST: {"model": ErrorResponse},
                 status.HTTP_422_UNPROCESSABLE_ENTITY: {"model": ValidationErrorResponse},
             })
 async def end_buque(
         puerto_id: str,
-        service: ViajesService = Depends(get_viajes_service)):
+        service: ViajesService = Depends(get_viajes_service),
+        tran_service: TransaccionesService = Depends(get_transacciones_service),
+        pesadas_service: PesadasService = Depends(get_pesadas_service),
+        bls_service: BlsService = Depends(get_bls_service)):
     log.info(f"Payload recibido: Flota {puerto_id} - Partida")
     try:
 
         await service.chg_estado_flota(puerto_id, estado_puerto=False)
         log.info(f"La Partida de buque {puerto_id} desde el operador marcada exitosamente.")
+        # Obtener viaje y transacción asociada para retornar última pesada parcial
+        viaje = await service.get_viaje_by_puerto_id(puerto_id)
+        if viaje:
+            tran = None
+            try:
+                # First attempt: try to get BL(s) for the viaje and use its number to resolve the transaction
+                bls = await bls_service.get_bl_by_viaje(viaje.id)
+                if bls:
+                    # try each BL number until we get a transacción
+                    for bl_item in bls:
+                        try:
+                            # use the new FK column bl_id from Transacciones (integer)
+                            tran = await tran_service.get_tran_by_viaje(viaje.id, bl_id=bl_item.id)
+                            if tran:
+                                break
+                        except Exception:
+                            tran = None
+                # Fallback: get transaction by viaje only
+                if not tran:
+                    tran = await tran_service.get_tran_by_viaje(viaje.id)
+            except Exception:
+                tran = None
+
+            last_pesada = None
+            if tran:
+                try:
+                    last_pesada = await pesadas_service.get_last_pesada_for_transaccion(tran.id)
+                except Exception:
+                    last_pesada = None
+
+            data = {"transaccion": tran.model_dump() if tran else None, "ultima_pesada": last_pesada.model_dump() if last_pesada else None}
+            return response_json(
+                status_code=status.HTTP_200_OK,
+                message=f"estado actualizado",
+                data=data
+            )
+
         return response_json(
             status_code=status.HTTP_200_OK,
             message=f"estado actualizado",
@@ -381,5 +423,3 @@ async def get_acum_pesadas(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             message=str(e)
         )
-
-

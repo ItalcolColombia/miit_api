@@ -40,7 +40,7 @@ class Usuarios(Base):
 
 # Create the SQLAlchemy engine
 engine = create_async_engine(
-    "postgresql+asyncpg://postgres:M3t4l867s0ft@localhost:5432/PtoAntioquia_DW",
+    "postgresql+asyncpg://postgres:M3t4l867s0ft@localhost:5432/PTOAntioquia_DW",
     echo=True,
     future=True,
 )
