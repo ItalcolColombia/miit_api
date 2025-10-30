@@ -22,6 +22,7 @@ class TransaccionResponse(BaseModel):
     leido: Optional[bool] = False
     fecha_hora: Optional[datetime] = None
     usuario_id: Optional[int] = None
+    bl_id: Optional[int] = None
 
 
     class Config:
@@ -45,6 +46,7 @@ class TransaccionCreate(TransaccionResponse):
     leido: Optional[bool] = False
     fecha_hora: Optional[datetime] = None
     usuario_id: Optional[int] = None
+    bl_id: Optional[int] = None
 
     @field_validator('tipo')
     def tipo_valido(cls, value):
@@ -89,3 +91,4 @@ class TransaccionUpdate(BaseModel):
     leido: Optional[bool] = None
     fecha_hora: Optional[datetime] = None
     usuario_id: Optional[int] = None
+    bl_id: Optional[int] = None
