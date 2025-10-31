@@ -1,4 +1,3 @@
-import json
 from datetime import datetime
 from decimal import Decimal
 from fastapi_pagination import Page, Params
@@ -8,7 +7,7 @@ from starlette import status
 import httpx
 from core.exceptions.base_exception import BasedException
 from core.config.settings import get_settings
-from database.models import VViajes, Clientes
+from database.models import VViajes
 from typing import List, Optional
 from repositories.viajes_repository import ViajesRepository
 from schemas.bls_schema import BlsCreate, BlsExtCreate, BlsResponse, BlsUpdate, VBlsResponse
@@ -536,7 +535,7 @@ class ViajesService:
 
             notification = NotificationPitCargue(
                 cargoPit=tran.pit,
-            ).model_dump(mode='json')
+            ).model_dump()
             log.info(f"Ingreso actualizado para viaje: {viaje.puerto_id} a {fecha}")
 
             return notification
@@ -615,7 +614,7 @@ class ViajesService:
                 truckTransaction=viaje.puerto_id,
                 weighingPitId=tran.pit,
                 weight=tran.peso_real
-            ).model_dump(mode='json')
+            ).model_dump()
             endpoint = f"{get_settings().TG_API_URL}/api/v1/Metalsoft/CamionCargue"
         else:
             #Se mapean los registros de interes del BL
@@ -624,7 +623,7 @@ class ViajesService:
                     noBL=bl_item.no_bl,
                     voyage=bl_item.viaje,
                     weightBl=bl_item.peso_real
-                ).model_dump(mode='json')
+                ).model_dump()
                 for bl_item in bl
             ] if bl else None
 
@@ -632,24 +631,28 @@ class ViajesService:
                 voyage=viaje.puerto_id,
                 status="Finished",
                 data= dt_bl
-            ).model_dump(mode='json')
+            ).model_dump()
             endpoint = f"{get_settings().TG_API_URL}/api/v1/Metalsoft/FinalizaBuque"
 
         try:
-            log.info(f"Notificación flota {flota.referencia} con request: {AnyUtils.serialize_dict(notification)}")
-            await self.feedback_service.post(AnyUtils.serialize_dict(notification), endpoint)
+            serialized = AnyUtils.serialize_data(notification)
+            log.info(f"Notificación flota {flota.referencia} con request: {serialized}")
+            await self.feedback_service.post(serialized, endpoint)
         except httpx.HTTPStatusError as e:
+            # Intentar extraer un JSON de la respuesta; si no es JSON usar el texto
             try:
-                error_details = e.response.json()
-            except json.JSONDecodeError:
-                error_details = e.response.text
-            log.error(f"Notificación de cargue falló. API externa error: {e.response.status_code}): {e.response.text}")
+                error_json = e.response.json()
+            except Exception:
+                error_json = None
+
+            if isinstance(error_json, dict):
+                # Preferir keys comunes que contengan el mensaje
+                msg = error_json.get('message') or error_json.get('error') or e.response.text
+            else:
+                msg = e.response.text
+
+            log.error(f"Notificación de cargue falló. API externa error: {e.response.status_code}: {e.response.text}")
             raise BasedException(
-                message=f"Notificación de cargue falló. API externa error: {error_details.get('message', e.response.text)}",
+                message=f"Notificación de cargue falló. API externa error: {msg}",
                 status_code=e.response.status_code
             ) from e
-
-
-
-
-

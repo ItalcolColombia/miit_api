@@ -22,3 +22,16 @@ class PesadasCorteRepository(IRepository[PesadasCorte, PesadasCorteResponse]):
         result = await self.db.execute(query)
         pesada_corte = result.scalars().first()
         return pesada_corte
+
+    async def count_by_transaccion(self, tran_id: int) -> int:
+        """
+        Retorna el número de registros en pesadas_corte para una transacción.
+        """
+        from sqlalchemy import select, func
+        query = select(func.count()).select_from(PesadasCorte).where(PesadasCorte.transaccion == tran_id)
+        result = await self.db.execute(query)
+        count = result.scalar_one()
+        try:
+            return int(count)
+        except Exception:
+            return 0

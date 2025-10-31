@@ -1,5 +1,9 @@
-
 import httpx
+import orjson
+import json as _json
+import uuid
+import asyncio
+from httpx import Timeout
 from typing import Dict, Any, Optional
 from fastapi import status
 from core.config.external_api import get_token
@@ -105,16 +109,71 @@ class ExtApiService:
                 "Content-Type": "application/json"
             }
 
-            response = await self._http_client.post(
-                url=url,
-                json=data,
-                headers=headers
-            )
-            response.raise_for_status()
+            # Prepare body bytes reliably
+            try:
+                payload = AnyUtils.serialize_data(data)
+                try:
+                    body = orjson.dumps(payload)
+                except Exception:
+                    body = _json.dumps(payload, default=str, ensure_ascii=False).encode('utf-8')
+            except Exception as ser_e:
+                log.error(f"Error serializando payload con AnyUtils: {ser_e}")
+                body = _json.dumps(data, default=str, ensure_ascii=False).encode('utf-8')
 
-            response_data = response.json()
-            log.info(f"Notificación enviada con éxito: {data}")
-            return response_data
+            # Retry policy
+            max_retries = 3
+            base_backoff = 0.5
+            timeout = Timeout(5.0)
+            request_id = str(uuid.uuid4())
+            headers.update({"X-Request-Id": request_id})
+
+            last_exc = None
+            for attempt in range(1, max_retries + 1):
+                try:
+                    log.debug(f"POST attempt {attempt}/{max_retries} to {url} request_id={request_id}")
+                    response = await self._http_client.post(
+                        url=url,
+                        content=body,
+                        headers=headers,
+                        timeout=timeout
+                    )
+                    # Log response headers for debugging
+                    log.debug(f"Response headers: {dict(response.headers)} request_id={request_id}")
+                    response.raise_for_status()
+                    response_data = response.json() if response.content else {}
+                    log.info(f"Notificación enviada con éxito: {data} request_id={request_id}")
+                    return response_data
+                except httpx.HTTPStatusError as e:
+                    last_exc = e
+                    status_code = e.response.status_code
+                    content_len = len(e.response.content) if e.response is not None else 0
+                    log.error(f"Fallo en la notificación a la API {status_code}: content_length={content_len} request_id={request_id}")
+                    # Retry on 5xx
+                    if 500 <= status_code < 600 and attempt < max_retries:
+                        backoff = base_backoff * (2 ** (attempt - 1))
+                        await asyncio.sleep(backoff)
+                        continue
+                    # Do not retry on 4xx; re-raise to be handled by caller
+                    raise
+                except httpx.RequestError as e:
+                    last_exc = e
+                    log.error(f"Connection error during POST request attempt {attempt}: {e} request_id={request_id}")
+                    if attempt < max_retries:
+                        backoff = base_backoff * (2 ** (attempt - 1))
+                        await asyncio.sleep(backoff)
+                        continue
+                    raise BasedException(
+                        message=f"Error de conexión al notificar: {str(e)}",
+                        status_code=status.HTTP_503_SERVICE_UNAVAILABLE
+                    ) from e
+
+            # If we fall out without return, escalate last exception
+            if isinstance(last_exc, httpx.HTTPStatusError):
+                raise last_exc
+            raise BasedException(
+                message=f"Error inesperado al enviar la notificación: {str(last_exc)}",
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
         except httpx.HTTPStatusError as e:
             log.error(f"Fallo en la notificación a la API {e.response.status_code}: {e.response.text}")
             raise
@@ -164,16 +223,52 @@ class ExtApiService:
                 "Content-Type": "application/json"
             }
 
-            response = await self._http_client.put(
-                url=url,
-                json=AnyUtils.serialize_dict(data),
-                headers=headers
-            )
-            response.raise_for_status()
+            try:
+                payload = AnyUtils.serialize_data(data)
+                try:
+                    body = orjson.dumps(payload)
+                except Exception:
+                    body = _json.dumps(payload, default=str, ensure_ascii=False).encode('utf-8')
+            except Exception as ser_e:
+                log.error(f"Error serializando payload con AnyUtils: {ser_e}")
+                body = _json.dumps(data, default=str, ensure_ascii=False).encode('utf-8')
 
-            response_data = response.json()
-            log.info(f"PUT request successful: {data}")
-            return response_data
+            max_retries = 3
+            base_backoff = 0.5
+            timeout = Timeout(5.0)
+            request_id = str(uuid.uuid4())
+            headers.update({"X-Request-Id": request_id})
+
+            for attempt in range(1, max_retries + 1):
+                try:
+                    log.debug(f"PUT attempt {attempt}/{max_retries} to {url} request_id={request_id}")
+                    response = await self._http_client.put(
+                        url=url,
+                        content=body,
+                        headers=headers,
+                        timeout=timeout
+                    )
+                    log.debug(f"Response headers: {dict(response.headers)} request_id={request_id}")
+                    response.raise_for_status()
+                    response_data = response.json() if response.content else {}
+                    log.info(f"PUT request successful: {data} request_id={request_id}")
+                    return response_data
+                except httpx.HTTPStatusError as e:
+                    status_code = e.response.status_code
+                    log.error(f"PUT request failed (status: {status_code}) request_id={request_id}")
+                    if 500 <= status_code < 600 and attempt < max_retries:
+                        await asyncio.sleep(base_backoff * (2 ** (attempt - 1)))
+                        continue
+                    raise
+                except httpx.RequestError as e:
+                    log.error(f"Connection error during PUT request: {e} request_id={request_id}")
+                    if attempt < max_retries:
+                        await asyncio.sleep(base_backoff * (2 ** (attempt - 1)))
+                        continue
+                    raise BasedException(
+                        message=f"Error de conexión al realizar PUT: {str(e)}",
+                        status_code=status.HTTP_503_SERVICE_UNAVAILABLE
+                    ) from e
         except httpx.HTTPStatusError as e:
             log.error(f"PUT request failed (status: {e.response.status_code}): {e.response.text}")
             raise
@@ -223,16 +318,52 @@ class ExtApiService:
                 "Content-Type": "application/json"
             }
 
-            response = await self._http_client.patch(
-                url=url,
-                json=AnyUtils.serialize_dict(data),
-                headers=headers
-            )
-            response.raise_for_status()
+            try:
+                payload = AnyUtils.serialize_data(data)
+                try:
+                    body = orjson.dumps(payload)
+                except Exception:
+                    body = _json.dumps(payload, default=str, ensure_ascii=False).encode('utf-8')
+            except Exception as ser_e:
+                log.error(f"Error serializando payload con AnyUtils: {ser_e}")
+                body = _json.dumps(data, default=str, ensure_ascii=False).encode('utf-8')
 
-            response_data = response.json()
-            log.info(f"PATCH request successful: {data}")
-            return response_data
+            max_retries = 3
+            base_backoff = 0.5
+            timeout = Timeout(5.0)
+            request_id = str(uuid.uuid4())
+            headers.update({"X-Request-Id": request_id})
+
+            for attempt in range(1, max_retries + 1):
+                try:
+                    log.debug(f"PATCH attempt {attempt}/{max_retries} to {url} request_id={request_id}")
+                    response = await self._http_client.patch(
+                        url=url,
+                        content=body,
+                        headers=headers,
+                        timeout=timeout
+                    )
+                    log.debug(f"Response headers: {dict(response.headers)} request_id={request_id}")
+                    response.raise_for_status()
+                    response_data = response.json() if response.content else {}
+                    log.info(f"PATCH request successful: {data} request_id={request_id}")
+                    return response_data
+                except httpx.HTTPStatusError as e:
+                    status_code = e.response.status_code
+                    log.error(f"PATCH request failed (status: {status_code}) request_id={request_id}")
+                    if 500 <= status_code < 600 and attempt < max_retries:
+                        await asyncio.sleep(base_backoff * (2 ** (attempt - 1)))
+                        continue
+                    raise
+                except httpx.RequestError as e:
+                    log.error(f"Connection error during PATCH request: {e} request_id={request_id}")
+                    if attempt < max_retries:
+                        await asyncio.sleep(base_backoff * (2 ** (attempt - 1)))
+                        continue
+                    raise BasedException(
+                        message=f"Error de conexión al realizar PATCH: {str(e)}",
+                        status_code=status.HTTP_503_SERVICE_UNAVAILABLE
+                    ) from e
         except httpx.HTTPStatusError as e:
             log.error(f"PATCH request failed (status: {e.response.status_code}): {e.response.text}")
             raise
@@ -248,4 +379,3 @@ class ExtApiService:
                 message="Error inesperado al realizar la solicitud PATCH.",
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
-
