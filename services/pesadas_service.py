@@ -613,10 +613,11 @@ class PesadasService:
             except Exception:
                 viaje_id = 0
 
+            # Para el envío final la transacción queda como 00000 para indicar que es la última
             resp_data = {
                 'referencia': referencia,
                 'consecutivo': int(viaje_id),
-                'transaccion': int(transaccion),
+                'transaccion': 00000,
                 'pit': int(pit),
                 'material': material,
                 'peso': peso,
