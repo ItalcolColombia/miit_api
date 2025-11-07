@@ -139,7 +139,8 @@ async def buque_in(
 @router.put("/buque-finalizar/{puerto_id}",
             status_code=status.HTTP_200_OK,
             summary="Modificar estado de un buque por partida",
-            description="Evento realizado por la automatización al dar por finalizado el recibo de buque.",
+            description="Evento realizado por la automatización al dar por finalizado el recibo de buque."
+                        "Corresponde a FinalizaBuqueOP.",
             response_model=UpdateResponse,
             responses={
                 status.HTTP_400_BAD_REQUEST: {"model": ErrorResponse},

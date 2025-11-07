@@ -436,6 +436,14 @@ class ViajesService:
                     tran = await self.transacciones_service.get_tran_by_viaje(viaje.id)
                     if not tran:
                         raise EntityNotFoundException(f"Transacción para la cita: '{viaje.id}' no existe")
+                    # Si la transacción no tiene peso_real, intentar finalizarla para calcular y guardar el peso
+                    try:
+                        if getattr(tran, 'peso_real', None) in (None, 0):
+                            # Intentar finalizar; esto actualizará peso_real desde las pesadas acumuladas
+                            tran = await self.transacciones_service.transaccion_finalizar(tran.id)
+                    except Exception as e_final:
+                        # No bloquear la operación por fallo al finalizar, pero loguear la situación
+                        log.warning(f"No se pudo finalizar transacción {getattr(tran, 'id', None)} antes de notificar: {e_final}")
                 if flota.tipo == "buque":
                     bl = await self.bls_service.get_bl_by_viaje(viaje.id)
                     if not bl:

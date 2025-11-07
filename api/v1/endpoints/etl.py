@@ -91,7 +91,8 @@ async def get_buques_listado(
 @router.put("/buque-finalizar/{puerto_id}",
             status_code=status.HTTP_200_OK,
             summary="Modificar viaje del buque para actualizar estado por partida",
-            description="Evento realizado por la automatización al dar por finalizado el recibo de buque.",
+            description="Evento realizado por la automatización al dar por finalizado el recibo de buque."
+                        "Corresponde a FinalizaBuqueMT.",
             response_model=UpdateResponse,
             responses={
                 status.HTTP_400_BAD_REQUEST: {"model": ErrorResponse},
@@ -196,7 +197,8 @@ async def set_points_camion(
 @router.put("/camion-finalizar/{puerto_id}",
             status_code=status.HTTP_200_OK,
             summary="Modificar estado de un camion por cargue",
-            description="Evento realizado por la automatización al dar por finalizado el recibo de buque.",
+            description="Evento realizado por la automatización al dar por finalizado el recibo de buque."
+                        "Corresponde a CamionCargue (SendTruckFinalizationLoading).",
             response_model=UpdateResponse,
             responses={
                 status.HTTP_400_BAD_REQUEST: {"model": ErrorResponse},

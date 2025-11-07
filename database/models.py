@@ -171,7 +171,7 @@ class Transacciones(Base):
     fecha_inicio = Column(DateTime(timezone=False), nullable=True)
     fecha_fin = Column(DateTime(timezone=False), nullable=True)
     origen_id = Column(Integer, ForeignKey('almacenamientos.id') ,nullable=True)
-    destino_id = Column(Integer,nullable=True)
+    destino_id = Column(Integer,ForeignKey('almacenamientos.id') ,nullable=True)
     peso_meta = Column(Numeric(10,2), nullable=False, default=0)
     peso_real = Column(Numeric(10,2), nullable=True)
     estado = Column(String(12), nullable=False)
