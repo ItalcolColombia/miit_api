@@ -16,7 +16,7 @@ class Settings(BaseSettings):
     API_HOST: str = "0.0.0.0"
     API_PORT: int = "8000"
     API_V1_STR: str = "v1"
-    API_VERSION_NUM: str = "0.0.26"
+    API_VERSION_NUM: str = "0.0.27"
     API_LOG_LEVEL: str = "DEBUG"
     APP_LOG_DIR: str = "/var/www/metalteco/log/app_logs"
     ALLOWED_HOSTS: list[str] = ["*"]
@@ -25,15 +25,13 @@ class Settings(BaseSettings):
     API_USER_ADMINISTRATOR: str = "administrator"
     API_PASSWORD_ADMINISTRATOR: str = "$2b$12$XZpenPj7tndIasZhG5FS9OP.fmKJlUs2pOPw3oH/SmYQ9q07A7o7C"
 
-
-
     # Database Params
     DB_TYPE: str = "PostgreSQL"
     DB_USER: str = "postgres"
     DB_PASSWORD: str = "M3t4l867s0ft"
     DB_HOST: str = "localhost"
     DB_PORT: str = "5432"
-    DB_NAME: str = "PtoAntioquia_DW"
+    DB_NAME: str = "PTOAntioquia_DW"
 
     #Email Params
     SMTP_HOST: str = "smtp.example.com"

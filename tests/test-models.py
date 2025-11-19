@@ -29,7 +29,7 @@ class Usuarios(Base):
     cedula = Column(Integer, nullable=False)
     email = Column(String(100), nullable=False, unique=True)
     clave = Column(String(200), nullable=False)
-    fecha_modificado = Column(TIMESTAMP, server_default=func.now(), onupdate=func.now())
+    fecha_hora = Column(TIMESTAMP, server_default=func.now(), onupdate=func.now())
     rol_id = Column(Integer, ForeignKey('roles.id'), nullable=False)
     recuperacion = Column(String(300), nullable=True)
     foto = Column(String, nullable=True)
