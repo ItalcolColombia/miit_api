@@ -1,14 +1,12 @@
 import asyncio
-from fastapi.testclient import TestClient
-from sqlalchemy import select
 from typing import AsyncGenerator
-from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession
-from sqlalchemy.orm import sessionmaker
-
 
 from sqlalchemy import Column, Integer, String, Boolean, ForeignKey, TIMESTAMP
-from sqlalchemy.orm import relationship
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession
 from sqlalchemy.orm import declarative_base
+from sqlalchemy.orm import relationship
+from sqlalchemy.orm import sessionmaker
 from sqlalchemy.sql import func
 
 Base = declarative_base()  # Ensure this is the same Base instance

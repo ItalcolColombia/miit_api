@@ -1,13 +1,14 @@
 from typing import List, Optional
+
 from starlette import status
 
 from core.exceptions.base_exception import BasedException
 from core.exceptions.entity_exceptions import EntityNotFoundException
 from database.models import Flotas
-from schemas.flotas_schema import FlotasResponse, FlotaCreate, FlotaUpdate
 from repositories.flotas_repository import FlotasRepository
-
+from schemas.flotas_schema import FlotasResponse, FlotaCreate, FlotaUpdate
 from utils.logger_util import LoggerUtil
+
 log = LoggerUtil()
 
 class FlotasService:

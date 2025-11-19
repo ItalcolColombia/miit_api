@@ -1,13 +1,9 @@
-from sqlalchemy import Column, Integer, Double, Numeric, Table, String, DateTime, Boolean, ForeignKey, DECIMAL, \
-    Date, Boolean, TIMESTAMP
-from sqlalchemy.schema import UniqueConstraint
+from sqlalchemy import Column, Integer, Double, Numeric, Table, String, DateTime, ForeignKey, Date, Boolean, TIMESTAMP
 from sqlalchemy import Identity
-from sqlalchemy.sql import func
 from sqlalchemy.orm import relationship, declarative_base, backref
-from sqlalchemy.sql.schema import PrimaryKeyConstraint
-from sqlalchemy.sql.sqltypes import JSON, BigInteger
-
-from utils.any_utils import AnyUtils
+from sqlalchemy.schema import UniqueConstraint
+from sqlalchemy.sql import func
+from sqlalchemy.sql.sqltypes import JSON
 
 Base = declarative_base()
 

@@ -1,9 +1,10 @@
 from datetime import datetime
+from typing import Optional
 
 from pydantic import Field, ConfigDict
+
 from schemas.base_schema import BaseSchema
-from decimal import Decimal
-from typing import Optional
+
 
 class ClientesResponse(BaseSchema):
     id: int

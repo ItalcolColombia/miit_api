@@ -1,10 +1,11 @@
-from pydantic import BaseModel, Field, field_validator
-from schemas.base_schema import BaseSchema
 from datetime import datetime
-from decimal import Decimal
 from typing import Optional, Dict, List, Any
-from schemas.transacciones_schema import TransaccionResponse
+
+from pydantic import Field
+
+from schemas.base_schema import BaseSchema
 from schemas.pesadas_corte_schema import PesadasCorteResponse
+from schemas.transacciones_schema import TransaccionResponse
 
 
 class BaseResponse(BaseSchema):

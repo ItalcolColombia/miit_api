@@ -4,7 +4,7 @@ import time
 from http import HTTPStatus
 
 from starlette.middleware.base import BaseHTTPMiddleware
-from starlette.responses import Response, JSONResponse
+from starlette.responses import Response
 
 from utils.logger_util import LoggerUtil
 

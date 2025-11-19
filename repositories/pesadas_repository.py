@@ -1,12 +1,13 @@
 from typing import List, Optional
-from sqlalchemy.ext.asyncio import AsyncSession
+
 from sqlalchemy import func, select
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from core.contracts.auditor import Auditor
+from database.models import Pesadas, Viajes, Flotas, Transacciones, Materiales, VPesadasAcumulado
 from repositories.base_repository import IRepository
 from schemas.pesadas_corte_schema import PesadasCalculate, PesadasRange
 from schemas.pesadas_schema import PesadaResponse, VPesadasAcumResponse
-from database.models import Pesadas, Viajes, Flotas, Transacciones, Materiales, VPesadasAcumulado
 
 
 class PesadasRepository(IRepository[Pesadas, PesadaResponse]):

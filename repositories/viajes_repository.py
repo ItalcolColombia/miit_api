@@ -1,12 +1,13 @@
 from typing import List, Optional
-from sqlalchemy.ext.asyncio import AsyncSession
+
 from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm.exc import NoResultFound
 
 from core.contracts.auditor import Auditor
+from database.models import Viajes, VViajes
 from repositories.base_repository import IRepository
 from schemas.viajes_schema import ViajesResponse, ViajesActResponse
-from database.models import Viajes, VViajes
-from sqlalchemy.orm.exc import NoResultFound
 from utils.logger_util import LoggerUtil
 
 log = LoggerUtil()

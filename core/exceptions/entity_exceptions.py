@@ -2,6 +2,7 @@ from starlette import status
 
 from core.exceptions.base_exception import BasedException
 
+
 class EntityAlreadyRegisteredException(BasedException):
     """
        Class responsible for handling exceptions when an entity is found.

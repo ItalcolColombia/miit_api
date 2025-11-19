@@ -1,7 +1,10 @@
 from datetime import datetime
 from typing import Optional
+
 from pydantic import Field, ConfigDict
+
 from schemas.base_schema import BaseSchema
+
 
 class FlotasResponse(BaseSchema):
     id: int

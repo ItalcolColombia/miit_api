@@ -1,27 +1,25 @@
+from datetime import datetime
 from decimal import Decimal
 from typing import List
 
 from fastapi import APIRouter, Depends, HTTPException, status
-from datetime import datetime
 
+from core.di.service_injection import get_viajes_service, get_pesadas_service
 from core.enums.user_role_enum import UserRoleEnum
 from core.exceptions.entity_exceptions import EntityNotFoundException
-from services.auth_service import AuthService
-from core.di.service_injection import get_viajes_service, get_pesadas_service, get_transacciones_service, get_bls_service
-from utils.response_util import ResponseUtil
-from services.viajes_service import ViajesService
-from services.pesadas_service import PesadasService
-from services.transacciones_service import TransaccionesService
-from services.bls_service import BlsService
+from schemas.bls_schema import BlsExtCreate
 from schemas.pesadas_schema import VPesadasAcumResponse
-from schemas.response_models import CreateResponse, ErrorResponse, ValidationErrorResponse, UpdateResponse, EndBuqueResponse
+from schemas.response_models import CreateResponse, ErrorResponse, ValidationErrorResponse, UpdateResponse
 from schemas.viajes_schema import (
     ViajeBuqueExtCreate,
     ViajeCamionExtCreate
 )
-from schemas.bls_schema import BlsExtCreate
-
+from services.auth_service import AuthService
+from services.pesadas_service import PesadasService
+from services.viajes_service import ViajesService
 from utils.logger_util import LoggerUtil
+from utils.response_util import ResponseUtil
+
 log = LoggerUtil()
 
 

@@ -1,5 +1,4 @@
 from abc import ABC, abstractmethod
-from typing import Optional, Dict, Any
 
 from schemas.logs_auditoria_schema import LogsAuditoriaCreate
 

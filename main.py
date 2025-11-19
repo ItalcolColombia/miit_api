@@ -1,25 +1,23 @@
 from contextlib import asynccontextmanager
-from urllib.request import Request
 
 import uvicorn
-
-from fastapi import FastAPI, status
+from fastapi import FastAPI
 from fastapi.exceptions import RequestValidationError
-from starlette.middleware.cors import CORSMiddleware
-from starlette.middleware.sessions import SessionMiddleware
-from starlette.exceptions import HTTPException as StarletteHTTPException
 from fastapi.middleware.gzip import GZipMiddleware
 from fastapi.responses import JSONResponse
 from fastapi_pagination import add_pagination
+from starlette.exceptions import HTTPException as StarletteHTTPException
+from starlette.middleware.cors import CORSMiddleware
+from starlette.middleware.sessions import SessionMiddleware
 
-from core.exceptions.base_exception import BasedException
-from core.middleware.auth_middleware import AuthMiddleware
-from core.middleware.error_middleware import ErrorMiddleware
-from core.middleware.time_middleware import TimeMiddleware
 from api.v1.routes import routers as v1_routers
 from core.config.settings import get_settings
+from core.exceptions.base_exception import BasedException
 from core.handlers.exception_handler import ExceptionHandler
+from core.middleware.auth_middleware import AuthMiddleware
+from core.middleware.error_middleware import ErrorMiddleware
 from core.middleware.logger_middleware import LoggerMiddleware
+from core.middleware.time_middleware import TimeMiddleware
 from utils.database_util import DatabaseUtil
 from utils.logger_util import LoggerUtil
 from utils.message_util import MessageUtil

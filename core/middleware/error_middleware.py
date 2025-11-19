@@ -1,16 +1,10 @@
-from datetime import datetime
-
-from fastapi import FastAPI, Request
-from starlette.middleware.base import BaseHTTPMiddleware
-from starlette.exceptions import HTTPException as StarletteHTTPException
-from starlette.responses import JSONResponse
-from fastapi.exceptions import RequestValidationError
-
-from core.exceptions.base_exception import BasedException
-from core.handlers.exception_handler import ExceptionHandler
-from schemas.response_models import ErrorResponse
-from utils.logger_util import LoggerUtil
 from http import HTTPStatus
+
+from fastapi import Request
+from starlette.middleware.base import BaseHTTPMiddleware
+from starlette.responses import JSONResponse
+
+from utils.logger_util import LoggerUtil
 
 log = LoggerUtil()
 

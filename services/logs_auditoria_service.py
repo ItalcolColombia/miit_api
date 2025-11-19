@@ -1,11 +1,12 @@
 from sqlalchemy.ext.asyncio import AsyncSession
 from starlette import status
-from core.exceptions.base_exception import BasedException
+
 from core.contracts.auditor import Auditor
+from core.exceptions.base_exception import BasedException
 from database.models import LogsAuditoria
 from schemas.logs_auditoria_schema import LogsAuditoriaCreate
-
 from utils.logger_util import LoggerUtil
+
 log = LoggerUtil()
 
 class DatabaseAuditor(Auditor):

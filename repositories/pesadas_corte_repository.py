@@ -1,8 +1,9 @@
 from sqlalchemy.ext.asyncio import AsyncSession
+
 from core.contracts.auditor import Auditor
+from database.models import PesadasCorte
 from repositories.base_repository import IRepository
 from schemas.pesadas_corte_schema import PesadasCorteResponse
-from database.models import PesadasCorte
 
 
 class PesadasCorteRepository(IRepository[PesadasCorte, PesadasCorteResponse]):

@@ -1,9 +1,12 @@
+from typing import Optional
+
 from sqlalchemy.ext.asyncio import AsyncSession
+
 from core.contracts.auditor import Auditor
+from database.models import Transacciones
 from repositories.base_repository import IRepository
 from schemas.transacciones_schema import TransaccionResponse
-from database.models import Transacciones
-from typing import Optional
+
 
 class TransaccionesRepository(IRepository[Transacciones, TransaccionResponse]):
     db: AsyncSession

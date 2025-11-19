@@ -7,8 +7,8 @@ from colorlog import ColoredFormatter
 from starlette import status
 from whenever._whenever import Instant
 
-from core.exceptions.base_exception import BasedException
 from core.config.settings import get_settings
+from core.exceptions.base_exception import BasedException
 
 
 class LoggerUtil:

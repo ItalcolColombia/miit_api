@@ -1,9 +1,9 @@
 from fastapi import APIRouter, Depends, HTTPException, status
+
 from core.di.service_injection import get_auth_service
-from core.middleware.auth_middleware import security
-from schemas.response_models import ErrorResponse, ValidationErrorResponse
-from services.auth_service import AuthService
+from schemas.response_models import ErrorResponse
 from schemas.usuarios_schema import UserAuth, Token  # You'll need to create these
+from services.auth_service import AuthService
 from utils.jwt_util import JWTUtil
 from utils.logger_util import LoggerUtil
 from utils.response_util import ResponseUtil

@@ -1,36 +1,34 @@
-import httpx
-from fastapi import Depends
 from typing import Annotated
 
+from fastapi import Depends
+
+from repositories.almacenamientos_materiales_repository import AlmacenamientosMaterialesRepository
 # Repositories
 from repositories.almacenamientos_repository import AlmacenamientosRepository
-from repositories.almacenamientos_materiales_repository import AlmacenamientosMaterialesRepository
 from repositories.bls_repository import BlsRepository
 from repositories.clientes_repository import ClientesRepository
 from repositories.flotas_repository import FlotasRepository
-from repositories.pesadas_corte_repository import PesadasCorteRepository
-from repositories.viajes_repository import ViajesRepository
 from repositories.materiales_repository import MaterialesRepository
 from repositories.movimientos_repository import MovimientosRepository
+from repositories.pesadas_corte_repository import PesadasCorteRepository
 from repositories.pesadas_repository import PesadasRepository
 from repositories.transacciones_repository import TransaccionesRepository
 from repositories.usuarios_repository import UsuariosRepository
-
+from repositories.viajes_repository import ViajesRepository
+from services.almacenamientos_materiales_service import AlmacenamientosMaterialesService
+from services.almacenamientos_service import AlmacenamientosService
 # Services
 from services.auth_service import AuthService
-from services.almacenamientos_service import AlmacenamientosService
-from services.almacenamientos_materiales_service import AlmacenamientosMaterialesService
 from services.bls_service import BlsService
 from services.clientes_service import ClientesService
 from services.ext_api_service import ExtApiService
 from services.flotas_service import FlotasService
-from services.viajes_service import ViajesService
 from services.materiales_service import MaterialesService
 from services.movimientos_service import MovimientosService
 from services.pesadas_service import PesadasService
 from services.transacciones_service import TransaccionesService
 from services.usuarios_service import UsuariosService
-
+from services.viajes_service import ViajesService
 # InjectionRepo
 from .repository_injection import (
     get_user_repository,

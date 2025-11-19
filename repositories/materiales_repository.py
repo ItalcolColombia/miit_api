@@ -1,11 +1,13 @@
 from typing import Optional
-from sqlalchemy.ext.asyncio import AsyncSession
+
 from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from core.contracts.auditor import Auditor
+from database.models import Materiales
 from repositories.base_repository import IRepository
 from schemas.materiales_schema import MaterialesResponse
-from database.models import Materiales
+
 
 class MaterialesRepository(IRepository[Materiales, MaterialesResponse]):
     db: AsyncSession

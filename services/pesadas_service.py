@@ -1,7 +1,7 @@
 import uuid
 from typing import List, Optional
-from fastapi_pagination import Page, Params
 
+from fastapi_pagination import Page, Params
 from sqlalchemy import select
 from starlette import status
 
@@ -10,12 +10,12 @@ from core.exceptions.db_exception import DatabaseSQLAlchemyException
 from core.exceptions.entity_exceptions import EntityNotFoundException, EntityAlreadyRegisteredException
 from database.models import Pesadas, Transacciones
 from repositories.pesadas_corte_repository import PesadasCorteRepository
+from repositories.pesadas_repository import PesadasRepository
 from schemas.pesadas_corte_schema import PesadasCalculate, PesadasCorteCreate, PesadasRange, \
     PesadaCorteRetrieve
 from schemas.pesadas_schema import PesadaResponse, PesadaCreate, PesadaUpdate, VPesadasAcumResponse
-from repositories.pesadas_repository import PesadasRepository
-
 from utils.logger_util import LoggerUtil
+
 log = LoggerUtil()
 
 class PesadasService:

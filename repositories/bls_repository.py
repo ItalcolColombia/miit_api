@@ -1,11 +1,12 @@
-from typing import Optional, List
-from sqlalchemy.ext.asyncio import AsyncSession
+from typing import List
+
 from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from core.contracts.auditor import Auditor
+from database.models import Bls, VBls
 from repositories.base_repository import IRepository
 from schemas.bls_schema import BlsResponse, VBlsResponse
-from database.models import Bls, VBls
 
 
 class BlsRepository(IRepository[Bls, BlsResponse]):

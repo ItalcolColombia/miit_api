@@ -1,9 +1,10 @@
-from pydantic import BaseModel, Field, field_validator, ConfigDict
-from schemas.base_schema import BaseSchema
 from datetime import datetime
 from decimal import Decimal
 from typing import Optional
 
+from pydantic import BaseModel, Field, field_validator, ConfigDict
+
+from schemas.base_schema import BaseSchema
 
 
 class ViajesResponse(BaseSchema):
