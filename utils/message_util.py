@@ -1,9 +1,9 @@
 from starlette import status
 
-from core.exceptions.base_exception import BasedException
 from core.config.settings import get_settings
-
+from core.exceptions.base_exception import BasedException
 from utils.logger_util import LoggerUtil
+
 log = LoggerUtil()
 
 class MessageUtil:

@@ -1,13 +1,13 @@
 import smtplib
-from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
+from email.mime.text import MIMEText
 
 from starlette import status
 
-from core.exceptions.base_exception import BasedException
 from core.contracts.email import Email
-
+from core.exceptions.base_exception import BasedException
 from utils.logger_util import LoggerUtil
+
 log = LoggerUtil()
 
 class EmailService(Email):

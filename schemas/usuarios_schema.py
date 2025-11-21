@@ -1,7 +1,9 @@
-from pydantic import BaseModel, EmailStr, Field
-from schemas.base_schema import BaseSchema
+from datetime import datetime
 from typing import Optional
-from datetime import datetime  
+
+from pydantic import BaseModel, Field
+
+from schemas.base_schema import BaseSchema
 
 
 class UsuariosResponse(BaseSchema):

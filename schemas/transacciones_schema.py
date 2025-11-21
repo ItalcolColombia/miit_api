@@ -1,7 +1,8 @@
-from pydantic import BaseModel, Field, field_validator, ConfigDict
 from datetime import datetime
-from typing import Optional
 from decimal import Decimal
+from typing import Optional
+
+from pydantic import BaseModel, Field, field_validator
 
 
 class TransaccionResponse(BaseModel):

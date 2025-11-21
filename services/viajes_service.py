@@ -1,35 +1,37 @@
 from datetime import datetime, timezone
 from decimal import Decimal
+from typing import List, Optional
+
+import httpx
 from fastapi_pagination import Page, Params
 from sqlalchemy import select
 from starlette import status
 
-import httpx
-from core.exceptions.base_exception import BasedException
 from core.config.settings import get_settings
-from database.models import VViajes
-from typing import List, Optional
-from repositories.viajes_repository import ViajesRepository
-from schemas.bls_schema import BlsCreate, BlsExtCreate, BlsResponse, BlsUpdate, VBlsResponse
-from schemas.ext_api_schema import NotificationCargue, NotificationBuque, NotificationPitCargue, NotificationBlsPeso
-from schemas.transacciones_schema import TransaccionResponse
-from services.bls_service import BlsService
-from services.clientes_service import ClientesService
-from services.ext_api_service import ExtApiService
-from services.materiales_service import MaterialesService
-from services.flotas_service import FlotasService
-from schemas.viajes_schema import (
-    ViajesResponse, ViajeCreate, ViajeBuqueExtCreate, ViajeUpdate, ViajesActResponse, ViajeCamionExtCreate,VViajesResponse
-)
-from schemas.flotas_schema import FlotasResponse, FlotaCreate
+from core.exceptions.base_exception import BasedException
 from core.exceptions.entity_exceptions import (
     EntityAlreadyRegisteredException,
     EntityNotFoundException,
 )
+from database.models import VViajes
+from repositories.viajes_repository import ViajesRepository
+from schemas.bls_schema import BlsCreate, BlsExtCreate, BlsResponse, BlsUpdate, VBlsResponse
+from schemas.ext_api_schema import NotificationCargue, NotificationBuque, NotificationPitCargue, NotificationBlsPeso
+from schemas.flotas_schema import FlotasResponse, FlotaCreate
+from schemas.transacciones_schema import TransaccionResponse
+from schemas.viajes_schema import (
+    ViajesResponse, ViajeCreate, ViajeBuqueExtCreate, ViajeUpdate, ViajesActResponse, ViajeCamionExtCreate,
+    VViajesResponse
+)
+from services.bls_service import BlsService
+from services.clientes_service import ClientesService
+from services.ext_api_service import ExtApiService
+from services.flotas_service import FlotasService
+from services.materiales_service import MaterialesService
 from services.transacciones_service import TransaccionesService
 from utils.any_utils import AnyUtils
-
 from utils.logger_util import LoggerUtil
+
 log = LoggerUtil()
 
 class ViajesService:

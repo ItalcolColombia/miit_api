@@ -1,7 +1,6 @@
 from fastapi import APIRouter
 
-from api.v1.endpoints import  auth, etl, operador
-from api.v1.endpoints.admin import admin
+from api.v1.endpoints import auth, etl, operador
 
 routers = APIRouter()
 

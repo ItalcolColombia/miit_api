@@ -1,7 +1,8 @@
+import datetime
 from typing import Optional
 
 from pydantic import BaseModel, ConfigDict
-import datetime
+
 
 class RolBase(BaseModel):
     nombre: str

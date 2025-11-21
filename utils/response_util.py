@@ -3,8 +3,8 @@
 from http import HTTPStatus
 from typing import Optional, Dict, Union, Any
 
-from fastapi.responses import JSONResponse
 from fastapi.encoders import jsonable_encoder
+from fastapi.responses import JSONResponse
 
 
 class ResponseUtil:

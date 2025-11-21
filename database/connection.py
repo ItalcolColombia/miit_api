@@ -1,8 +1,7 @@
 # /src/infrastructure/database/database_configuration.py
 
-from typing import Any, Generator, AsyncGenerator
-from sqlalchemy import create_engine
-from sqlalchemy.ext.declarative import declarative_base
+from typing import Any, AsyncGenerator
+
 from asyncpg.exceptions import InvalidCachedStatementError
 from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession
 from sqlalchemy.orm import declarative_base, sessionmaker

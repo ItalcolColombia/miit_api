@@ -1,19 +1,20 @@
 from typing import Optional, Annotated
 
+from fastapi import status, Depends
+
 from core.config import context
+from core.config.settings import get_settings
 from core.di.repository_injection import get_user_repository
 from core.enums.user_role_enum import UserRoleEnum
+from core.exceptions.auth_exception import InvalidCredentialsException, InvalidTokenCredentialsException
 from core.exceptions.base_exception import BasedException
 from database.models import Usuarios
-from utils.jwt_util import JWTUtil, JWTBearer
-from utils.any_utils import AnyUtils
 from repositories.usuarios_repository import UsuariosRepository
 from schemas.usuarios_schema import UsuariosResponse, VUsuariosRolResponse
-from fastapi import status, Depends
-from core.exceptions.auth_exception import InvalidCredentialsException, InvalidTokenCredentialsException
-from core.config.settings import get_settings
-
+from utils.any_utils import AnyUtils
+from utils.jwt_util import JWTUtil, JWTBearer
 from utils.logger_util import LoggerUtil
+
 log = LoggerUtil()
 
 class AuthService:

@@ -6,7 +6,6 @@ from core.exceptions.base_exception import BasedException
 from database.models import Bls
 from repositories.clientes_repository import ClientesRepository
 from schemas.clientes_schema import ClientesResponse, ClienteCreate, ClienteUpdate
-
 from utils.logger_util import LoggerUtil
 
 log = LoggerUtil()

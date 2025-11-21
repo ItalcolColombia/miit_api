@@ -1,6 +1,8 @@
 from decimal import Decimal
 from typing import Optional, Any, List
-from pydantic import  ConfigDict
+
+from pydantic import ConfigDict
+
 from schemas.base_schema import BaseSchema
 
 

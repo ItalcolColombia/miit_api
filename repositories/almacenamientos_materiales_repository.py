@@ -1,11 +1,9 @@
-from typing import Optional
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select
 
 from core.contracts.auditor import Auditor
+from database.models import AlmacenamientosMateriales
 from repositories.base_repository import IRepository
 from schemas.almacenamientos_materiales_schema import AlmacenamientoMaterialesResponse
-from database.models import AlmacenamientosMateriales
 
 
 class AlmacenamientosMaterialesRepository(IRepository[AlmacenamientosMateriales, AlmacenamientoMaterialesResponse]):

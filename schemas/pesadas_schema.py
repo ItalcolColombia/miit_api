@@ -1,7 +1,8 @@
-from pydantic import Field
 from datetime import datetime
 from decimal import Decimal
 from typing import Optional
+
+from pydantic import Field
 
 from schemas.base_schema import BaseSchema
 

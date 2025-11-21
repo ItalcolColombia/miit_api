@@ -1,16 +1,17 @@
 from typing import List, Optional
+
+from fastapi_pagination import Page, Params
 from sqlalchemy import func
 from starlette import status
 
 from core.exceptions.base_exception import BasedException
-from utils.any_utils import AnyUtils
-from fastapi_pagination import Page, Params
-from repositories.usuarios_repository import UsuariosRepository
-from schemas.usuarios_schema import UsuariosResponse, UsuarioCreate, UsuarioUpdate
 from core.exceptions.entity_exceptions import (
     EntityAlreadyRegisteredException,
     EntityNotFoundException,
 )
+from repositories.usuarios_repository import UsuariosRepository
+from schemas.usuarios_schema import UsuariosResponse, UsuarioCreate, UsuarioUpdate
+from utils.any_utils import AnyUtils
 from utils.logger_util import LoggerUtil
 
 log = LoggerUtil()

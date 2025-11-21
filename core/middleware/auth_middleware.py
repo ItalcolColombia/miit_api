@@ -1,23 +1,17 @@
-from fastapi import HTTPException, Request
-from starlette.middleware.base import BaseHTTPMiddleware
-
-
+from fastapi import Depends, status
+from fastapi import Request
 from fastapi.security import HTTPBearer
+from starlette.middleware.base import BaseHTTPMiddleware
+from starlette.responses import Response
+from starlette.types import ASGIApp
+
+from core.config import context
+from core.config.settings import get_settings
 from core.di.service_injection import get_user_service
+from core.exceptions.auth_exception import InvalidCredentialsException, InvalidTokenCredentialsException
 from core.exceptions.base_exception import BasedException
 from services.usuarios_service import UsuariosService
 from utils.jwt_util import JWTUtil
-from fastapi import Depends, status
-from core.exceptions.auth_exception import InvalidCredentialsException, InvalidTokenCredentialsException
-from core.config.settings import get_settings
-from core.config import context
-from starlette.types import ASGIApp
-from fastapi import Request
-from http import HTTPStatus
-from starlette.responses import Response, JSONResponse
-
-
-
 from utils.logger_util import LoggerUtil
 from utils.response_util import ResponseUtil
 
