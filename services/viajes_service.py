@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import datetime, timezone
 from decimal import Decimal
 from fastapi_pagination import Page, Params
 from sqlalchemy import select
@@ -664,3 +664,143 @@ class ViajesService:
                 message=f"Notificación de cargue falló. API externa error: {msg}",
                 status_code=e.response.status_code
             ) from e
+        except Exception as e:
+            log.error(f"Error inesperado al enviar notificación de cargue para flota {flota.referencia}: {e}", exc_info=True)
+            raise BasedException(
+                message=f"Error inesperado al enviar notificación de cargue: {e}",
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
+
+    async def send_envio_final_external(self, voyage: str, envio_list: list, external_accepts_list: Optional[bool] = None) -> None:
+        """
+        Envía la lista de 'envio final' a la API externa en el endpoint /api/v1/Metalsoft/EnvioFinal.
+
+        - voyage: puerto_id del viaje
+        - envio_list: lista de objetos que siguen la forma de VPesadasAcumResponse (o dicts compatibles)
+        - external_accepts_list: si None, se consulta get_settings().TG_API_ACCEPTS_LIST; si False, se enviará un POST por cada elemento.
+        """
+        try:
+            from core.config.settings import get_settings
+            from utils.any_utils import AnyUtils
+            from decimal import Decimal
+            from datetime import datetime, timezone
+            import asyncio
+            import httpx
+
+            settings = get_settings()
+            if external_accepts_list is None:
+                external_accepts_list = bool(settings.TG_API_ACCEPTS_LIST)
+
+            # Normalizar cada item a dict con campos esperados
+            payloads = []
+            for item in envio_list:
+                if isinstance(item, dict):
+                    it = item
+                else:
+                    try:
+                        it = item.model_dump() if hasattr(item, 'model_dump') else item.__dict__
+                    except Exception:
+                        it = {k: getattr(item, k, None) for k in ['referencia', 'consecutivo', 'transaccion', 'pit', 'material', 'peso', 'puerto_id', 'fecha_hora', 'usuario_id', 'usuario']}
+
+                peso_val = it.get('peso', None)
+                try:
+                    if peso_val is None:
+                        peso_str = "0"
+                    else:
+                        peso_dec = Decimal(peso_val) if not isinstance(peso_val, str) else Decimal(peso_val)
+                        peso_str = format(peso_dec.quantize(Decimal('0.00')), 'f')
+                except Exception:
+                    try:
+                        peso_str = format(Decimal(str(peso_val)), 'f')
+                    except Exception:
+                        peso_str = "0"
+
+                fecha = it.get('fecha_hora', None)
+                if fecha is None:
+                    fecha_iso = datetime.now(timezone.utc).isoformat()
+                else:
+                    try:
+                        fecha_iso = fecha if isinstance(fecha, str) else (fecha.isoformat() if hasattr(fecha, 'isoformat') else str(fecha))
+                    except Exception:
+                        fecha_iso = str(fecha)
+
+                payloads.append({
+                    "voyage": voyage,
+                    "referencia": it.get('referencia'),
+                    "consecutivo": int(it.get('consecutivo') or 0),
+                    "transaccion": int(it.get('transaccion') or 0),
+                    "pit": int(it.get('pit') or 0),
+                    "material": it.get('material') or "",
+                    "peso": peso_str,
+                    "puerto_id": it.get('puerto_id') or voyage,
+                    "fecha_hora": fecha_iso,
+                    "usuario_id": int(it.get('usuario_id') or 0),
+                    "usuario": it.get('usuario') or "",
+                })
+
+            endpoint = f"{settings.TG_API_URL}/api/v1/Metalsoft/EnvioFinal"
+
+            # Si la API acepta lista, enviar todo en una sola request (comportamiento actual)
+            if external_accepts_list:
+                serialized = AnyUtils.serialize_data(payloads)
+                log.info(f"EnvioFinal - notificación externa para voyage {voyage} -> endpoint {endpoint} payload: {serialized}")
+                await self.feedback_service.post(serialized, endpoint)
+                return
+
+            # Si no acepta lista: enviar un POST por cada item con concurrencia y retries
+            concurrency = 5
+            sem = asyncio.Semaphore(concurrency)
+            max_retries = 3
+            base_backoff = 0.5
+
+            async def _post_single(p):
+                # Generar idempotency key por item
+                idempotency_key = f"{p.get('referencia') or ''}-{p.get('transaccion') or 0}"
+                # serializar
+                serialized = AnyUtils.serialize_data(p)
+                headers = {"Idempotency-Key": idempotency_key}
+
+                last_exc = None
+                for attempt in range(1, max_retries + 1):
+                    try:
+                        async with sem:
+                            # feedback_service.post firma: (data, url)
+                            await self.feedback_service.post(serialized, endpoint)
+                        return True
+                    except httpx.HTTPStatusError as he:
+                        last_exc = he
+                        status_code = he.response.status_code if he.response is not None else None
+                        # si 4xx -> no reintentar
+                        if status_code and 400 <= status_code < 500:
+                            log.error(f"EnvioFinal item non-retryable error {status_code}: {he.response.text if he.response is not None else he}")
+                            raise
+                        # si 5xx -> reintentar
+                    except Exception as e:
+                        last_exc = e
+                        log.warning(f"EnvioFinal item, intento {attempt} fallo: {e}")
+
+                    # backoff
+                    await asyncio.sleep(base_backoff * (2 ** (attempt - 1)))
+
+                # si falla todo, elevar
+                log.error(f"EnvioFinal: fallaron todos los reintentos para item {p.get('referencia')} trans {p.get('transaccion')}")
+                if isinstance(last_exc, Exception):
+                    raise last_exc
+                raise Exception("EnvioFinal: error desconocido al enviar item")
+
+            tasks = [asyncio.create_task(_post_single(p)) for p in payloads]
+            results = await asyncio.gather(*tasks, return_exceptions=True)
+            errors = [r for r in results if isinstance(r, Exception)]
+            if errors:
+                log.error(f"EnvioFinal: {len(errors)} items fallaron al notificar externamente")
+                # decidir si lanzar o no. Por seguridad, lanzar BasedException para que caller lo maneje
+                raise BasedException(message=f"Algunos items fallaron al notificar externamente ({len(errors)})", status_code=status.HTTP_424_FAILED_DEPENDENCY)
+
+        except BasedException:
+            raise
+        except Exception as e:
+            log.error(f"EnvioFinal: Error al enviar notificación externa para voyage {voyage}: {e}", exc_info=True)
+            raise BasedException(
+                message=f"EnvioFinal: Error al enviar notificación externa: {e}",
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )

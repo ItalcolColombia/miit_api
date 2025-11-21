@@ -8,7 +8,7 @@ from starlette import status
 from core.exceptions.base_exception import BasedException
 from core.exceptions.db_exception import DatabaseSQLAlchemyException
 from core.exceptions.entity_exceptions import EntityNotFoundException, EntityAlreadyRegisteredException
-from database.models import Pesadas, Transacciones
+from database.models import Pesadas
 from repositories.pesadas_corte_repository import PesadasCorteRepository
 from schemas.pesadas_corte_schema import PesadasCalculate, PesadasCorteCreate, PesadasRange, \
     PesadaCorteRetrieve
@@ -563,73 +563,100 @@ class PesadasService:
 
     async def get_envio_final(self, puerto_id: Optional[str] = None) -> List[VPesadasAcumResponse]:
         """
-        Retorna el último registro de `pesadas_corte` para el `puerto_id` indicado.
+        Retorna una lista con un elemento por cada transacción (BL) asociada al mismo `puerto_id`.
+        La referencia final se genera a partir de la última pesada global; sólo la transacción
+        de la última pesada mantiene su peso real, las demás transacciones tendrán peso = 0.
         """
         try:
             from sqlalchemy import select
-            query = select(self._repo_corte.model).where(self._repo_corte.model.puerto_id == puerto_id).order_by(self._repo_corte.model.fecha_hora.desc()).limit(1)
-            result = await self._repo_corte.db.execute(query)
-            last_corte = result.scalars().first()
+            from decimal import Decimal
+            from datetime import datetime
 
-            if not last_corte:
+            # Obtener todas las pesadas_corte para el puerto ordenadas por fecha desc (la primera es la última global)
+            query = (select(self._repo_corte.model)
+                     .where(self._repo_corte.model.puerto_id == puerto_id)
+                     .order_by(self._repo_corte.model.fecha_hora.desc()))
+            result = await self._repo_corte.db.execute(query)
+            cortes = result.scalars().all()
+
+            if not cortes:
                 raise EntityNotFoundException("No hay pesadas nuevas por reportar. no encontrada.")
 
-            # Extraer atributos del ORM usando getattr
+            # Última pesada global (más reciente)
+            last_corte = cortes[0]
+
+            # Construir referencia final a partir de la última pesada global
             ref = getattr(last_corte, 'ref', None)
             corte_id = getattr(last_corte, 'id', None)
-            transaccion = getattr(last_corte, 'transaccion', None) or 0
-            pit = getattr(last_corte, 'pit', None) or 0
-            material = getattr(last_corte, 'material', None) or ""
-            peso = getattr(last_corte, 'peso', None)
-            puerto = getattr(last_corte, 'puerto_id', None) or puerto_id
-            fecha_hora = getattr(last_corte, 'fecha_hora', None)
-            usuario_id = getattr(last_corte, 'usuario_id', None) or 0
+            referencia_final = f"{ref}F" if ref else (f"{corte_id}F" if corte_id is not None else None)
 
-            # Ensure types compatible with VPesadasAcumResponse
-            from decimal import Decimal
-            if peso is None:
-                peso = Decimal('0')
-            else:
-                try:
-                    peso = Decimal(peso)
-                except Exception:
-                    peso = Decimal('0')
-
-            if fecha_hora is None:
-                from datetime import datetime
-                fecha_hora = datetime.now()
-
-            referencia = f"{ref}F" if ref else (f"{corte_id}F" if corte_id is not None else None)
-
-            # Obtener viaje_id desde la transacción relacionada para que 'consecutivo' represente viaje_id
-            viaje_id = 0
+            # Determinar qué transacción corresponde a la última pesada global (mantendrá el peso real)
             try:
-                if transaccion:
-                    from sqlalchemy import select
-                    q = select(Transacciones).where(Transacciones.id == int(transaccion))
-                    r = await self._repo_corte.db.execute(q)
-                    tran_rec = r.scalars().first()
-                    if tran_rec and getattr(tran_rec, 'viaje_id', None) is not None:
-                        viaje_id = int(getattr(tran_rec, 'viaje_id'))
+                transacion_con_peso = int(getattr(last_corte, 'transaccion')) if getattr(last_corte, 'transaccion', None) is not None else None
             except Exception:
-                viaje_id = 0
+                transacion_con_peso = None
 
-            # Para el envío final la transacción queda como 00000 para indicar que es la última
-            resp_data = {
-                'referencia': referencia,
-                'consecutivo': int(viaje_id),
-                'transaccion': 00000,
-                'pit': int(pit),
-                'material': material,
-                'peso': peso,
-                'puerto_id': puerto,
-                'fecha_hora': fecha_hora,
-                'usuario_id': int(usuario_id),
-                'usuario': "",
-            }
+            # Agrupar el último registro por transacción (primer aparición al iterar cortes ordenados desc)
+            per_tran: dict[int, object] = {}
+            for corte in cortes:
+                try:
+                    trans_attr = getattr(corte, 'transaccion', None)
+                    # convertir transaccion a entero seguro (si es None, usar 0)
+                    try:
+                        tkey = int(trans_attr) if trans_attr is not None else 0
+                    except Exception:
+                        tkey = 0
+                    if tkey not in per_tran:
+                        per_tran[tkey] = corte
+                except Exception:
+                    # Ignorar cortes mal formados
+                    continue
 
-            response_item = VPesadasAcumResponse(**resp_data)
-            return [response_item]
+            # Construir la lista de respuestas: una entrada por cada transacción encontrada
+            response: List[VPesadasAcumResponse] = []
+
+            for tkey, corte in per_tran.items():
+                try:
+                    pit = getattr(corte, 'pit', None) or 0
+                    material = getattr(corte, 'material', None) or ""
+                    peso_val = getattr(corte, 'peso', None)
+                    puerto = getattr(corte, 'puerto_id', None) or puerto_id
+                    fecha_hora = getattr(corte, 'fecha_hora', None) or datetime.now()
+                    usuario_id = getattr(corte, 'usuario_id', None) or 0
+                    usuario = getattr(corte, 'usuario', None) or ""
+
+                    # El campo 'consecutivo' en pesadas_corte ya contiene el viaje_id cuando se creó
+                    consecutivo = getattr(corte, 'consecutivo', None) or 0
+
+                    # Solo la transacción que coincide con la última pesada global mantiene su peso real
+                    if transacion_con_peso is not None and int(tkey) == int(transacion_con_peso):
+                        try:
+                            peso = Decimal(peso_val) if peso_val is not None else Decimal('0')
+                        except Exception:
+                            peso = Decimal('0')
+                    else:
+                        peso = Decimal('0')
+
+                    resp = VPesadasAcumResponse(
+                        referencia=referencia_final,
+                        consecutivo=int(consecutivo),
+                        transaccion= 0,
+                        pit=int(pit),
+                        material=material,
+                        peso=peso,
+                        puerto_id=puerto,
+                        fecha_hora=fecha_hora,
+                        usuario_id=int(usuario_id),
+                        usuario=usuario,
+                    )
+                    response.append(resp)
+                except Exception as e_map:
+                    log.error(f"Error mapeando pesadas_corte a VPesadasAcumResponse en envio final: {e_map} - corte: {corte}", exc_info=True)
+
+            if not response:
+                raise EntityNotFoundException("No hay pesadas por transacción encontradas para el envío final.")
+
+            return response
 
         except EntityNotFoundException:
             raise

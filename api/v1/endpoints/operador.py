@@ -7,19 +7,19 @@ from datetime import datetime
 from core.enums.user_role_enum import UserRoleEnum
 from core.exceptions.entity_exceptions import EntityNotFoundException
 from services.auth_service import AuthService
-from core.di.service_injection import get_viajes_service, get_pesadas_service, get_transacciones_service, get_bls_service
+from core.di.service_injection import get_viajes_service, get_pesadas_service
 from utils.response_util import ResponseUtil
 from services.viajes_service import ViajesService
 from services.pesadas_service import PesadasService
-from services.transacciones_service import TransaccionesService
-from services.bls_service import BlsService
 from schemas.pesadas_schema import VPesadasAcumResponse
-from schemas.response_models import CreateResponse, ErrorResponse, ValidationErrorResponse, UpdateResponse, EndBuqueResponse
+from schemas.response_models import CreateResponse, ErrorResponse, ValidationErrorResponse, UpdateResponse
 from schemas.viajes_schema import (
     ViajeBuqueExtCreate,
     ViajeCamionExtCreate
 )
 from schemas.bls_schema import BlsExtCreate
+
+from core.exceptions.base_exception import BasedException
 
 from utils.logger_util import LoggerUtil
 log = LoggerUtil()
@@ -393,11 +393,31 @@ async def get_acum_pesadas(
                  status.HTTP_500_INTERNAL_SERVER_ERROR: {"model": ErrorResponse},
              })
 async def envio_final(
+        puerto_id: str,
         service: PesadasService = Depends(get_pesadas_service),
-        puerto_id: str = None):
+        viajes_service: ViajesService = Depends(get_viajes_service),
+        notify: bool = True):
     try:
         pesadas = await service.get_envio_final(puerto_id=puerto_id)
         log.info(f"EnvioFinal: consulta de pesadas para flota {puerto_id} realizada exitosamente.")
+
+        # Enviar la lista a la API externa si se solicita
+        if notify and pesadas:
+            try:
+                await viajes_service.send_envio_final_external(puerto_id, pesadas)
+                log.info(f"EnvioFinal: notificación externa enviada para {puerto_id}")
+            except Exception as e_send:
+                # Manejar BasedException explícitamente para mantener compatibilidad con el flujo anterior
+                try:
+                    from core.exceptions.base_exception import BasedException as _BasedException
+                except Exception:
+                    _BasedException = None
+                if _BasedException is not None and isinstance(e_send, _BasedException):
+                    log.error(f"EnvioFinal: fallo al notificar externamente para {puerto_id}: {e_send}")
+                    raise
+                log.error(f"EnvioFinal: error inesperado al notificar externamente para {puerto_id}: {e_send}")
+                raise
+
         return pesadas
 
     except HTTPException as http_exc:
@@ -410,6 +430,52 @@ async def envio_final(
         raise e
     except Exception as e:
         log.error(f"EnvioFinal: Error al consultar pesadas de flota {puerto_id}: {e}")
+        return response_json(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            message=str(e)
+        )
+
+@router.post("/envio-final/{puerto_id}/notify",
+             status_code=status.HTTP_200_OK,
+             summary="Notificar Envio Final a API externa",
+             description="Obtiene la lista de envio final y la notifica a la API externa. mode='auto' usa la configuración TG_API_ACCEPTS_LIST; 'list' fuerza envío único con lista; 'single' envía item-por-item.",
+             responses={
+                 status.HTTP_400_BAD_REQUEST: {"model": ErrorResponse},
+                 status.HTTP_424_FAILED_DEPENDENCY: {"model": ErrorResponse},
+                 status.HTTP_500_INTERNAL_SERVER_ERROR: {"model": ErrorResponse},
+             })
+async def envio_final_notify(
+        puerto_id: str,
+        mode: str = 'auto',
+        service: PesadasService = Depends(get_pesadas_service),
+        viajes_service: ViajesService = Depends(get_viajes_service)):
+    try:
+        pesadas = await service.get_envio_final(puerto_id=puerto_id)
+        log.info(f"EnvioFinal notify: obtenida lista para {puerto_id} con {len(pesadas)} items")
+
+        if mode not in ('auto', 'list', 'single'):
+            return response_json(status_code=status.HTTP_400_BAD_REQUEST, message="mode inválido. use 'auto'|'list'|'single'")
+
+        if mode == 'auto':
+            external_accepts_list = None
+        elif mode == 'list':
+            external_accepts_list = True
+        else:
+            external_accepts_list = False
+
+        await viajes_service.send_envio_final_external(puerto_id, pesadas, external_accepts_list=external_accepts_list)
+        return response_json(status_code=status.HTTP_200_OK, message="Notificación enviada")
+
+    except HTTPException as http_exc:
+        log.error(f"EnvioFinal notify: consulta de flota {puerto_id} no pudo realizarse: {http_exc.detail}")
+        return response_json(
+            status_code=http_exc.status_code,
+            message=http_exc.detail
+        )
+    except EntityNotFoundException as e:
+        raise e
+    except Exception as e:
+        log.error(f"EnvioFinal notify: Error al notificar pesadas de flota {puerto_id}: {e}")
         return response_json(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             message=str(e)
