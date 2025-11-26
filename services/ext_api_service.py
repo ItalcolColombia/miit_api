@@ -9,7 +9,7 @@ from fastapi import status
 from httpx import Timeout
 
 from core.config.external_api import get_token
-from core.exceptions.entity_exceptions import BasedException
+from core.exceptions.base_exception import BasedException
 from utils.any_utils import AnyUtils
 from utils.logger_util import LoggerUtil
 
@@ -72,15 +72,16 @@ class ExtApiService:
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
 
-    async def post(self, data: Dict[str, Any], url: str) -> Dict[str, Any]:
+    async def post(self, data: Dict[str, Any], url: str, extra_headers: Optional[Dict[str, str]] = None) -> Dict[str, Any]:
         """Send a generic notification to an external API via a POST request.
 
-        Sends the provided notification data in a POST request to the external API, using the
-        injected JWT token for authentication.
+        Now accepts optional extra_headers which will be merged with the default headers
+        (Authorization, Content-Type, X-Request-Id).
 
         Args:
             data (Dict[str, Any]): A dictionary containing the notification data to send.
             url (str): The URL to send the data to.
+            extra_headers (Optional[Dict[str, str]]): Optional additional headers to include.
 
         Returns:
             Dict[str, Any]: The response from the external API.
@@ -110,6 +111,11 @@ class ExtApiService:
                 "Authorization": f"Bearer {jwt_token}",
                 "Content-Type": "application/json"
             }
+
+            # Merge extra headers if provided
+            if extra_headers:
+                # avoid overwriting Authorization unless explicitly given
+                headers.update(extra_headers)
 
             # Prepare body bytes reliably
             try:
@@ -186,7 +192,8 @@ class ExtApiService:
                 status_code=status.HTTP_503_SERVICE_UNAVAILABLE
             )
         except Exception as e:
-            log.error(f"Error inesperado al enviar notificación: {str(e)}",)
+            log.error(f"Error inesperado al enviar notificación: {str(e)}",
+            )
             raise BasedException(
                 message=f"Error inesperado al enviar la notificación: {str(e)}",
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR

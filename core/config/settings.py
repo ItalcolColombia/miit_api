@@ -56,7 +56,7 @@ class Settings(BaseSettings):
     TG_API_URL:str = "http://turbograneles-puertoantioquia-424798204.us-east-1.elb.amazonaws.com"
     TG_API_USER:str = "daniel.pacheco@metalteco.com"
     TG_API_PASS:str ="Passw0rd_metalteco"
-    TG_API_ACCEPTS_LIST: bool = True
+    TG_API_ACCEPTS_LIST: bool = False
 
 
     class Config:

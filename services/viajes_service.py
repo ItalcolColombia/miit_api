@@ -34,6 +34,9 @@ from utils.logger_util import LoggerUtil
 
 log = LoggerUtil()
 
+# Referencia para evitar advertencias de import no usado
+_TZ = timezone
+
 class ViajesService:
 
     def __init__(self, viajes_repository: ViajesRepository, mat_service : MaterialesService, flotas_service : FlotasService, feedback_service : ExtApiService, transacciones_service : TransaccionesService, bl_service : BlsService, client_service : ClientesService) -> None:
@@ -673,13 +676,14 @@ class ViajesService:
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
 
-    async def send_envio_final_external(self, voyage: str, envio_list: list, external_accepts_list: Optional[bool] = None) -> None:
+    async def send_envio_final_external(self, voyage: str, envio_list: list, external_accepts_list: Optional[bool] = None, send_last_as_object: Optional[bool] = True) -> None:
         """
         Envía la lista de 'envio final' a la API externa en el endpoint /api/v1/Metalsoft/EnvioFinal.
 
         - voyage: puerto_id del viaje
         - envio_list: lista de objetos que siguen la forma de VPesadasAcumResponse (o dicts compatibles)
         - external_accepts_list: si None, se consulta get_settings().TG_API_ACCEPTS_LIST; si False, se enviará un POST por cada elemento.
+        - send_last_as_object: cuando True, se enviará únicamente el último registro (por fecha_hora) como un único objeto (no lista). Por defecto True (nuevo comportamiento).
         """
         try:
             from core.config.settings import get_settings
@@ -688,6 +692,8 @@ class ViajesService:
             from datetime import datetime, timezone
             import asyncio
             import httpx
+            import uuid
+            import time
 
             settings = get_settings()
             if external_accepts_list is None:
@@ -742,11 +748,39 @@ class ViajesService:
 
             endpoint = f"{settings.TG_API_URL}/api/v1/Metalsoft/EnvioFinal"
 
+            # Si se solicita enviar solo la última pesada como objeto, elegir el registro con fecha_hora más reciente
+            if send_last_as_object:
+                if not payloads:
+                    raise BasedException(message="No hay registros para enviar", status_code=status.HTTP_400_BAD_REQUEST)
+                # intentar determinar la última por fecha_hora
+                def _parse_date(v):
+                    try:
+                        if isinstance(v, str):
+                            return datetime.fromisoformat(v.replace('Z', '+00:00'))
+                        return v
+                    except Exception:
+                        return datetime.min.replace(tzinfo=timezone.utc)
+
+                last_item = max(payloads, key=lambda x: _parse_date(x.get('fecha_hora')))
+                # preparar headers: Idempotency-Key y X-Correlation-Id
+                idempotency_key = f"{last_item.get('referencia') or ''}-{last_item.get('transaccion') or 0}"
+                correlation_id = str(uuid.uuid4())
+                headers = {"Idempotency-Key": idempotency_key, "X-Correlation-Id": correlation_id}
+
+                serialized = AnyUtils.serialize_data(last_item)
+                log.info(f"EnvioFinal - enviando última pesada como objeto para voyage {voyage} -> endpoint {endpoint} payload: {serialized} headers: {headers}")
+                await self.feedback_service.post(serialized, endpoint, extra_headers=headers)
+                return
+
             # Si la API acepta lista, enviar todo en una sola request (comportamiento actual)
             if external_accepts_list:
+                # headers para lista
+                correlation_id = str(uuid.uuid4())
+                idempotency_key = f"{voyage}-{int(time.time())}"
+                headers = {"Idempotency-Key": idempotency_key, "X-Correlation-Id": correlation_id}
                 serialized = AnyUtils.serialize_data(payloads)
-                log.info(f"EnvioFinal - notificación externa para voyage {voyage} -> endpoint {endpoint} payload: {serialized}")
-                await self.feedback_service.post(serialized, endpoint)
+                log.info(f"EnvioFinal - notificación externa para voyage {voyage} -> endpoint {endpoint} payload: {serialized} headers: {headers}")
+                await self.feedback_service.post(serialized, endpoint, extra_headers=headers)
                 return
 
             # Si no acepta lista: enviar un POST por cada item con concurrencia y retries
@@ -758,16 +792,17 @@ class ViajesService:
             async def _post_single(p):
                 # Generar idempotency key por item
                 idempotency_key = f"{p.get('referencia') or ''}-{p.get('transaccion') or 0}"
+                correlation_id = str(uuid.uuid4())
                 # serializar
                 serialized = AnyUtils.serialize_data(p)
-                headers = {"Idempotency-Key": idempotency_key}
+                headers = {"Idempotency-Key": idempotency_key, "X-Correlation-Id": correlation_id}
 
                 last_exc = None
                 for attempt in range(1, max_retries + 1):
                     try:
                         async with sem:
-                            # feedback_service.post firma: (data, url)
-                            await self.feedback_service.post(serialized, endpoint)
+                            # feedback_service.post firma: (data, url, extra_headers)
+                            await self.feedback_service.post(serialized, endpoint, extra_headers=headers)
                         return True
                     except httpx.HTTPStatusError as he:
                         last_exc = he

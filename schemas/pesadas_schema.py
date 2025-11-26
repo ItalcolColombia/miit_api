@@ -80,3 +80,9 @@ class VPesadasAcumResponse(BaseSchema):
 
     class Config:
         from_attributes = True
+
+class VPesadasEnvioResponse(VPesadasAcumResponse):
+    voyage: Optional[str] = None
+
+    class Config:
+        from_attributes = True
