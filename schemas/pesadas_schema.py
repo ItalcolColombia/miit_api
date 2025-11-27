@@ -1,7 +1,8 @@
-from pydantic import Field
 from datetime import datetime
 from decimal import Decimal
 from typing import Optional
+
+from pydantic import Field
 
 from schemas.base_schema import BaseSchema
 
@@ -76,6 +77,12 @@ class VPesadasAcumResponse(BaseSchema):
     usuario_id: int
     usuario:str
 
+
+    class Config:
+        from_attributes = True
+
+class VPesadasEnvioResponse(VPesadasAcumResponse):
+    voyage: Optional[str] = None
 
     class Config:
         from_attributes = True

@@ -1,9 +1,9 @@
 from datetime import datetime
+from typing import Optional, Dict, Any
 
 from pydantic import Field, ConfigDict
+
 from schemas.base_schema import BaseSchema
-from decimal import Decimal
-from typing import Optional, Dict, Any
 
 
 class LogsAuditoriaResponse(BaseSchema):

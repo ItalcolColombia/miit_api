@@ -4,10 +4,10 @@ from starlette import status
 
 from core.exceptions.base_exception import BasedException
 from core.exceptions.db_exception import DatabaseSQLAlchemyException
-from schemas.bls_schema import BlsResponse, BlsCreate, BlsUpdate, VBlsResponse
 from repositories.bls_repository import BlsRepository
-
+from schemas.bls_schema import BlsResponse, BlsCreate, BlsUpdate, VBlsResponse
 from utils.logger_util import LoggerUtil
+
 log = LoggerUtil()
 
 class BlsService:

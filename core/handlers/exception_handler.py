@@ -1,12 +1,9 @@
-from http import HTTPStatus
-
 from fastapi import HTTPException, Request, status
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from core.exceptions.base_exception import BasedException
-from schemas.response_models import ErrorResponse
 from utils.logger_util import LoggerUtil
 from utils.response_util import ResponseUtil
 

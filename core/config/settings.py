@@ -1,4 +1,5 @@
 from functools import lru_cache
+
 from pydantic_settings import BaseSettings
 
 
@@ -16,7 +17,7 @@ class Settings(BaseSettings):
     API_HOST: str = "0.0.0.0"
     API_PORT: int = "8000"
     API_V1_STR: str = "v1"
-    API_VERSION_NUM: str = "0.0.27"
+    API_VERSION_NUM: str = "0.0.28"
     API_LOG_LEVEL: str = "DEBUG"
     APP_LOG_DIR: str = "/var/www/metalteco/log/app_logs"
     ALLOWED_HOSTS: list[str] = ["*"]
@@ -55,6 +56,7 @@ class Settings(BaseSettings):
     TG_API_URL:str = "http://turbograneles-puertoantioquia-424798204.us-east-1.elb.amazonaws.com"
     TG_API_USER:str = "daniel.pacheco@metalteco.com"
     TG_API_PASS:str ="Passw0rd_metalteco"
+    TG_API_ACCEPTS_LIST: bool = False
 
 
     class Config:

@@ -1,11 +1,13 @@
 from typing import Optional
-from sqlalchemy.ext.asyncio import AsyncSession
+
 from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from core.contracts.auditor import Auditor
+from database.models import Clientes
 from repositories.base_repository import IRepository
 from schemas.clientes_schema import ClientesResponse
-from database.models import Clientes
+
 
 class ClientesRepository(IRepository[Clientes, ClientesResponse]):
     db: AsyncSession

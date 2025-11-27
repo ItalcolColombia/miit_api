@@ -1,14 +1,14 @@
 from typing import Optional
-from sqlalchemy.ext.asyncio import AsyncSession
+
+from fastapi import HTTPException, status
 from sqlalchemy import select
 from sqlalchemy.exc import ProgrammingError, SQLAlchemyError
-from fastapi import HTTPException, status
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from core.contracts.auditor import Auditor
+from database.models import Usuarios, VUsuariosRoles, VRolesPermisos
 from repositories.base_repository import IRepository
 from schemas.usuarios_schema import UsuariosResponse, VUsuariosRolResponse, VRolesPermResponse
-from database.models import Usuarios, VUsuariosRoles, VRolesPermisos
-
 from utils.logger_util import LoggerUtil
 
 log = LoggerUtil()

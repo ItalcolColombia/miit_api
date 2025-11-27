@@ -1,7 +1,6 @@
 # /src/core/exceptions/login_exception.py
 
 from fastapi import status
-from pycparser.c_ast import Default
 
 from core.exceptions.base_exception import BasedException
 

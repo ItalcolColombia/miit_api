@@ -1,6 +1,8 @@
 import time
+
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.responses import Response
+
 from utils.logger_util import LoggerUtil
 
 log = LoggerUtil()

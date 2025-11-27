@@ -1,14 +1,16 @@
-from sqlalchemy import func
-from sqlalchemy.ext.asyncio import AsyncSession
 from typing import Optional, TypeVar, Generic, List, Any, Dict
-from pydantic import BaseModel
-from sqlalchemy.future import select
-from fastapi_pagination.ext.sqlalchemy import paginate
+
 from fastapi_pagination import Page, Params
+from fastapi_pagination.ext.sqlalchemy import paginate
+from pydantic import BaseModel
+from sqlalchemy import func
 from sqlalchemy.exc import NoResultFound
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.future import select
+
+from core.config.context import current_user_id
 from core.contracts.auditor import Auditor
 from core.exceptions.entity_exceptions import EntityNotFoundException
-from core.config.context import current_user_id
 from schemas.logs_auditoria_schema import LogsAuditoriaCreate
 from utils.any_utils import AnyUtils
 

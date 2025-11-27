@@ -1,13 +1,13 @@
-from typing import List, Optional
-from fastapi import APIRouter, Depends, HTTPException, status, Query
-from fastapi_pagination import Page, Params
+from typing import List
+
+from fastapi import APIRouter, Depends, HTTPException, status
+
 from core.di.service_injection import get_user_service
 from core.enums.user_role_enum import UserRoleEnum
+from schemas.usuarios_schema import UsuarioCreate, UsuariosResponse, UsuarioUpdate, VUsuariosRolResponse
 from services.auth_service import AuthService
 from services.usuarios_service import UsuariosService
-from schemas.usuarios_schema import UsuarioCreate, UsuariosResponse, UsuarioUpdate, VUsuariosRolResponse
 from utils.response_util import ResponseUtil
-
 
 response_json = ResponseUtil().json_response
 router = APIRouter(prefix="/admin", tags=["Administrador"], dependencies=[Depends(AuthService.require_access(roles=[UserRoleEnum.SUPER_ADMINISTRATOR, UserRoleEnum.ADMINISTRADOR]))]) #

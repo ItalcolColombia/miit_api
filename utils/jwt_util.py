@@ -1,9 +1,10 @@
 
 from datetime import datetime, timedelta, timezone
 from typing import Optional
+
 import jwt
-from fastapi import HTTPException, Request, status
-from fastapi.security import HTTPBearer,HTTPAuthorizationCredentials
+from fastapi import Request, status
+from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from jwt.exceptions import (
     ExpiredSignatureError,
     InvalidKeyError,
@@ -14,8 +15,8 @@ from jwt.exceptions import (
     DecodeError,
 )
 
-from core.exceptions.base_exception import BasedException
 from core.config.settings import get_settings
+from core.exceptions.base_exception import BasedException
 from core.exceptions.jwt_exception import UnauthorizedToken
 from utils.logger_util import LoggerUtil
 

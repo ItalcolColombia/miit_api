@@ -1,11 +1,12 @@
 from typing import Optional
-from sqlalchemy.ext.asyncio import AsyncSession
+
 from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from core.contracts.auditor import Auditor
+from database.models import Flotas
 from repositories.base_repository import IRepository
 from schemas.flotas_schema import FlotasResponse
-from database.models import Flotas
 
 
 class FlotasRepository(IRepository[Flotas, FlotasResponse]):
