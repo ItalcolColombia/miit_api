@@ -20,6 +20,7 @@ from schemas.viajes_schema import (
 from schemas.bls_schema import BlsExtCreate
 
 from utils.logger_util import LoggerUtil
+from services.envio_final_service import prepare_and_notify_envio_final, notify_envio_final
 
 log = LoggerUtil()
 
@@ -353,6 +354,7 @@ async def out_camion(
         )
 
 @router.get("/pesadas-parciales/{puerto_id}",
+             status_code=status.HTTP_200_OK,
              summary="Obtener acumulado de pesadas",
              description="Evento realizado por el operador post petición de consulta recibida a través de la interfaz de PBCU.",
              response_model=List[VPesadasAcumResponse],
@@ -384,6 +386,7 @@ async def get_acum_pesadas(
         )
 
 @router.get("/envio-final/{puerto_id}",
+             status_code=status.HTTP_200_OK,
              summary="Envio final: obtener último corte de pesadas con marca F",
              description="Retorna el último corte registrado en pesadas_corte para el puerto indicado y añade la marca 'F' a la referencia.",
              response_model=VPesadasEnvioResponse,
@@ -400,51 +403,12 @@ async def envio_final(
         pesadas = await service.get_envio_final(puerto_id=puerto_id)
         log.info(f"EnvioFinal: consulta de pesadas para flota {puerto_id} realizada exitosamente.")
 
-        if not pesadas:
+        result = await prepare_and_notify_envio_final(puerto_id, pesadas, viajes_service, notify=notify)
+
+        if not result:
             return response_json(status_code=status.HTTP_404_NOT_FOUND, message="No se encontraron pesadas para el puerto especificado")
 
-        # seleccionar la última pesada por fecha_hora (maneja dicts o modelos)
-        def _get_date(item):
-            try:
-                if isinstance(item, dict):
-                    val = item.get('fecha_hora')
-                else:
-                    val = getattr(item, 'fecha_hora', None)
-                if isinstance(val, str):
-                    return datetime.fromisoformat(val.replace('Z', '+00:00'))
-                return val
-            except Exception:
-                return datetime.min
-
-        last = max(pesadas, key=_get_date)
-
-        # convertir a dict si es modelo
-        try:
-            last_obj = last.model_dump() if hasattr(last, 'model_dump') else (last.__dict__ if hasattr(last, '__dict__') else dict(last))
-        except Exception:
-            last_obj = last if isinstance(last, dict) else {}
-
-        # añadir el campo voyage para la respuesta y para el envío externo
-        last_obj['voyage'] = puerto_id
-
-        # Enviar notificación externa si se solicita (send_envio_final_external por defecto enviará sólo la última como objeto)
-        if notify:
-            try:
-                await viajes_service.send_envio_final_external(puerto_id, [last_obj])
-                log.info(f"EnvioFinal: notificación externa enviada para {puerto_id}")
-            except Exception as e_send:
-                try:
-                    from core.exceptions.base_exception import BasedException as _BasedException
-                except Exception:
-                    _BasedException = None
-                if _BasedException is not None and isinstance(e_send, _BasedException):
-                    log.error(f"EnvioFinal: fallo al notificar externamente para {puerto_id}: {e_send}")
-                    raise
-                log.error(f"EnvioFinal: error inesperado al notificar externamente para {puerto_id}: {e_send}")
-                raise
-
-        # retornar el último como modelo-compatible
-        return VPesadasEnvioResponse.model_validate(last_obj)
+        return result
 
     except HTTPException as http_exc:
         log.error(f"EnvioFinal: consulta de flota {puerto_id} no pudo realizarse: {http_exc.detail}")
@@ -479,24 +443,8 @@ async def envio_final_notify(
         pesadas = await service.get_envio_final(puerto_id=puerto_id)
         log.info(f"EnvioFinal notify: obtenida lista para {puerto_id} con {len(pesadas)} items")
 
-        if mode not in ('auto', 'list', 'single', 'last'):
-            return response_json(status_code=status.HTTP_400_BAD_REQUEST, message="mode inválido. use 'auto'|'list'|'single'|'last'")
+        await notify_envio_final(puerto_id, pesadas, viajes_service, mode=mode)
 
-        if mode == 'auto':
-            external_accepts_list = None
-            send_last_as_object = False
-        elif mode == 'list':
-            external_accepts_list = True
-            send_last_as_object = False
-        elif mode == 'single':
-            external_accepts_list = False
-            send_last_as_object = False
-        else:
-            # 'last'
-            external_accepts_list = None
-            send_last_as_object = True
-
-        await viajes_service.send_envio_final_external(puerto_id, pesadas, external_accepts_list=external_accepts_list, send_last_as_object=send_last_as_object)
         return response_json(status_code=status.HTTP_200_OK, message="Notificación enviada")
 
     except HTTPException as http_exc:

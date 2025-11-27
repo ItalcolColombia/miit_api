@@ -14,7 +14,7 @@ log = LoggerUtil()
 
 response_json = ResponseUtil.json_response
 
-@router.post("", status_code=status.HTTP_201_CREATED,
+@router.post("", status_code=status.HTTP_200_OK,
              summary="Iniciar sesión",
              description="Mécanismo de autenticación empleado para obtener acceso a los recursos protegidos.",
              response_model=Token,
@@ -30,7 +30,7 @@ async def login(
         token = await auth_service.login(login_data.nick_name, login_data.clave)
         log.info(f"Login exitoso de usuario {login_data.nick_name}")
         return response_json(
-            status_code=status.HTTP_201_CREATED,
+            status_code=status.HTTP_200_OK,
             message=f"Inicio de sesión exitoso",
             token=token
         )
@@ -49,7 +49,7 @@ async def login(
         )
 
 @router.post("/token/refresh",
-             status_code=status.HTTP_201_CREATED,
+             status_code=status.HTTP_200_OK,
              summary="Refrescar sesión",
              description="Mécanismo de autenticación empleado para renovar el acceso a los recursos protegidos.",
              response_model=Token,
@@ -74,7 +74,7 @@ async def refresh(
 
         log.info(f"Refrescado exitoso de token para usuario {payload.get("sub")}")
         return response_json(
-            status_code=status.HTTP_201_CREATED,
+            status_code=status.HTTP_200_OK,
             message=f"Refresco de sesión exitoso",
             token=token_data
         )

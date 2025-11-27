@@ -7,6 +7,8 @@ import bcrypt
 import orjson
 from sqlalchemy.orm.base import class_mapper
 
+from utils.time_util import format_iso_bogota
+
 
 class AnyUtils:
 
@@ -126,7 +128,7 @@ class AnyUtils:
                 if hasattr(obj, column):
                     value = getattr(obj, column)
                     if isinstance(value, datetime):
-                        result[column] = value.isoformat()
+                        result[column] = format_iso_bogota(value)
                     elif isinstance(value, Decimal):
                         result[column] = str(value)
                     elif isinstance(value, (dict, list)):
@@ -145,7 +147,7 @@ class AnyUtils:
 
         def convert(obj):
             if isinstance(obj, datetime):
-                return obj.isoformat()  # Convert datetime to ISO format
+                return format_iso_bogota(obj)
             if isinstance(obj, Decimal):
                 return str(obj)  # Convert Decimal to string to preserve precision
             raise TypeError(f"Object of type {type(obj)} is not JSON serializable")
@@ -173,7 +175,7 @@ class AnyUtils:
             result = {}
             for key, value in data.items():
                 if isinstance(value, datetime):
-                    result[key] = value.isoformat()  # Convert datetime to ISO string
+                    result[key] = format_iso_bogota(value)  # Convert datetime to ISO string
                 elif isinstance(value, Decimal):
                     result[key] = str(value)  # Convert Decimal to string
                 elif isinstance(value, (dict, list)):

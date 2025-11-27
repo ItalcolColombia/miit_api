@@ -13,9 +13,26 @@ from core.contracts.auditor import Auditor
 from core.exceptions.entity_exceptions import EntityNotFoundException
 from schemas.logs_auditoria_schema import LogsAuditoriaCreate
 from utils.any_utils import AnyUtils
+from utils.time_util import ensure_aware_utc
 
 ModelType = TypeVar("ModelType")
 SchemaType = TypeVar("SchemaType")
+
+
+def _normalize_datetimes(data: Dict[str, Any]) -> Dict[str, Any]:
+    """Recorre el dict y convierte objetos datetime a UTC-aware."""
+    normalized = {}
+    for k, v in data.items():
+        try:
+            if hasattr(v, 'tzinfo') or getattr(v, '__class__', None).__name__ == 'datetime':
+                # Evita importar datetime en este módulo; delega la conversión
+                normalized[k] = ensure_aware_utc(v)
+            else:
+                normalized[k] = v
+        except Exception:
+            normalized[k] = v
+    return normalized
+
 
 class IRepository(Generic[ModelType, SchemaType]):
     def __init__(self, model: type[ModelType], schema: type[SchemaType], db: AsyncSession, auditor: Auditor) -> None:
@@ -84,16 +101,15 @@ class IRepository(Generic[ModelType, SchemaType]):
         Create a new entity in the database and log the action in LogsAuditoria.
 
         Args:
-            obj: Pydantic model containing the data to create the entity.
+          obj: Pydantic model containing the data to create the entity.
 
         Returns:
-            BaseModel: The created entity, validated against the schema.
+          BaseModel: The created entity, validated against the schema.
 
         Raises:
-            ValueError: If user_id is None and the model requires it.
+          ValueError: If user_id is None and the model requires it.
         """
-
-        db_obj = self.model(**obj.model_dump())  # Assuming obj is a BaseModel with `model_dump`
+        db_obj = self.model(**_normalize_datetimes(obj.model_dump()))  # Normalize datetimes before creating
 
         # Explicitly set usuario_id column
         if hasattr(self.model, 'usuario_id'):
@@ -137,7 +153,8 @@ class IRepository(Generic[ModelType, SchemaType]):
 
         db_objects = []
         for obj in objects:
-            db_obj = self.model(**obj.model_dump())
+            normalized = _normalize_datetimes(obj.model_dump())
+            db_obj = self.model(**normalized)
             if hasattr(self.model, 'usuario_id'):
                 setattr(db_obj, 'usuario_id', current_user_id.get())
             db_objects.append(db_obj)
@@ -187,7 +204,8 @@ class IRepository(Generic[ModelType, SchemaType]):
             }
 
             # Update fields
-            for key, value in update_data.items():
+            normalized_update = _normalize_datetimes(update_data)
+            for key, value in normalized_update.items():
                 # Hard-coding value encryption when is update password
                 if key == 'clave' and value:
                     value = AnyUtils.generate_password_hash(value)

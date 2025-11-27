@@ -6,6 +6,8 @@ from typing import Optional, Dict, Union, Any
 from fastapi.encoders import jsonable_encoder
 from fastapi.responses import JSONResponse
 
+from utils.any_utils import AnyUtils
+
 
 class ResponseUtil:
     """
@@ -17,6 +19,55 @@ class ResponseUtil:
     Class Args:
         None
     """
+
+    @staticmethod
+    def _prepare_data(data: Any) -> Any:
+        """Normalize response data converting datetimes to America/Bogota ISO strings.
+
+        Supports dicts, lists, Pydantic models (model_dump), and SQLAlchemy ORM objects.
+        """
+        if data is None:
+            return None
+
+        # Pydantic model
+        if hasattr(data, 'model_dump'):
+            try:
+                dumped = data.model_dump()
+                return AnyUtils.serialize_data(dumped)
+            except Exception:
+                pass
+
+        # SQLAlchemy ORM object
+        try:
+            # AnyUtils.serialize_orm_object handles None and ORM objects
+            orm_serialized = AnyUtils.serialize_orm_object(data)
+            if orm_serialized is not None:
+                return orm_serialized
+        except Exception:
+            pass
+
+        # List of items
+        if isinstance(data, list):
+            processed = []
+            for item in data:
+                if hasattr(item, 'model_dump'):
+                    processed.append(AnyUtils.serialize_data(item.model_dump()))
+                else:
+                    orm_item = AnyUtils.serialize_orm_object(item)
+                    if orm_item is not None:
+                        processed.append(orm_item)
+                    elif isinstance(item, dict):
+                        processed.append(AnyUtils.serialize_data(item))
+                    else:
+                        processed.append(item)
+            return processed
+
+        # Dict-like
+        if isinstance(data, dict):
+            return AnyUtils.serialize_data(data)
+
+        # Fallback: try to serialize primitives or unknown objects via jsonable_encoder later
+        return data
 
     @staticmethod
     def json_response(
@@ -56,7 +107,7 @@ class ResponseUtil:
             response_content["token"] = token
 
         if data is not None:
-            response_content["data"] = data
+            response_content["data"] = ResponseUtil._prepare_data(data)
 
         # Ensure content is JSON serializable (datetimes, decimals, pydantic models, etc.)
         encoded = jsonable_encoder(response_content)
