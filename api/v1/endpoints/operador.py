@@ -262,6 +262,7 @@ async def create_camion(
         return response_json(
             status_code=status.HTTP_201_CREATED,
             message=f"Registró de cita de camión realizada exitosamente",
+            data={"cargoPit": 1} # Valor por defecto del pit
         )
 
     except HTTPException as http_exc:

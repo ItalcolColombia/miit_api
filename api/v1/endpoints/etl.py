@@ -310,10 +310,10 @@ async def create_pesada(
 ):
     log.info(f"Payload recibido: Pesada {pesada} - Crear")
     try:
-       await service.create_pesada_if_not_exists(pesada)
+       await service.create_pesada(pesada)
        return response_json(
             status_code=status.HTTP_201_CREATED,
-            message="registro exitoso."
+            message="Registro exitoso."
        )
 
     except HTTPException as http_exc:
