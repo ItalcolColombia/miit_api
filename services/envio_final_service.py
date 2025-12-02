@@ -1,9 +1,10 @@
 from datetime import datetime
 from typing import Any, List, Optional
 
-from utils.logger_util import LoggerUtil
-from schemas.pesadas_schema import VPesadasEnvioResponse
 from fastapi import HTTPException, status
+
+from schemas.pesadas_schema import VPesadasEnvioResponse
+from utils.logger_util import LoggerUtil
 
 log = LoggerUtil()
 

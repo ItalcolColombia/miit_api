@@ -7,7 +7,7 @@ import bcrypt
 import orjson
 from sqlalchemy.orm.base import class_mapper
 
-from utils.time_util import format_iso_bogota
+from utils.time_util import format_iso_bogota, now_local
 
 
 class AnyUtils:
@@ -31,14 +31,11 @@ class AnyUtils:
         This method generates a timestamp formatted as `%y-%m-%d %H:%M:%S`
         for database storage.
 
-        Args:
-            None
-
         Returns:
             str: The formatted timestamp.
         """
 
-        now = datetime.now()
+        now = now_local()
         formatted_datetime = now.strftime("%d-%m-%Y %H:%M:%S")
         return formatted_datetime
 
@@ -50,14 +47,11 @@ class AnyUtils:
         This method generates a unique identifier using the current date-time
         and a randomly generated hexadecimal value.
 
-        Args:
-            None
-
         Returns:
             str: The generated unique ID.
         """
 
-        now = datetime.now()
+        now = now_local()
         sorted_value = random.randint(0, 0xFFFF)
         hex_value = f"{sorted_value:04X}"
         date_time_now = now.strftime("%d%m%Y%H%M%S")

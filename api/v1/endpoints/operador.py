@@ -4,23 +4,23 @@ from typing import List
 
 from fastapi import APIRouter, Depends, HTTPException, status
 
+from core.di.service_injection import get_viajes_service, get_pesadas_service
 from core.enums.user_role_enum import UserRoleEnum
 from core.exceptions.entity_exceptions import EntityNotFoundException
-from core.di.service_injection import get_viajes_service, get_pesadas_service
-from services.auth_service import AuthService
-from services.viajes_service import ViajesService
-from services.pesadas_service import PesadasService
-from utils.response_util import ResponseUtil
+from schemas.bls_schema import BlsExtCreate
 from schemas.pesadas_schema import VPesadasAcumResponse, VPesadasEnvioResponse
-from schemas.response_models import CreateResponse, ErrorResponse, ValidationErrorResponse, UpdateResponse
+from schemas.response_models import CreateResponse, ErrorResponse, ValidationErrorResponse, UpdateResponse, \
+    CamionIngresoResponse, CamionRegistroResponse
 from schemas.viajes_schema import (
     ViajeBuqueExtCreate,
     ViajeCamionExtCreate
 )
-from schemas.bls_schema import BlsExtCreate
-
-from utils.logger_util import LoggerUtil
+from services.auth_service import AuthService
 from services.envio_final_service import prepare_and_notify_envio_final, notify_envio_final
+from services.pesadas_service import PesadasService
+from services.viajes_service import ViajesService
+from utils.logger_util import LoggerUtil
+from utils.response_util import ResponseUtil
 
 log = LoggerUtil()
 
@@ -246,8 +246,9 @@ async def load_release_operador(
              status_code=status.HTTP_201_CREATED,
              summary="Registrar camión",
              description="Evento realizado por el operador con la cita de enturnamiento notificada a través de la interfaz de PBCU.",
-             response_model=CreateResponse,
+             response_model=CamionRegistroResponse,
              responses={
+                 status.HTTP_201_CREATED: {"model": CamionRegistroResponse},
                  status.HTTP_400_BAD_REQUEST: {"model": ErrorResponse},
                  status.HTTP_422_UNPROCESSABLE_ENTITY: {"model": ValidationErrorResponse},
              })
@@ -282,8 +283,9 @@ async def create_camion(
             status_code=status.HTTP_200_OK,
             summary="Modificar cita del camion para actualizar ingreso",
             description="Evento realizado por el operador post confirmación del ingreso del camión a báscula a través de la interfaz de PBCU.",
-            response_model=UpdateResponse,
+            response_model=CamionIngresoResponse,
             responses={
+                status.HTTP_200_OK: {"model": CamionIngresoResponse},
                 status.HTTP_400_BAD_REQUEST: {"model": ErrorResponse},
                 status.HTTP_422_UNPROCESSABLE_ENTITY: {"model": ValidationErrorResponse},
             })

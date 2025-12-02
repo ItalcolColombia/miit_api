@@ -690,6 +690,7 @@ class ViajesService:
             from utils.any_utils import AnyUtils
             from decimal import Decimal
             from datetime import datetime, timezone
+            from utils.time_util import now_local
             import asyncio
             import httpx
             import uuid
@@ -725,7 +726,8 @@ class ViajesService:
 
                 fecha = it.get('fecha_hora', None)
                 if fecha is None:
-                    fecha_iso = datetime.now(timezone.utc).isoformat()
+                    # Use the container local timezone (configured via TZ) for timestamps
+                    fecha_iso = now_local().isoformat()
                 else:
                     try:
                         fecha_iso = fecha if isinstance(fecha, str) else (fecha.isoformat() if hasattr(fecha, 'isoformat') else str(fecha))
@@ -754,12 +756,17 @@ class ViajesService:
                     raise BasedException(message="No hay registros para enviar", status_code=status.HTTP_400_BAD_REQUEST)
                 # intentar determinar la última por fecha_hora
                 def _parse_date(v):
-                    try:
+                     try:
                         if isinstance(v, str):
-                            return datetime.fromisoformat(v.replace('Z', '+00:00'))
+                            # Try parsing aware ISO strings first; if missing tz info, assume local
+                            try:
+                                return datetime.fromisoformat(v)
+                            except Exception:
+                                # Fallback: treat strings ending with Z as UTC
+                                return datetime.fromisoformat(v.replace('Z', '+00:00'))
                         return v
-                    except Exception:
-                        return datetime.min.replace(tzinfo=timezone.utc)
+                     except Exception:
+                         return datetime.min.replace(tzinfo=timezone.utc)
 
                 last_item = max(payloads, key=lambda x: _parse_date(x.get('fecha_hora')))
                 # preparar headers: Idempotency-Key y X-Correlation-Id

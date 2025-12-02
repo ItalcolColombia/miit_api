@@ -1,4 +1,3 @@
-from datetime import datetime
 from typing import List, Optional
 
 from fastapi_pagination import Page, Params
@@ -13,6 +12,7 @@ from schemas.transacciones_schema import TransaccionResponse, TransaccionCreate,
 from services.movimientos_service import MovimientosService
 from services.pesadas_service import PesadasService
 from utils.logger_util import LoggerUtil
+from utils.time_util import now_local
 
 log = LoggerUtil()
 
@@ -253,7 +253,7 @@ class TransaccionesService:
 
             update_fields = {
                 "estado": "Finalizada",
-                "fecha_fin": datetime.now(),
+                "fecha_fin": now_local(),
                 "peso_real" : pesada.peso,
             }
 

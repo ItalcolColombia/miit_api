@@ -13,7 +13,7 @@ class Almacenamientos(Base):
     nombre = Column(String(50), unique=True, index=True)
     capacidad = Column(Numeric(10, 2), nullable=False)
     poli_material = Column(Boolean, nullable=False)
-    fecha_hora = Column(DateTime(timezone=True), server_default=func.timezone('UTC', func.now()), onupdate=func.timezone('UTC', func.now()))
+    fecha_hora = Column(DateTime(timezone=True), server_default=func.timezone('America/Bogota', func.now()), onupdate=func.timezone('America/Bogota', func.now()))
     usuario_id = Column(Integer, nullable=True)
     # Definición de relacion 1:M
     transacciones = relationship("Transacciones", backref="Almacenamientos")
@@ -25,7 +25,7 @@ AlmacenamientosMateriales = Table("almacenamientos_materiales", Base.metadata,
     Column("almacenamiento_id", ForeignKey("almacenamientos.id"), primary_key=True),
     Column("material_id", ForeignKey("materiales.id"), primary_key=True),
     Column("saldo", Numeric(10,2), nullable=False),
-    Column("fecha_hora", DateTime(timezone=True),  server_default=func.timezone('UTC', func.now()), onupdate=func.timezone('UTC', func.now())),
+    Column("fecha_hora", DateTime(timezone=True),  server_default=func.timezone('America/Bogota', func.now()), onupdate=func.timezone('America/Bogota', func.now())),
     Column("usuario_id", ForeignKey("usuarios.id"), primary_key=True),
 )
 
@@ -41,7 +41,7 @@ class Bls(Base):
     cargue_directo = Column(Boolean, nullable=False, default=0)
     estado_puerto = Column(Boolean, nullable=False, default=0)
     estado_operador = Column(Boolean, nullable=False, default=0)
-    fecha_hora = Column(DateTime(timezone=True), server_default=func.timezone('UTC', func.now()), onupdate=func.timezone('UTC', func.now()))
+    fecha_hora = Column(DateTime(timezone=True), server_default=func.timezone('America/Bogota', func.now()), onupdate=func.timezone('America/Bogota', func.now()))
     usuario_id = Column(Integer, nullable=True)
 
     # Define relationships
@@ -63,7 +63,7 @@ class Clientes(Base):
     primer_apellido = Column(String(30))
     segundo_apellido = Column(String(30))
     id_actividad = Column(Integer)
-    fecha_hora = Column(DateTime(timezone=True), server_default=func.timezone('UTC', func.now()), onupdate=func.timezone('UTC', func.now()))
+    fecha_hora = Column(DateTime(timezone=True), server_default=func.timezone('America/Bogota', func.now()), onupdate=func.timezone('America/Bogota', func.now()))
     usuario_id = Column(Integer, nullable=True)
 
 
@@ -73,7 +73,7 @@ class Flotas(Base):
     tipo = Column(String(6))
     referencia = Column(String(300), unique=True, index=True)
     puntos = Column(Integer, nullable=True)
-    fecha_hora = Column(DateTime(timezone=True), server_default=func.timezone('UTC', func.now()), onupdate=func.timezone('UTC', func.now()))
+    fecha_hora = Column(DateTime(timezone=True), server_default=func.timezone('America/Bogota', func.now()), onupdate=func.timezone('America/Bogota', func.now()))
     usuario_id = Column(Integer, nullable=True)
     estado_puerto = Column(Boolean)
     estado_operador = Column(Boolean)
@@ -92,7 +92,7 @@ class Viajes(Base):
     material_id = Column(Integer,nullable=True)
     viaje_origen = Column(String(300),nullable=True)
     despacho_directo = Column(Boolean, nullable=True)
-    fecha_hora = Column(DateTime(timezone=True), server_default=func.timezone('UTC', func.now()), onupdate=func.timezone('UTC', func.now()))
+    fecha_hora = Column(DateTime(timezone=True), server_default=func.timezone('America/Bogota', func.now()), onupdate=func.timezone('America/Bogota', func.now()))
     usuario_id = Column(Integer, nullable=True)
     transacciones = relationship("Transacciones", backref="Viajes")
 
@@ -105,7 +105,7 @@ class Materiales(Base):
     codigo = Column(String(20), nullable=False)
     tipo = Column(String(50), nullable=False)
     densidad = Column(Numeric(4,2))
-    fecha_hora = Column(DateTime(timezone=True), server_default=func.timezone('UTC', func.now()), onupdate=func.timezone('UTC', func.now()))
+    fecha_hora = Column(DateTime(timezone=True), server_default=func.timezone('America/Bogota', func.now()), onupdate=func.timezone('America/Bogota', func.now()))
     usuario_id = Column(Integer, nullable=True)
     # Definición de relaciones 1:M
     transacciones = relationship("Transacciones", backref="Materiales")
@@ -120,7 +120,7 @@ class Roles(Base):
     id = Column(Integer, primary_key=True, index=True)
     nombre = Column(String, unique=True, index=True)
     estado = Column(Boolean)
-    fecha_hora = Column(DateTime(timezone=True), server_default=func.timezone('UTC', func.now()), onupdate=func.timezone('UTC', func.now()))
+    fecha_hora = Column(DateTime(timezone=True), server_default=func.timezone('America/Bogota', func.now()), onupdate=func.timezone('America/Bogota', func.now()))
     usuario_id = Column(Integer, nullable=True)
     usuarios = relationship("Usuarios", back_populates ="rol")
     permisos = relationship('Permisos', secondary='roles_permisos', back_populates='roles')
@@ -135,7 +135,7 @@ class Permisos(Base):
     __tablename__ = "permisos"
     id = Column(Integer, Identity(), primary_key=True, index=True)
     nombre = Column(String)
-    fecha_hora = Column(DateTime(timezone=True), server_default=func.timezone('UTC', func.now()), onupdate=func.timezone('UTC', func.now()))
+    fecha_hora = Column(DateTime(timezone=True), server_default=func.timezone('America/Bogota', func.now()), onupdate=func.timezone('America/Bogota', func.now()))
     usuario_id = Column(Integer, nullable=True)
     roles = relationship("Roles", secondary="roles_permisos", back_populates="permisos")
 
@@ -152,7 +152,7 @@ class Usuarios(Base):
     recuperacion = Column(String(300), nullable=True)
     foto = Column(String, nullable=True)
     estado = Column(Boolean, nullable=False)
-    fecha_hora = Column(DateTime(timezone=True), server_default=func.timezone('UTC', func.now()), onupdate=func.timezone('UTC', func.now()))
+    fecha_hora = Column(DateTime(timezone=True), server_default=func.timezone('America/Bogota', func.now()), onupdate=func.timezone('America/Bogota', func.now()))
     usuario_id = Column(Integer, nullable=True)
 
 class Transacciones(Base):
@@ -172,7 +172,7 @@ class Transacciones(Base):
     peso_real = Column(Numeric(10,2), nullable=True)
     estado = Column(String(12), nullable=False)
     leido = Column(Boolean, nullable=False)
-    fecha_hora = Column(DateTime(timezone=True), server_default=func.timezone('UTC', func.now()), onupdate=func.timezone('UTC', func.now()))
+    fecha_hora = Column(DateTime(timezone=True), server_default=func.timezone('America/Bogota', func.now()), onupdate=func.timezone('America/Bogota', func.now()))
     usuario_id = Column(Integer, nullable=True)
     bl_id = Column(Integer(), ForeignKey('bls.id'))
     movimientos = relationship("Movimientos", backref="Transacciones")
@@ -190,7 +190,7 @@ class Movimientos(Base):
     peso = Column(Numeric(10,2), nullable=False)
     saldo_anterior = Column(Numeric(10,2), nullable=False)
     saldo_nuevo = Column(Numeric(10,2), nullable=True)
-    fecha_hora = Column(DateTime(timezone=True), server_default=func.timezone('UTC', func.now()), onupdate=func.timezone('UTC', func.now()))
+    fecha_hora = Column(DateTime(timezone=True), server_default=func.timezone('America/Bogota', func.now()), onupdate=func.timezone('America/Bogota', func.now()))
     usuario_id = Column(Integer, nullable=True)
 
 class Pesadas(Base):
@@ -203,7 +203,7 @@ class Pesadas(Base):
     peso_real = Column(Numeric(10,2), nullable=False)
     peso_vuelo = Column(Numeric(10,2), nullable=True)
     peso_fino = Column(Numeric(10,2), nullable=True)
-    fecha_hora = Column(DateTime(timezone=True), server_default=func.timezone('UTC', func.now()), onupdate=func.timezone('UTC', func.now()))
+    fecha_hora = Column(DateTime(timezone=True), server_default=func.timezone('America/Bogota', func.now()), onupdate=func.timezone('America/Bogota', func.now()))
     usuario_id = Column(Integer, nullable=True)
     leido = Column(Boolean, nullable=False, default=False)
 
@@ -218,7 +218,7 @@ class PesadasCorte(Base):
     material = Column(String(50), nullable=True)
     peso = Column(Numeric(10,2), nullable=True)
     ref = Column(String(100), nullable=True)
-    fecha_hora = Column(DateTime(timezone=True), server_default=func.timezone('UTC', func.now()), onupdate=func.timezone('UTC', func.now()))
+    fecha_hora = Column(DateTime(timezone=True), server_default=func.timezone('America/Bogota', func.now()), onupdate=func.timezone('America/Bogota', func.now()))
     usuario_id = Column(Integer, nullable=True)
     enviado = Column(Boolean, nullable=False, default=False)
 
@@ -230,7 +230,7 @@ class LogsAuditoria(Base):
     accion = Column(String, nullable=False)
     valor_anterior = Column(JSON, nullable=True)
     valor_nuevo = Column(JSON, nullable=True)
-    fecha_hora = Column(DateTime(timezone=True), server_default=func.timezone('UTC', func.now()), onupdate=func.timezone('UTC', func.now()))
+    fecha_hora = Column(DateTime(timezone=True), server_default=func.timezone('America/Bogota', func.now()), onupdate=func.timezone('America/Bogota', func.now()))
     usuario_id = Column(Integer, nullable=True)
 
 class VBls(Base):
@@ -250,7 +250,7 @@ class VBls(Base):
     cargue_directo = Column(Boolean, nullable=True)
     estado_puerto = Column(Boolean, nullable=True)
     estado_operador = Column(Boolean, nullable=True)
-    fecha_hora = Column(DateTime(timezone=True), server_default=func.timezone('UTC', func.now()), onupdate=func.timezone('UTC', func.now()))
+    fecha_hora = Column(DateTime(timezone=True), server_default=func.timezone('America/Bogota', func.now()), onupdate=func.timezone('America/Bogota', func.now()))
     usuario_id = Column(Integer, nullable=True)
     usuario = Column(String(200))
 
@@ -262,7 +262,7 @@ class VFlotas(Base):
     puntos = Column(Integer,nullable=True)
     estado_operador = Column(Boolean, nullable=True)
     estado_puerto = Column(Boolean, nullable=True)
-    fecha_hora = Column(DateTime(timezone=True), server_default=func.timezone('UTC', func.now()), onupdate=func.timezone('UTC', func.now()))
+    fecha_hora = Column(DateTime(timezone=True), server_default=func.timezone('America/Bogota', func.now()), onupdate=func.timezone('America/Bogota', func.now()))
     usuario_id = Column(Integer, nullable=True)
     usuario = Column(String(200))
 
@@ -284,7 +284,7 @@ class VViajes(Base):
     despacho_directo = Column(Boolean)
     estado_puerto = Column(Boolean, nullable=True)
     estado_operador = Column(Boolean, nullable=True)
-    fecha_hora = Column(DateTime(timezone=True), server_default=func.timezone('UTC', func.now()), onupdate=func.timezone('UTC', func.now()))
+    fecha_hora = Column(DateTime(timezone=True), server_default=func.timezone('America/Bogota', func.now()), onupdate=func.timezone('America/Bogota', func.now()))
     usuario_id = Column(Integer, nullable=True)
 
 class VPesadasAcumulado(Base):
@@ -296,7 +296,7 @@ class VPesadasAcumulado(Base):
     pit = Column(Integer)
     material = Column(String)
     peso = Column(Numeric(10,2), nullable=False)
-    fecha_hora = Column(DateTime(timezone=True), server_default=func.timezone('UTC', func.now()), onupdate=func.timezone('UTC', func.now()))
+    fecha_hora = Column(DateTime(timezone=True), server_default=func.timezone('America/Bogota', func.now()), onupdate=func.timezone('America/Bogota', func.now()))
     usuario_id = Column(Integer, nullable=True)
     usuario = Column(String(200))
 

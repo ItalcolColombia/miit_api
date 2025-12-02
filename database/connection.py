@@ -27,8 +27,17 @@ class DatabaseConfiguration:
     _db_url = DatabaseConfigurationUtil().get_url()
 
     # Create the SQLAlchemy engine
+    # Ensure the DB session timezone is set to America/Bogota so queries and
+    # returned timestamp values reflect UTC-5 (Bogotá) when using TIMESTAMPTZ.
+    # asyncpg accepts `server_settings` in connect_args to set session parameters
+    # on connection (e.g. timezone).
     _engine = create_async_engine(
-        _db_url, echo=False,  future=True, max_overflow=10, pool_size=5
+        _db_url,
+        echo=False,
+        future=True,
+        max_overflow=10,
+        pool_size=5,
+        connect_args={"server_settings": {"timezone": "America/Bogota"}},
     )
     # Create a session factory
     _async_session = sessionmaker( bind=_engine, class_=AsyncSession, autoflush=False, 
@@ -80,8 +89,15 @@ class DatabaseConfiguration:
         await cls._engine.dispose()
 
         #Recreates engine and assign session
+        # Recreate the engine preserving the server_settings so new connections
+        # again set the session timezone to America/Bogota.
         cls._engine = create_async_engine(
-            cls._db_url, echo=False,  future=True, max_overflow=10, pool_size=5
+            cls._db_url,
+            echo=False,
+            future=True,
+            max_overflow=10,
+            pool_size=5,
+            connect_args={"server_settings": {"timezone": "America/Bogota"}},
         )
 
         cls._async_session = sessionmaker(bind=cls._engine, class_=AsyncSession, autoflush=False,

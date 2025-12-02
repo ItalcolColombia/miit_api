@@ -1,3 +1,4 @@
+from datetime import datetime
 from typing import Optional, TypeVar, Generic, List, Any, Dict
 
 from fastapi_pagination import Page, Params
@@ -13,7 +14,7 @@ from core.contracts.auditor import Auditor
 from core.exceptions.entity_exceptions import EntityNotFoundException
 from schemas.logs_auditoria_schema import LogsAuditoriaCreate
 from utils.any_utils import AnyUtils
-from utils.time_util import ensure_aware_utc
+from utils.time_util import ensure_aware_local
 
 ModelType = TypeVar("ModelType")
 SchemaType = TypeVar("SchemaType")
@@ -24,9 +25,9 @@ def _normalize_datetimes(data: Dict[str, Any]) -> Dict[str, Any]:
     normalized = {}
     for k, v in data.items():
         try:
-            if hasattr(v, 'tzinfo') or getattr(v, '__class__', None).__name__ == 'datetime':
-                # Evita importar datetime en este módulo; delega la conversión
-                normalized[k] = ensure_aware_utc(v)
+            # Detectar objetos datetime de forma robusta
+            if isinstance(v, datetime):
+                normalized[k] = ensure_aware_local(v)
             else:
                 normalized[k] = v
         except Exception:

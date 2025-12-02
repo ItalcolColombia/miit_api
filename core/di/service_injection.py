@@ -95,9 +95,10 @@ async def get_mov_service(
 
 async def get_pesadas_service(
     pesadas_repository: PesadasRepository = Depends(get_pesadas_repository),
-    pesadas_corte_repository: PesadasCorteRepository = Depends(get_pesadas_corte_repository)
+    pesadas_corte_repository: PesadasCorteRepository = Depends(get_pesadas_corte_repository),
+    trans_repository: TransaccionesRepository = Depends(get_transacciones_repository),
 ) -> PesadasService:
-    return PesadasService(pesadas_repository, pesadas_corte_repository)
+    return PesadasService(pesadas_repository, pesadas_corte_repository, trans_repository)
 
 async def get_transacciones_service(
     trans_repository: Annotated[TransaccionesRepository, Depends(get_transacciones_repository)],
@@ -133,5 +134,3 @@ async def get_user_service(
     user_repository: UsuariosRepository = Depends(get_user_repository)
 ) -> UsuariosService:
     return UsuariosService(user_repository)
-
-
