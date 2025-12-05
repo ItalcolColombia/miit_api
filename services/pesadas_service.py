@@ -125,7 +125,8 @@ class PesadasService:
             # Intentar actualizar el estado de la transacción relacionada a 'Proceso' (no crítico en fallback)
             try:
                 if self._trans_repo is not None:
-                    update_data = TransaccionUpdate(estado='Proceso')
+                    # Rellenar explícitamente campos opcionales para evitar advertencias estáticas
+                    update_data = TransaccionUpdate(estado='Proceso') ##TODO actualizar el peso cada vez que se cree una pesada
                     await self._trans_repo.update(int(trans_id), update_data)
                     log.info(f"Transacción {trans_id} actualizada a 'Proceso' después de crear pesada (fallback).")
             except Exception as e_trans:
@@ -487,43 +488,67 @@ class PesadasService:
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
 
-    async def get_pesadas_acumuladas(self, puerto_id: str, tran_id: Optional[int] = None) -> List[VPesadasAcumResponse]:
+    async def get_pesadas_acumuladas(self, puerto_id: str) -> List[VPesadasAcumResponse]:
         """
         Obtener y procesar pesadas acumuladas para un puerto (y opcionalmente una transacción).
 
         Flujo:
-        1) Obtener acumulado agrupado de pesadas no leídas (repo.get_sumatoria_pesadas)
-        2) Validar que hay acumulados (si no, lanzar EntityNotFoundException)
-        3) Construir rangos (primera/ultima) y crear registros en pesadas_corte (creación robusta)
-        4) Marcar las pesadas dentro de los rangos como leídas
-        5) Construir y devolver la lista de VPesadasAcumResponse a partir de los registros de pesadas_corte
+        1) Obtener la transacción en estado 'Proceso' (o la más reciente) para el puerto dado.
+        2) Consultar el acumulado de pesadas nuevas desde la última transacción.
+        3) Construir rangos de pesadas para marcar como leídas.
+        4) Intentar crear registros en pesadas_corte (no crítico).
+        5) Marcar las pesadas como leídas.
+        6) Construir y devolver la respuesta, preferiendo datos de pesadas_corte
         """
         try:
-            # 1. Obtener acumulado
+            # 1. Obtener transaccion a partir del puerto_id consultando Transacciones.ref1 == puerto_id
+            tran_id = None
+            try:
+                if self._trans_repo is not None:
+                    # find_many devuelve una lista de TransaccionResponse
+                    trans_list = await self._trans_repo.find_many(ref1=puerto_id)
+                    if trans_list:
+                        # Preferir transacciones en estado 'Proceso'
+                        proceso = [t for t in trans_list if getattr(t, 'estado', None) == 'Proceso']
+                        from datetime import datetime
+                        if proceso:
+                            # Si hay varias en 'Proceso', elegir la más reciente por fecha_hora
+                            chosen = max(proceso, key=lambda t: getattr(t, 'fecha_hora') or datetime.min)
+                        else:
+                            # Si no hay en 'Proceso', elegir la más reciente entre todas las encontradas
+                            chosen = max(trans_list, key=lambda t: getattr(t, 'fecha_hora') or datetime.min)
+                        tran_id = getattr(chosen, 'id', None)
+                else:
+                    log.warning("get_pesadas_acumuladas: no hay repositorio de transacciones disponible para buscar ref1 por puerto.")
+            except Exception as e_tran:
+                log.error(f"Error buscando transacciones por ref1={puerto_id}: {e_tran}", exc_info=True)
+                tran_id = None
+
+            # 2. Obtener acumulado
             acumulado = await self._repo.get_sumatoria_pesadas(puerto_id, tran_id)
             if not acumulado:
                 raise EntityNotFoundException("No hay pesadas nuevas por reportar.")
 
-            # 2. Construir rangos para marcar como leídas (solo donde existan ids válidos)
+            # 3. Construir rangos para marcar como leídas (solo donde existan ids válidos)
             pesada_range = [
                 PesadasRange(primera=acum.primera, ultima=acum.ultima, transaccion=acum.transaccion)
                 for acum in acumulado
                 if getattr(acum, 'primera', None) is not None and getattr(acum, 'ultima', None) is not None and getattr(acum, 'transaccion', None) is not None
             ]
 
-            # 3. Intentar crear registros en pesadas_corte y usar esos registros para construir la respuesta.
+            # 4. Intentar crear registros en pesadas_corte y usar esos registros para construir la respuesta.
             pesadas_corte_records = None
             try:
                 pesadas_corte_records = await self.create_pesadas_corte_if_not_exists(acumulado)
             except Exception as e_create:
                 log.error(f"No fue posible crear pesadas_corte (no crítico): {e_create}", exc_info=True)
 
-            # 4. Marcar las pesadas como leídas solo si existen rangos
+            # 5. Marcar las pesadas como leídas solo si existen rangos
             if pesada_range:
                 ids_marcados = await self._repo.mark_pesadas(pesada_range)
                 log.info(f"{len(ids_marcados)} Pesadas marcadas como leído.")
 
-            # 5. Construir la respuesta: preferir registros de pesadas_corte (tienen la ref con el consecutivo por transacción)
+            # 6. Construir la respuesta: preferir registros de pesadas_corte (tienen la ref con el consecutivo por transacción)
             response: List[VPesadasAcumResponse] = []
             from decimal import Decimal
             from datetime import datetime

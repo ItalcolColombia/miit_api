@@ -7,6 +7,7 @@ from fastapi.encoders import jsonable_encoder
 from fastapi.responses import JSONResponse
 
 from utils.any_utils import AnyUtils
+from utils.serialize_util import safe_serialize
 
 
 class ResponseUtil:
@@ -29,6 +30,13 @@ class ResponseUtil:
         if data is None:
             return None
 
+        # Use safe_serialize as the central normalizer (handles pydantic, orm, dicts, lists)
+        try:
+            return safe_serialize(data)
+        except Exception:
+            pass
+
+        # Fallbacks (existing logic):
         # Pydantic model
         if hasattr(data, 'model_dump'):
             try:

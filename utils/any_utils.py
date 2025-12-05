@@ -6,6 +6,7 @@ from typing import Any, Dict
 import bcrypt
 import orjson
 from sqlalchemy.orm.base import class_mapper
+from sqlalchemy.orm.exc import UnmappedClassError
 
 from utils.time_util import format_iso_bogota, now_local
 
@@ -111,25 +112,40 @@ class AnyUtils:
             return None
 
         try:
+            # Early-return for primitive types (avoid calling class_mapper on them)
+            if isinstance(obj, (int, float, str, bool, dict, list, tuple, set)):
+                return None
+
             # Build a dictionary with only serializable column data
             result = {}
 
             # Get the mapper for the object to inspect its columns and relationships
-            mapper = class_mapper(type(obj))
+            try:
+                mapper = class_mapper(type(obj))
+            except UnmappedClassError:
+                # Object is not a SQLAlchemy mapped instance
+                return None
+
             columns = [col.key for col in mapper.columns]
 
             for column in columns:
                 if hasattr(obj, column):
                     value = getattr(obj, column)
-                    if isinstance(value, datetime):
-                        result[column] = format_iso_bogota(value)
-                    elif isinstance(value, Decimal):
-                        result[column] = str(value)
-                    elif isinstance(value, (dict, list)):
-                        result[column] = value
-                    elif isinstance(value, (int, float, str, bool)) or value is None:
-                        result[column] = value
-                    else:
+                    try:
+                        if isinstance(value, datetime):
+                            result[column] = format_iso_bogota(value)
+                        elif isinstance(value, Decimal):
+                            result[column] = str(value)
+                        elif isinstance(value, (dict, list)):
+                            result[column] = value
+                        elif isinstance(value, (int, float, str, bool)) or value is None:
+                            result[column] = value
+                        else:
+                            result[column] = str(value)
+                    except Exception as tz_exc:
+                        # Si falla la conversión por temas de TZ o formatos, caemos
+                        # a un fallback seguro para evitar que toda la serialización
+                        # falle y propague un 500 en producción.
                         result[column] = str(value)
             return result
         except Exception as e:

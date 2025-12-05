@@ -31,6 +31,7 @@ from services.materiales_service import MaterialesService
 from services.transacciones_service import TransaccionesService
 from utils.any_utils import AnyUtils
 from utils.logger_util import LoggerUtil
+from utils.time_util import now_local, ensure_aware_local
 
 log = LoggerUtil()
 
@@ -590,7 +591,10 @@ class ViajesService:
                     f"La flota es del tipo '{flota.tipo}' diferente al tipo esperado 'camion'")
 
             update_fields = {
-                "fecha_salida": fecha,
+                # Convertir la fecha recibida a la zona local configurada (TZ)
+                # Esto asegura que si el cliente envía una fecha naive o en UTC,
+                # la guardemos con la zona local (p. ej. America/Bogota).
+                "fecha_salida": ensure_aware_local(fecha),
                 "peso_real": peso
             }
             update_data = ViajeUpdate(**update_fields)

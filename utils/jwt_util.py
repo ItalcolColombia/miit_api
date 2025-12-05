@@ -1,5 +1,5 @@
-
-from datetime import datetime, timedelta, timezone
+from datetime import timedelta
+from utils.time_util import now_utc
 from typing import Optional
 
 import jwt
@@ -109,10 +109,10 @@ class JWTUtil:
     
         try:
             to_encode = data.copy()
-            expire = datetime.now(timezone.utc) + (
+            expire = now_utc() + (
                     expires_delta or timedelta(minutes=JWT_ACCESS_TOKEN_EXPIRE_MINUTES)
             )
-            to_encode.update({"iat": int(datetime.now().timestamp()),
+            to_encode.update({"iat": int(now_utc().timestamp()),
                               "exp": expire,
                               "aud": JWT_AUDIENCE,
                               "iss": JWT_ISSUER})
@@ -146,10 +146,10 @@ class JWTUtil:
         try:
             to_encode = data.copy()
             if expires_delta:
-                expire = datetime.now(timezone.utc) + expires_delta
+                expire = now_utc() + expires_delta
             else:
-                expire = datetime.now(timezone.utc) + timedelta(days=JWT_REFRESH_TOKEN_EXPIRE_DAYS)
-            to_encode.update({"iat": int(datetime.now().timestamp()),
+                expire = now_utc() + timedelta(days=JWT_REFRESH_TOKEN_EXPIRE_DAYS)
+            to_encode.update({"iat": int(now_utc().timestamp()),
                               "exp": expire,
                               "aud": JWT_AUDIENCE,
                               "iss": JWT_ISSUER })

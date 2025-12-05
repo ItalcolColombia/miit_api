@@ -1,6 +1,9 @@
 import os
 from datetime import datetime, timezone
 from zoneinfo import ZoneInfo
+import logging
+
+logger = logging.getLogger(__name__)
 
 
 def utc_from_timestamp(timestamp: float) -> datetime:
@@ -37,6 +40,8 @@ def ensure_aware_utc(dt: datetime) -> datetime:
         try:
             local_tz = ZoneInfo(tz_name)
         except Exception:
+            # Guardar un warning por si la zona está corrupta en el servidor
+            logger.warning(f"ZoneInfo('{tz_name}') failed, falling back to system local tz or UTC")
             local_tz = datetime.now().astimezone().tzinfo or timezone.utc
     else:
         # Fallback to system local timezone
@@ -55,7 +60,13 @@ def utc_to_bogota(dt: datetime) -> datetime:
     if dt is None:
         return None
     dt_utc = ensure_aware_utc(dt)
-    return dt_utc.astimezone(ZoneInfo('America/Bogota'))
+    try:
+        bogota_tz = ZoneInfo('America/Bogota')
+    except Exception as e:
+        # Puede ocurrir "Invalid TZif file: magic not found" u otros errores del tzdata.
+        logger.warning(f"ZoneInfo('America/Bogota') failed: {e}; falling back to UTC for formatting")
+        bogota_tz = timezone.utc
+    return dt_utc.astimezone(bogota_tz)
 
 
 def format_iso_bogota(dt: datetime) -> str:
@@ -65,7 +76,16 @@ def format_iso_bogota(dt: datetime) -> str:
     """
     if dt is None:
         return None
-    return utc_to_bogota(dt).isoformat()
+    try:
+        return utc_to_bogota(dt).isoformat()
+    except Exception as e:
+        # Si por alguna razón la conversión de zona falla, devolver ISO en UTC como fallback
+        logger.warning(f"format_iso_bogota fallo al convertir dt {dt}: {e}; devolviendo ISO en UTC")
+        try:
+            return dt.astimezone(timezone.utc).isoformat()
+        except Exception:
+            # Último recurso
+            return dt.isoformat()
 
 
 # Nueva función: asegurar datetime en la zona configurada por TZ
@@ -85,6 +105,7 @@ def ensure_aware_local(dt: datetime) -> datetime:
     try:
         local_tz = ZoneInfo(tz_name)
     except Exception:
+        logger.warning(f"ZoneInfo('{tz_name}') failed in ensure_aware_local; falling back to UTC")
         local_tz = timezone.utc
 
     if dt.tzinfo is None:
@@ -101,6 +122,15 @@ def now_local() -> datetime:
     tz_name = os.environ.get('TZ', 'UTC')
     try:
         local_tz = ZoneInfo(tz_name)
-    except Exception:
+    except Exception as e:
+        logger.warning(f"ZoneInfo('{tz_name}') failed in now_local: {e}; falling back to UTC")
         local_tz = timezone.utc
     return datetime.now(local_tz)
+
+
+def now_utc() -> datetime:
+    """Devuelve la fecha y hora actual en UTC (timezone-aware).
+
+    Útil para usos que requieren tiempo en UTC (tokens, expiraciones, logs centralizados).
+    """
+    return datetime.now(timezone.utc)
