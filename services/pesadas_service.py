@@ -875,3 +875,112 @@ class PesadasService:
                 message="Error inesperado al obtener la suma de pesadas.",
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
+
+    async def get_pending_for_last_transaccion(self, puerto_id: str) -> List[VPesadasAcumResponse]:
+        """
+        Obtener la sumatoria de pesadas NO leídas (leido=False) únicamente para la última
+        transacción asociada con `puerto_id`.
+
+        Flujo:
+        1. Determinar la última transacción (preferir estado 'Proceso', sino la más reciente) para el puerto.
+        2. Solicitar al repositorio la sumatoria de pesadas no leídas para esa transacción.
+        3. Generar una referencia para el envío final y devolver la lista de VPesadasAcumResponse.
+        """
+        try:
+            # 1. Obtener transaccion a partir del puerto_id consultando Transacciones.ref1 == puerto_id
+            tran_id = None
+            try:
+                if self._trans_repo is not None:
+                    trans_list = await self._trans_repo.find_many(ref1=puerto_id)
+                    if trans_list:
+                        proceso = [t for t in trans_list if getattr(t, 'estado', None) == 'Proceso']
+                        from datetime import datetime
+                        if proceso:
+                            chosen = max(proceso, key=lambda t: getattr(t, 'fecha_hora') or datetime.min)
+                        else:
+                            chosen = max(trans_list, key=lambda t: getattr(t, 'fecha_hora') or datetime.min)
+                        tran_id = getattr(chosen, 'id', None)
+                else:
+                    log.warning("get_pending_for_last_transaccion: no hay repositorio de transacciones disponible para buscar ref1 por puerto.")
+            except Exception as e_tran:
+                log.error(f"Error buscando transacciones por ref1={puerto_id}: {e_tran}", exc_info=True)
+                tran_id = None
+
+            if tran_id is None:
+                raise EntityNotFoundException("No se encontró transacción asociada al puerto especificado.")
+
+            # 2. Obtener acumulado de pesadas no leídas para esa transacción
+            acumulado = await self._repo.get_sumatoria_pesadas(puerto_id, tran_id)
+            if not acumulado:
+                raise EntityNotFoundException("No hay pesadas pendientes de enviar para la última transacción.")
+
+            # --- NUEVO: construir rangos y marcar las pesadas como leídas ---
+            pesada_range = [
+                PesadasRange(primera=acum.primera, ultima=acum.ultima, transaccion=acum.transaccion)
+                for acum in acumulado
+                if getattr(acum, 'primera', None) is not None and getattr(acum, 'ultima', None) is not None and getattr(acum, 'transaccion', None) is not None
+            ]
+
+            if pesada_range:
+                try:
+                    ids_marcados = await self._repo.mark_pesadas(pesada_range)
+                    log.info(f"{len(ids_marcados)} Pesadas marcadas como leído para la última transacción.")
+                except Exception as e_mark:
+                    # No hacer crítico el fallo de marcado: loguear y continuar devolviendo la respuesta
+                    log.error(f"No fue posible marcar pesadas como leídas en get_pending_for_last_transaccion: {e_mark}", exc_info=True)
+
+            # 3. Generar referencia final (usar gen_pesada_identificador para mantener consistencia) y mapear al esquema de respuesta
+            response: List[VPesadasAcumResponse] = []
+            from decimal import Decimal
+            from datetime import datetime
+
+            # generar referencia base usando gen_pesada_identificador
+            try:
+                gen_req = PesadaCorteRetrieve(puerto_id=puerto_id, transaccion=int(tran_id))
+                ref_gen = await self.gen_pesada_identificador(gen_req)
+                referencia_final = f"{ref_gen}F" if ref_gen else None
+            except Exception as e_ref:
+                log.error(f"No fue posible generar referencia para transaccion {tran_id}: {e_ref}", exc_info=True)
+                referencia_final = None
+
+            for acum in acumulado:
+                try:
+                    transaccion = int(getattr(acum, 'transaccion', 0) or 0)
+                    viaje_consec = int(getattr(acum, 'consecutivo', 0) or 0)
+                    pit = int(getattr(acum, 'pit', 0) or 0)
+                    material = getattr(acum, 'material', '') or ''
+                    peso_val = getattr(acum, 'peso', None)
+                    try:
+                        peso = Decimal(peso_val) if peso_val is not None else Decimal('0')
+                    except Exception:
+                        peso = Decimal('0')
+                    puerto = getattr(acum, 'puerto_id', None) or puerto_id
+                    fecha_hora = getattr(acum, 'fecha_hora', None) or now_local()
+                    usuario_id = int(getattr(acum, 'usuario_id', 0) or 0)
+
+                    resp = VPesadasAcumResponse(
+                        referencia=referencia_final,
+                        consecutivo=viaje_consec,
+                        transaccion=0,
+                        pit=pit,
+                        material=material,
+                        peso=peso,
+                        puerto_id=puerto,
+                        fecha_hora=fecha_hora,
+                        usuario_id=usuario_id,
+                        usuario=getattr(acum, 'usuario', "") or "",
+                    )
+                    response.append(resp)
+                except Exception as e_map:
+                    log.error(f"Error mapeando acumulado a VPesadasAcumResponse en pending last: {e_map} - acum: {acum}", exc_info=True)
+
+            return response
+
+        except EntityNotFoundException:
+            raise
+        except Exception as e:
+            log.error(f"Error al obtener pesadas pendientes para la última transacción del puerto_id {puerto_id}: {e}", exc_info=True)
+            raise BasedException(
+                message="Error inesperado al obtener pesadas pendientes.",
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )

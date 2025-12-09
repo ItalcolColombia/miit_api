@@ -204,11 +204,26 @@ class TransaccionesService:
             BasedException: For unexpected errors during the creation process.
         """
         try:
-            # 1. Validar si transacción ya existe
-            if await self._repo.find_one(viaje_id=tran_data.viaje_id, estado='Proceso' ):
-                raise EntityAlreadyRegisteredException(f"Ya existe transacción en proceso del viaje '{tran_data.viaje_id}'")
+            # Si la nueva transacción trae bl_id, impedir duplicados por (viaje_id, bl_id)
+            bl_id = getattr(tran_data, 'bl_id', None)
+            if bl_id is not None:
+                existing = await self._repo.find_one(viaje_id=tran_data.viaje_id, bl_id=bl_id)
+                if existing:
+                    # Permitir si la transacción existente es de distinto 'tipo'
+                    existing_tipo = getattr(existing, 'tipo', None)
+                    new_tipo = getattr(tran_data, 'tipo', None)
+                    try:
+                        if existing_tipo is not None and new_tipo is not None and str(existing_tipo).strip().lower() != str(new_tipo).strip().lower():
+                            log.info(f"create_transaccion_if_not_exists: existe transaccion con viaje_id={tran_data.viaje_id} y bl_id={bl_id} pero de tipo distinto ('{existing_tipo}' != '{new_tipo}'), permitiendo creación")
+                        else:
+                            raise EntityAlreadyRegisteredException(f"Ya existe transacción para viaje '{tran_data.viaje_id}' con bl_id '{bl_id}' y tipo '{existing_tipo}'")
+                    except EntityAlreadyRegisteredException:
+                        raise
+                    except Exception as e_check:
+                        # Si hay algún problema validando tipos, evitar crear duplicado por seguridad
+                        log.error(f"Error validando existencia de transacción (viaje_id={tran_data.viaje_id}, bl_id={bl_id}): {e_check}", exc_info=True)
+                        raise EntityAlreadyRegisteredException(f"Ya existe transacción para viaje '{tran_data.viaje_id}' con bl_id '{bl_id}'")
 
-            # 2. Se crea transacción si esta no existe en la BD
             tran_nueva = await self._repo.create(tran_data)
             return tran_nueva
         except EntityAlreadyRegisteredException as e:

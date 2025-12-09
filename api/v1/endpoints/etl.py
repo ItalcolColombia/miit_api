@@ -409,7 +409,7 @@ async def create_transaccion(
         await service.create_transaccion_if_not_exists(tran)
         return response_json(
             status_code=status.HTTP_201_CREATED,
-            message="registro exitoso."
+            message="Registro exitoso."
         )
 
     except HTTPException as http_exc:

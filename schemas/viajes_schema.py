@@ -67,15 +67,20 @@ class ViajeBuqueExtCreate(BaseModel):
     peso_meta: Optional[Decimal] = 0
     fecha_llegada: Optional[datetime] = None
     fecha_salida: Optional[datetime] = None
-    estado: Optional[bool] = None
     fecha_hora: Optional[datetime] = None
     usuario_id: Optional[int] = None
 
     @field_validator('tipo')
     def tipo_valido(cls, value):
-        if len(value) > 6:
+        # Acepta cualquier combinación de mayúsculas/minúsculas y normaliza a 'buque'
+        if not isinstance(value, str):
+            raise TypeError("Tipo debe ser una cadena")
+        val = value.strip()
+        if len(val) > 6:
             raise ValueError("Tipo debe tener máximo 6 caracteres")
-        return value
+        if val.lower() != 'buque':
+            raise ValueError("Tipo debe ser 'buque'")
+        return 'buque'
 
     @field_validator('peso_meta')
     def peso_positivo(cls, value):
@@ -92,7 +97,6 @@ class ViajeBuqueExtCreate(BaseModel):
                 "peso_meta": 954000.50,
                 "fecha_llegada": "2023-10-27T10:00:00",
                 "fecha_salida": "2023-10-29T14:30:00",
-                "estado": False
             }
         }
 
@@ -119,9 +123,15 @@ class ViajeCamionExtCreate(BaseModel):
 
     @field_validator('tipo')
     def tipo_valido(cls, value):
-        if len(value) > 6:
+        # Acepta cualquier combinación de mayúsculas/minúsculas y normaliza a 'camion'
+        if not isinstance(value, str):
+            raise TypeError("Tipo debe ser una cadena")
+        val = value.strip()
+        if len(val) > 6:
             raise ValueError("Tipo debe tener máximo 6 caracteres")
-        return value
+        if val.lower() != 'camion':
+            raise ValueError("Tipo debe ser 'camion'")
+        return 'camion'
 
     @field_validator('peso_meta')
     def peso_positivo(cls, value):

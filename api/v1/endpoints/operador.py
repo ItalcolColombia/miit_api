@@ -8,7 +8,7 @@ from core.di.service_injection import get_viajes_service, get_pesadas_service
 from core.enums.user_role_enum import UserRoleEnum
 from core.exceptions.entity_exceptions import EntityNotFoundException
 from schemas.bls_schema import BlsExtCreate
-from schemas.pesadas_schema import VPesadasAcumResponse, VPesadasEnvioResponse
+from schemas.pesadas_schema import VPesadasAcumResponse
 from schemas.response_models import CreateResponse, ErrorResponse, ValidationErrorResponse, UpdateResponse, \
     CamionIngresoResponse, CamionRegistroResponse
 from schemas.viajes_schema import (
@@ -16,7 +16,7 @@ from schemas.viajes_schema import (
     ViajeCamionExtCreate
 )
 from services.auth_service import AuthService
-from services.envio_final_service import prepare_and_notify_envio_final, notify_envio_final
+from services.envio_final_service import notify_envio_final
 from services.pesadas_service import PesadasService
 from services.viajes_service import ViajesService
 from utils.logger_util import LoggerUtil
@@ -33,7 +33,8 @@ router = APIRouter(prefix="/integrador", tags=["Integrador"],  dependencies=[Dep
 @router.post("/buque-registro",
              status_code=status.HTTP_201_CREATED,
              summary="Registrar nuevo buque",
-             description="Evento efectuado por el operador posterior a Anuncio MN obtenido a través de la interfaz de PBCU.",
+             description="Evento efectuado por el operador posterior al Anuncio MN obtenido a través de la interfaz de PBCU."
+                         "Corresponde a BuquesRegistro en el diagrama de flujo de proceso.",
              response_model=CreateResponse,
              responses={
                  status.HTTP_400_BAD_REQUEST: {"model": ErrorResponse},
@@ -48,7 +49,7 @@ async def create_buque(
         log.info(f"Buque {flota.puerto_id} registrado")
         return response_json(
             status_code=status.HTTP_201_CREATED,
-            message=f"registro exitoso",
+            message=f"Registro exitoso",
         )
 
     except HTTPException as http_exc:
@@ -69,7 +70,8 @@ async def create_buque(
 @router.post("/buque-carga",
              status_code=status.HTTP_201_CREATED,
              summary="Registrar carga de buque",
-             description="Evento efectuado por el operador con la información obtenida a través de la interfaz de PBCU.",
+             description="Evento efectuado por el operador con la información obtenida a través de la interfaz de PBCU."
+                         "Corresponde a BuquesCarga en el diagrama de flujo de proceso.",
              response_model=CreateResponse,
              responses={
                  status.HTTP_400_BAD_REQUEST: {"model": ErrorResponse},
@@ -84,7 +86,7 @@ async def set_load(
         log.info(f"BL {bl.no_bl} de buque {bl.puerto_id} registrado")
         return response_json(
             status_code=status.HTTP_201_CREATED,
-            message=f"registro exitoso",
+            message=f"Registro exitoso",
         )
 
     except HTTPException as http_exc:
@@ -104,7 +106,9 @@ async def set_load(
 @router.put("/buque-arribo/{puerto_id}",
             status_code=status.HTTP_200_OK,
             summary="Modificar viaje del buque para actualizar estado por arribo",
-            description="Evento realizado por el operador post confirmación del arribo de la motonave a través de la interfaz de PBCU.",
+            description="Evento realizado por el operador post confirmación del arribo de la motonave a través de la interfaz de PBCU."
+                        "Actualiza del estado_puerto de la flota a True."
+                        "Corresponde a BuqueArrivo en el diagrama de flujo de proceso.",
             response_model=UpdateResponse,
             responses={
                 status.HTTP_400_BAD_REQUEST: {"model": ErrorResponse},
@@ -119,7 +123,7 @@ async def buque_in(
         log.info(f"Arribo de buque {puerto_id} marcado exitosamente.")
         return response_json(
             status_code=status.HTTP_200_OK,
-            message=f"estado actualizado",
+            message=f"Estado actualizado",
         )
 
     except HTTPException as http_exc:
@@ -156,7 +160,7 @@ async def end_buque(
         log.info(f"La Partida de buque {puerto_id} desde el operador marcada exitosamente.")
         return response_json(
             status_code=status.HTTP_200_OK,
-            message=f"estado actualizado",
+            message=f"Estado actualizado",
         )
     except HTTPException as http_exc:
         log.error(f"La partida de buque {puerto_id} desde el operador no pudo marcarse: {http_exc.detail}")
@@ -390,31 +394,28 @@ async def get_acum_pesadas(
 
 @router.get("/envio-final/{puerto_id}",
              status_code=status.HTTP_200_OK,
-             summary="Envio final: obtener último corte de pesadas con marca F",
-             description="Retorna el último corte registrado en pesadas_corte para el puerto indicado y añade la marca 'F' a la referencia.",
-             response_model=VPesadasEnvioResponse,
+             summary="Envio final (previsión): mostrar la sumatoria de pesadas pendientes para la última transacción",
+             description="Muestra qué sería enviado en el envio final: la sumatoria de las pesadas pendientes (leido=False) correspondiente a la última transacción del puerto. No notifica a la API externa.",
+             response_model=List[VPesadasAcumResponse],
              responses={
                  status.HTTP_404_NOT_FOUND: {"model": ErrorResponse},
                  status.HTTP_500_INTERNAL_SERVER_ERROR: {"model": ErrorResponse},
              })
 async def envio_final(
         puerto_id: str,
-        service: PesadasService = Depends(get_pesadas_service),
-        viajes_service: ViajesService = Depends(get_viajes_service),
-        notify: bool = True):
+        service: PesadasService = Depends(get_pesadas_service)):
     try:
-        pesadas = await service.get_envio_final(puerto_id=puerto_id)
-        log.info(f"EnvioFinal: consulta de pesadas para flota {puerto_id} realizada exitosamente.")
+        # Obtener sólo las pesadas pendientes (leido=False) correspondientes a la última transacción del puerto
+        pesadas = await service.get_pending_for_last_transaccion(puerto_id=puerto_id)
+        log.info(f"EnvioFinal (preview): consulta de pesadas pendientes para flota {puerto_id} realizada exitosamente. items={len(pesadas)}")
 
-        result = await prepare_and_notify_envio_final(puerto_id, pesadas, viajes_service, notify=notify)
+        if not pesadas:
+            return response_json(status_code=status.HTTP_404_NOT_FOUND, message="No se encontraron pesadas pendientes para el puerto especificado")
 
-        if not result:
-            return response_json(status_code=status.HTTP_404_NOT_FOUND, message="No se encontraron pesadas para el puerto especificado")
-
-        return result
+        return pesadas
 
     except HTTPException as http_exc:
-        log.error(f"EnvioFinal: consulta de flota {puerto_id} no pudo realizarse: {http_exc.detail}")
+        log.error(f"EnvioFinal (preview): consulta de flota {puerto_id} no pudo realizarse: {http_exc.detail}")
         return response_json(
             status_code=http_exc.status_code,
             message=http_exc.detail
@@ -422,7 +423,7 @@ async def envio_final(
     except EntityNotFoundException as e:
         raise e
     except Exception as e:
-        log.error(f"EnvioFinal: Error al consultar pesadas de flota {puerto_id}: {e}")
+        log.error(f"EnvioFinal (preview): Error al consultar pesadas pendientes de flota {puerto_id}: {e}")
         return response_json(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             message=str(e)
@@ -443,8 +444,9 @@ async def envio_final_notify(
         service: PesadasService = Depends(get_pesadas_service),
         viajes_service: ViajesService = Depends(get_viajes_service)):
     try:
-        pesadas = await service.get_envio_final(puerto_id=puerto_id)
-        log.info(f"EnvioFinal notify: obtenida lista para {puerto_id} con {len(pesadas)} items")
+        # Obtener sólo las pesadas pendientes (leido=False) correspondientes a la última transacción del puerto
+        pesadas = await service.get_pending_for_last_transaccion(puerto_id=puerto_id)
+        log.info(f"EnvioFinal notify: obtenida lista de pendientes para {puerto_id} con {len(pesadas)} items (última transacción)")
 
         await notify_envio_final(puerto_id, pesadas, viajes_service, mode=mode)
 

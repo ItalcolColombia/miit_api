@@ -4,6 +4,7 @@ from typing import Any, AsyncGenerator
 
 from asyncpg.exceptions import InvalidCachedStatementError
 from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession
+from sqlalchemy import event, text
 from sqlalchemy.orm import declarative_base, sessionmaker
 
 from core.exceptions.db_exception import DatabaseSQLAlchemyException
@@ -39,6 +40,19 @@ class DatabaseConfiguration:
         pool_size=5,
         connect_args={"server_settings": {"timezone": "America/Bogota"}},
     )
+
+    # Also ensure on raw SQLAlchemy connect we set the timezone in the session as a safety.
+    @event.listens_for(_engine.sync_engine, "connect")
+    def _on_connect(dbapi_connection, connection_record):
+        try:
+            # This uses a simple SQL command to set the timezone for the session.
+            cursor = dbapi_connection.cursor()
+            cursor.execute("SET TIME ZONE 'America/Bogota'")
+            cursor.close()
+        except Exception:
+            # best-effort: if it fails (e.g., different DBAPI) ignore and rely on asyncpg server_settings
+            pass
+
     # Create a session factory
     _async_session = sessionmaker( bind=_engine, class_=AsyncSession, autoflush=False, 
                                    expire_on_commit=False, future=True, autocommit=False
@@ -99,6 +113,14 @@ class DatabaseConfiguration:
             pool_size=5,
             connect_args={"server_settings": {"timezone": "America/Bogota"}},
         )
+        @event.listens_for(cls._engine.sync_engine, "connect")
+        def _on_connect_recreated(dbapi_connection, connection_record):
+            try:
+                cursor = dbapi_connection.cursor()
+                cursor.execute("SET TIME ZONE 'America/Bogota'")
+                cursor.close()
+            except Exception:
+                pass
 
         cls._async_session = sessionmaker(bind=cls._engine, class_=AsyncSession, autoflush=False,
                                    expire_on_commit=False, future=True, autocommit=False
