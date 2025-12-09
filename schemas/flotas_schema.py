@@ -14,7 +14,7 @@ class FlotasResponse(BaseSchema):
     fecha_hora: Optional[datetime] = None
     usuario_id: Optional[int] = None
     estado_puerto: Optional[bool] = False
-    estado_operador: Optional[bool] = False
+    estado_operador: Optional[bool] = True
 
 
 model_config = ConfigDict(from_attributes=True)

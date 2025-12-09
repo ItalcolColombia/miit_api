@@ -93,6 +93,7 @@ async def get_buques_listado(
             status_code=status.HTTP_200_OK,
             summary="Modificar viaje del buque para actualizar estado por partida",
             description="Evento realizado por la automatización al dar por finalizado el recibo de buque."
+                        "Actualiza el estado_operador a False."
                         "Corresponde a FinalizaBuqueMT.",
             response_model=UpdateResponse,
             responses={

@@ -33,7 +33,7 @@ router = APIRouter(prefix="/integrador", tags=["Integrador"],  dependencies=[Dep
 @router.post("/buque-registro",
              status_code=status.HTTP_201_CREATED,
              summary="Registrar nuevo buque",
-             description="Evento efectuado por el operador posterior al Anuncio MN obtenido a través de la interfaz de PBCU."
+             description="Evento efectuado por el operador posterior al Anuncio MN obtenido a través de la interfaz de PBCU. "
                          "Corresponde a BuquesRegistro en el diagrama de flujo de proceso.",
              response_model=CreateResponse,
              responses={
@@ -70,7 +70,7 @@ async def create_buque(
 @router.post("/buque-carga",
              status_code=status.HTTP_201_CREATED,
              summary="Registrar carga de buque",
-             description="Evento efectuado por el operador con la información obtenida a través de la interfaz de PBCU."
+             description="Evento efectuado por el operador con la información obtenida a través de la interfaz de PBCU. "
                          "Corresponde a BuquesCarga en el diagrama de flujo de proceso.",
              response_model=CreateResponse,
              responses={
@@ -106,8 +106,8 @@ async def set_load(
 @router.put("/buque-arribo/{puerto_id}",
             status_code=status.HTTP_200_OK,
             summary="Modificar viaje del buque para actualizar estado por arribo",
-            description="Evento realizado por el operador post confirmación del arribo de la motonave a través de la interfaz de PBCU."
-                        "Actualiza del estado_puerto de la flota a True."
+            description="Evento realizado por el operador post confirmación del arribo de la motonave a través de la interfaz de PBCU. "
+                        "Actualiza del estado_puerto de la flota a True. "
                         "Corresponde a BuqueArrivo en el diagrama de flujo de proceso.",
             response_model=UpdateResponse,
             responses={
@@ -143,7 +143,8 @@ async def buque_in(
 @router.put("/buque-finalizar/{puerto_id}",
             status_code=status.HTTP_200_OK,
             summary="Modificar estado de un buque por partida",
-            description="Evento realizado por la automatización al dar por finalizado el recibo de buque."
+            description="Evento realizado por la automatización al dar por finalizado el recibo de buque. "
+                        "Actualiza el estado_puerto a False. "
                         "Corresponde a FinalizaBuqueOP.",
             response_model=UpdateResponse,
             responses={
@@ -179,7 +180,8 @@ async def end_buque(
 @router.put("/levante-carga-puerto/{no_bl}",
             status_code=status.HTTP_200_OK,
             summary="Modificar bit del estado_puerto de un BL",
-            description="Evento realizado por el operador posterior a confirmación de levante de carga la motonave a través de la interfaz de PBCU.",
+            description="Evento realizado por el operador posterior a confirmación de levante de carga la motonave a través de la interfaz de PBCU. "
+                        "Corresponde a LevanteCargaPuerto en el diagrama de flujo de proceso.",
             response_model=UpdateResponse,
             responses={
                 status.HTTP_400_BAD_REQUEST: {"model": ErrorResponse},
@@ -194,7 +196,7 @@ async def load_release_puerto(
         log.info(f"BL {no_bl}  estado_puerto marcado exitosamente.")
         return response_json(
             status_code=status.HTTP_200_OK,
-            message=f"estado_puerto actualizado",
+            message=f"Estado_puerto actualizado",
         )
 
     except HTTPException as http_exc:
@@ -214,7 +216,8 @@ async def load_release_puerto(
 @router.put("/levante-carga-operador/{no_bl}",
             status_code=status.HTTP_200_OK,
             summary="Modificar bit del estado_operador ",
-            description="Evento realizado por el operador posterior a confirmación de levante de carga la motonave a través de la interfaz de Control Carga.",
+            description="Evento realizado por el operador posterior a confirmación de levante de carga la motonave a través de la interfaz de Control Carga. "
+                        "Corresponde a LevanteCargaOperador en el diagrama de flujo de proceso.",
             response_model=UpdateResponse,
             responses={
                 status.HTTP_400_BAD_REQUEST: {"model": ErrorResponse},
@@ -229,7 +232,7 @@ async def load_release_operador(
         log.info(f"BL {no_bl}  estado_operador  marcado exitosamente.")
         return response_json(
             status_code=status.HTTP_200_OK,
-            message=f"estado_operador actualizado",
+            message=f"Estado_operador actualizado",
         )
 
     except HTTPException as http_exc:
@@ -249,7 +252,8 @@ async def load_release_operador(
 @router.post("/camion-registro",
              status_code=status.HTTP_201_CREATED,
              summary="Registrar camión",
-             description="Evento realizado por el operador con la cita de enturnamiento notificada a través de la interfaz de PBCU.",
+             description="Evento realizado por el operador con la cita de enturnamiento notificada a través de la interfaz de PBCU. "
+                         "Corresponde a CamionRegistro en el diagrama de flujo de proceso.",
              response_model=CamionRegistroResponse,
              responses={
                  status.HTTP_201_CREATED: {"model": CamionRegistroResponse},
@@ -286,7 +290,8 @@ async def create_camion(
 @router.put("/camion-ingreso/{puerto_id}",
             status_code=status.HTTP_200_OK,
             summary="Modificar cita del camion para actualizar ingreso",
-            description="Evento realizado por el operador post confirmación del ingreso del camión a báscula a través de la interfaz de PBCU.",
+            description="Evento realizado por el operador post confirmación del ingreso del camión a báscula a través de la interfaz de PBCU. "
+                        "Corresponde a CamionIngreso en el diagrama de flujo de proceso.",
             response_model=CamionIngresoResponse,
             responses={
                 status.HTTP_200_OK: {"model": CamionIngresoResponse},
@@ -325,7 +330,8 @@ async def in_camion(
 @router.put("/camion-egreso/{puerto_id}",
             status_code=status.HTTP_200_OK,
             summary="Modificar cita del camion para actualizar el egreso",
-            description="Evento realizado por el operador post confirmación del egreso del camión a báscula a través de la interfaz de PBCU.",
+            description="Evento realizado por el operador post confirmación del egreso del camión a báscula a través de la interfaz de PBCU. "
+                        "Corresponde a CamionSalida en el diagrama de flujo de proceso.",
             response_model=UpdateResponse,
             responses={
                 status.HTTP_400_BAD_REQUEST: {"model": ErrorResponse},
@@ -363,7 +369,9 @@ async def out_camion(
 @router.get("/pesadas-parciales/{puerto_id}",
              status_code=status.HTTP_200_OK,
              summary="Obtener acumulado de pesadas",
-             description="Evento realizado por el operador post petición de consulta recibida a través de la interfaz de PBCU.",
+             description="Evento realizado por el operador post petición de consulta recibida a través de la interfaz de PBCU. "
+                         "Consumo realizado por JOB del integrador para obtención de pesadas acumuladas por flota. "
+                         "Corresponde a Envioparciales en el diagrama de flujo de proceso.",
              response_model=List[VPesadasAcumResponse],
              responses={
                  status.HTTP_404_NOT_FOUND: {"model": ErrorResponse},
@@ -395,7 +403,8 @@ async def get_acum_pesadas(
 @router.get("/envio-final/{puerto_id}",
              status_code=status.HTTP_200_OK,
              summary="Envio final (previsión): mostrar la sumatoria de pesadas pendientes para la última transacción",
-             description="Muestra qué sería enviado en el envio final: la sumatoria de las pesadas pendientes (leido=False) correspondiente a la última transacción del puerto. No notifica a la API externa.",
+             description="Muestra qué sería enviado en el envio final: la sumatoria de las pesadas pendientes (leido=False) correspondiente a la última transacción del puerto. "
+                         "No notifica a la API externa.",
              response_model=List[VPesadasAcumResponse],
              responses={
                  status.HTTP_404_NOT_FOUND: {"model": ErrorResponse},
@@ -432,7 +441,11 @@ async def envio_final(
 @router.post("/envio-final/{puerto_id}/notify",
              status_code=status.HTTP_200_OK,
              summary="Notificar Envio Final a API externa",
-             description="Obtiene la lista de envio final y la notifica a la API externa. mode='auto' usa la configuración TG_API_ACCEPTS_LIST; 'list' fuerza envío único con lista; 'single' envía item-por-item.",
+             description="Obtiene la lista de envio final y la notifica a la API externa. "
+                         "mode='auto' usa la configuración TG_API_ACCEPTS_LIST; "
+                         "'list' fuerza envío único con lista; "
+                         "'single' envía item-por-item."
+                         "Corresponde a EnvioFinal en el diagrama de flujo de proceso.",
              responses={
                  status.HTTP_400_BAD_REQUEST: {"model": ErrorResponse},
                  status.HTTP_424_FAILED_DEPENDENCY: {"model": ErrorResponse},
