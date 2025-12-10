@@ -21,6 +21,7 @@ from services.pesadas_service import PesadasService
 from services.viajes_service import ViajesService
 from utils.logger_util import LoggerUtil
 from utils.response_util import ResponseUtil
+from utils.time_util import normalize_to_utc
 
 log = LoggerUtil()
 
@@ -196,7 +197,7 @@ async def load_release_puerto(
         log.info(f"BL {no_bl}  estado_puerto marcado exitosamente.")
         return response_json(
             status_code=status.HTTP_200_OK,
-            message=f"Estado_puerto actualizado",
+            message=f"estado_puerto actualizado",
         )
 
     except HTTPException as http_exc:
@@ -304,8 +305,10 @@ async def in_camion(
         service: ViajesService = Depends(get_viajes_service)):
     log.info(f"Payload recibido: Flota {puerto_id} - Ingreso ")
     try:
+        # Normalizar fecha_ingreso a UTC
+        fecha_ingreso_utc = normalize_to_utc(fecha_ingreso)
 
-        service_data = await service.chg_camion_ingreso(puerto_id, fecha_ingreso)
+        service_data = await service.chg_camion_ingreso(puerto_id, fecha_ingreso_utc)
         log.info(f"Ingreso de flota {puerto_id} marcada exitosamente.")
         return response_json(
             status_code=status.HTTP_200_OK,
@@ -344,8 +347,10 @@ async def out_camion(
         service: ViajesService = Depends(get_viajes_service)):
     log.info(f"Payload recibido: Camion {puerto_id} - Salida")
     try:
+        # Normalizar fecha_salida a UTC
+        fecha_salida_utc = normalize_to_utc(fecha_salida)
 
-        await service.chg_camion_salida(puerto_id, fecha_salida, peso_real)
+        await service.chg_camion_salida(puerto_id, fecha_salida_utc, peso_real)
         log.info(f"Salida de camion {puerto_id} marcada exitosamente.")
         return response_json(
             status_code=status.HTTP_200_OK,

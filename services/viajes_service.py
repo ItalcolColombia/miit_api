@@ -31,7 +31,7 @@ from services.materiales_service import MaterialesService
 from services.transacciones_service import TransaccionesService
 from utils.any_utils import AnyUtils
 from utils.logger_util import LoggerUtil
-from utils.time_util import now_local, ensure_aware_local
+from utils.time_util import ensure_aware_local, normalize_to_utc
 
 log = LoggerUtil()
 
@@ -262,6 +262,11 @@ class ViajesService:
             viaje_data = viaje_create.model_dump(exclude={"referencia", "estado"})
             viaje_data["flota_id"] = flota.id
 
+            # Salvaguarda: asegurar que las fechas estén en UTC (aceptar casos donde el validador no se ejecutó)
+            for f in ("fecha_llegada", "fecha_salida", "fecha_hora"):
+                if f in viaje_data and viaje_data[f] is not None:
+                    viaje_data[f] = normalize_to_utc(viaje_data[f])
+
             # 5. Crear registro en la base de datos
             db_viaje = ViajeCreate(**viaje_data)
             await self._repo.create(db_viaje)
@@ -387,6 +392,11 @@ class ViajesService:
             viaje_data = viaje_create.model_dump(exclude={"referencia", "puntos"})
             viaje_data["flota_id"] = flota.id
             viaje_data["material_id"] = material_id
+
+            # Salvaguarda: asegurar que las fechas estén en UTC
+            for f in ("fecha_llegada", "fecha_salida", "fecha_hora"):
+                if f in viaje_data and viaje_data[f] is not None:
+                    viaje_data[f] = normalize_to_utc(viaje_data[f])
 
             # 6. Crear registro en la base de datos
             db_viaje = ViajeCreate(**viaje_data)

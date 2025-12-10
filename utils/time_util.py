@@ -1,136 +1,126 @@
-import os
 from datetime import datetime, timezone
+import os
 from zoneinfo import ZoneInfo
-import logging
-
-logger = logging.getLogger(__name__)
+from typing import Optional
 
 
-def utc_from_timestamp(timestamp: float) -> datetime:
-    """
-    Class responsible for handling timestamp generation.
-
-    This class returns datetime with the timezone.
-
-    Class Args:
-        None
-    """
-    return datetime.fromtimestamp(timestamp, timezone.utc)
+def get_app_timezone() -> str:
+    """Devuelve la zona configurada por APP_TIMEZONE o 'America/Bogota' por defecto."""
+    return os.environ.get('APP_TIMEZONE') or 'America/Bogota'
 
 
-def ensure_aware_utc(dt: datetime) -> datetime:
-    """Ensure a datetime is timezone-aware in UTC.
+def _parse_iso_datetime(value: str) -> datetime:
+    """Parses an ISO datetime string robustly (handles trailing 'Z')."""
+    if value.endswith('Z'):
+        value = value[:-1] + '+00:00'
+    return datetime.fromisoformat(value)
 
-    - If dt is None, return None.
-    - If dt already has tzinfo, convert to UTC.
-    - If dt is naive, assume it's in the local timezone (from TZ env or system local timezone)
-      and convert to UTC. This fixes cases where code calls datetime.now() (naive) expecting
-      local time of the container.
+
+def ensure_aware_in_app_tz(dt: datetime) -> datetime:
+    """Asegura que dt sea timezone-aware en la zona configurada por APP_TIMEZONE.
+
+    - Si dt es naive -> se le asume la zona APP_TIMEZONE.
+    - Si dt ya tiene tzinfo -> se convierte a la zona APP_TIMEZONE.
     """
     if dt is None:
         return None
-
-    # If dt already has tzinfo, convert to UTC
-    if dt.tzinfo is not None:
-        return dt.astimezone(timezone.utc)
-
-    # dt is naive: determine local tz
-    tz_name = os.environ.get('TZ')
-    if tz_name:
-        try:
-            local_tz = ZoneInfo(tz_name)
-        except Exception:
-            # Guardar un warning por si la zona está corrupta en el servidor
-            logger.warning(f"ZoneInfo('{tz_name}') failed, falling back to system local tz or UTC")
-            local_tz = datetime.now().astimezone().tzinfo or timezone.utc
-    else:
-        # Fallback to system local timezone
-        local_tz = datetime.now().astimezone().tzinfo or timezone.utc
-
-    # Localize naive dt as local_tz then convert to UTC
-    localized = dt.replace(tzinfo=local_tz)
-    return localized.astimezone(timezone.utc)
-
-
-def utc_to_bogota(dt: datetime) -> datetime:
-    """Convierte un datetime aware en UTC a la zona America/Bogota.
-
-    Si dt es naive se asume UTC.
-    """
-    if dt is None:
-        return None
-    dt_utc = ensure_aware_utc(dt)
+    tz_name = get_app_timezone()
     try:
-        bogota_tz = ZoneInfo('America/Bogota')
-    except Exception as e:
-        # Puede ocurrir "Invalid TZif file: magic not found" u otros errores del tzdata.
-        logger.warning(f"ZoneInfo('America/Bogota') failed: {e}; falling back to UTC for formatting")
-        bogota_tz = timezone.utc
-    return dt_utc.astimezone(bogota_tz)
-
-
-def format_iso_bogota(dt: datetime) -> str:
-    """Devuelve una representación ISO 8601 en zona America/Bogota.
-
-    Si dt es None devuelve None.
-    """
-    if dt is None:
-        return None
-    try:
-        return utc_to_bogota(dt).isoformat()
-    except Exception as e:
-        # Si por alguna razón la conversión de zona falla, devolver ISO en UTC como fallback
-        logger.warning(f"format_iso_bogota fallo al convertir dt {dt}: {e}; devolviendo ISO en UTC")
-        try:
-            return dt.astimezone(timezone.utc).isoformat()
-        except Exception:
-            # Último recurso
-            return dt.isoformat()
-
-
-# Nueva función: asegurar datetime en la zona configurada por TZ
-def ensure_aware_local(dt: datetime) -> datetime:
-    """Asegura que un datetime sea timezone-aware usando la zona definida en la variable
-    de entorno TZ (por ejemplo 'America/Bogota').
-
-    - Si dt es None devuelve None.
-    - Si dt es naive: se asume que está en la zona local (TZ) y se le añade tzinfo.
-    - Si dt ya tiene tzinfo: se convierte a la zona local.
-
-    Esto permite persistir valores con la zona local en lugar de forzar UTC.
-    """
-    if dt is None:
-        return None
-    tz_name = os.environ.get('TZ', 'UTC')
-    try:
-        local_tz = ZoneInfo(tz_name)
+        app_tz = ZoneInfo(tz_name)
     except Exception:
-        logger.warning(f"ZoneInfo('{tz_name}') failed in ensure_aware_local; falling back to UTC")
-        local_tz = timezone.utc
+        # Fallback a UTC si la zona no existe
+        app_tz = timezone.utc
 
     if dt.tzinfo is None:
-        # Asumir naive como hora local
-        return dt.replace(tzinfo=local_tz)
-    return dt.astimezone(local_tz)
+        return dt.replace(tzinfo=app_tz)
+    return dt.astimezone(app_tz)
+
+
+def normalize_to_utc(value: Optional[object]) -> Optional[datetime]:
+    """Toma un str o datetime (naive o aware) y devuelve un datetime aware en UTC.
+
+    - Si value es None -> None
+    - Si es str -> intenta parsear ISO
+    - Si es naive -> se asume APP_TIMEZONE y luego se convierte a UTC
+    - Si es aware -> se convierte a UTC
+    """
+    if value is None:
+        return None
+
+    if isinstance(value, str):
+        # parsear ISO flexiblemente
+        dt = _parse_iso_datetime(value)
+    elif isinstance(value, datetime):
+        dt = value
+    else:
+        # no es un tipo esperado; intentar dejar que pydantic o quien llame valide
+        return value
+
+    # si es naive, asumir zona APP_TIMEZONE
+    if dt.tzinfo is None:
+        dt = ensure_aware_in_app_tz(dt)
+
+    return dt.astimezone(timezone.utc)
+
+
+def utc_to_app_tz(dt: Optional[datetime]) -> Optional[datetime]:
+    """Convierte un datetime aware UTC a la zona configurada por APP_TIMEZONE.
+
+    Si dt es naive, se asume que ya está en UTC.
+    """
+    if dt is None:
+        return None
+    if dt.tzinfo is None:
+        # interpretar naive como UTC
+        dt = dt.replace(tzinfo=timezone.utc)
+    tz_name = get_app_timezone()
+    try:
+        app_tz = ZoneInfo(tz_name)
+    except Exception:
+        app_tz = timezone.utc
+    return dt.astimezone(app_tz)
+
+
+def format_iso_bogota(dt: Optional[datetime]) -> Optional[str]:
+    """Convierte un datetime a la zona APP_TIMEZONE y devuelve un ISO string sin microsegundos.
+
+    - Si dt es None -> None
+    - Si dt es naive se asume UTC y se convierte a APP_TIMEZONE
+    - Si dt es aware se convierte a APP_TIMEZONE
+    """
+    if dt is None:
+        return None
+    try:
+        converted = utc_to_app_tz(dt)
+        # eliminar microsegundos para salidas más limpias
+        converted = converted.replace(microsecond=0)
+        return converted.isoformat()
+    except Exception:
+        # fallback seguro
+        try:
+            return dt.replace(microsecond=0).isoformat()
+        except Exception:
+            return str(dt)
+
+
+# Compatibilidad: alias/funciones utilitarias usadas en otros módulos
+def ensure_aware_local(dt: Optional[datetime]) -> Optional[datetime]:
+    """Alias para ensure_aware_in_app_tz: asegura tz aware en APP_TIMEZONE (útil al guardar)."""
+    if dt is None:
+        return None
+    return ensure_aware_in_app_tz(dt)
 
 
 def now_local() -> datetime:
-    """Devuelve la fecha y hora actual en la zona local definida por TZ (timezone-aware).
-
-    Útil para asignar campos de fecha_hora que deban reflejar la hora local del contenedor.
-    """
-    tz_name = os.environ.get('TZ', 'UTC')
+    """Devuelve el datetime actual con tzaware en la zona configurada por APP_TIMEZONE."""
+    tz_name = get_app_timezone()
     try:
-        local_tz = ZoneInfo(tz_name)
-    except Exception as e:
-        logger.warning(f"ZoneInfo('{tz_name}') failed in now_local: {e}; falling back to UTC")
-        local_tz = timezone.utc
-    return datetime.now(local_tz)
+        app_tz = ZoneInfo(tz_name)
+    except Exception:
+        app_tz = timezone.utc
+    return datetime.now(app_tz)
 
 
 def now_utc() -> datetime:
-    """Devuelve la fecha y hora actual en UTC (timezone-aware).
-
-    Útil para usos que requieren tiempo en UTC (tokens, expiraciones, logs centralizados).
-    """
+    """Devuelve el datetime actual en UTC (tz-aware)."""
     return datetime.now(timezone.utc)

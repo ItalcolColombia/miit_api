@@ -88,6 +88,14 @@ class ViajeBuqueExtCreate(BaseModel):
             raise ValueError("Peso debe ser positivo")
         return value
 
+    # Normalizar datetimes naive a UTC
+    @field_validator('fecha_llegada', 'fecha_salida', 'fecha_hora', mode='before')
+    def _normalize_datetimes(cls, v):
+        from utils.time_util import normalize_to_utc
+        if v is None:
+            return None
+        return normalize_to_utc(v)
+
     class Config:
         json_schema_extra = {
             "example": {
@@ -138,6 +146,14 @@ class ViajeCamionExtCreate(BaseModel):
         if value < 0:
             raise ValueError("Peso debe ser positivo")
         return value
+
+    # Normalizar datetimes naive a UTC
+    @field_validator('fecha_llegada', 'fecha_salida', 'fecha_hora', mode='before')
+    def _normalize_datetimes(cls, v):
+        from utils.time_util import normalize_to_utc
+        if v is None:
+            return None
+        return normalize_to_utc(v)
 
     class Config:
         json_schema_extra = {
