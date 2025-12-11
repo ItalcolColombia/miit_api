@@ -16,3 +16,6 @@ itsdangerous
 httpx
 orjson
 whenever
+pytest
+pytest-asyncio
+tzdata

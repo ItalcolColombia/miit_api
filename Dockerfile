@@ -1,4 +1,3 @@
-
 #Definir imagen de SO
 FROM registry.access.redhat.com/ubi9/python-312
 
@@ -28,7 +27,7 @@ RUN update-ca-trust extract
 
 #Configuración zona horaria (America/Bogota)
 RUN ln -sf /usr/share/zoneinfo/America/Bogota /etc/localtime && \
-    echo "America/Bogota" > /etc/localtime
+    echo "America/Bogota" > /etc/timezone
 
 #Instalar o actualizar gestor de paquetes pip, setuptools, wheel, supervisor
 RUN pip install --upgrade pip "setuptools<81" wheel supervisor

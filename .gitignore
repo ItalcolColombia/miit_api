@@ -54,3 +54,4 @@ ehthumbs.db
 
 /docker-compose.simulate.yml
 /README.simulate_ecr.md
+/scripts/simulate_ecr_push.ps1
