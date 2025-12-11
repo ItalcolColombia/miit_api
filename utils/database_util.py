@@ -1,3 +1,6 @@
+import asyncio
+import os
+
 from sqlalchemy.exc import OperationalError
 from sqlalchemy.ext.asyncio import create_async_engine
 from starlette import status
@@ -6,9 +9,6 @@ from core.config.settings import get_settings
 from core.exceptions.base_exception import BasedException
 from database.configuration import DatabaseConfigurationUtil
 from utils.logger_util import LoggerUtil
-
-import asyncio
-import os
 
 log = LoggerUtil()
 

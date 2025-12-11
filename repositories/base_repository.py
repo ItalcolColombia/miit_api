@@ -14,20 +14,30 @@ from core.contracts.auditor import Auditor
 from core.exceptions.entity_exceptions import EntityNotFoundException
 from schemas.logs_auditoria_schema import LogsAuditoriaCreate
 from utils.any_utils import AnyUtils
-from utils.time_util import ensure_aware_local
+from utils.logger_util import LoggerUtil
+
+log = LoggerUtil()
 
 ModelType = TypeVar("ModelType")
 SchemaType = TypeVar("SchemaType")
 
 
 def _normalize_datetimes(data: Dict[str, Any]) -> Dict[str, Any]:
-    """Recorre el dict y convierte objetos datetime a UTC-aware."""
+    """Recorre el dict y convierte objetos datetime o ISO strings a datetime aware en APP_TIMEZONE."""
     normalized = {}
+    # importar una vez fuera del bucle
+    from utils.time_util import normalize_to_app_tz
     for k, v in data.items():
         try:
-            # Detectar objetos datetime de forma robusta
+            # Detectar objetos datetime y strings ISO
             if isinstance(v, datetime):
-                normalized[k] = ensure_aware_local(v)
+                normalized[k] = normalize_to_app_tz(v)
+            elif isinstance(v, str):
+                # intentar parsear ISO string y normalizar
+                try:
+                    normalized[k] = normalize_to_app_tz(v)
+                except Exception:
+                    normalized[k] = v
             else:
                 normalized[k] = v
         except Exception:
@@ -111,6 +121,18 @@ class IRepository(Generic[ModelType, SchemaType]):
           ValueError: If user_id is None and the model requires it.
         """
         db_obj = self.model(**_normalize_datetimes(obj.model_dump()))  # Normalize datetimes before creating
+
+        # Debug: log datetime fields of db_obj before persisting
+        try:
+            table = getattr(self.model, '__table__', None)
+            if table is not None:
+                for col in table.columns:
+                    name = col.key
+                    val = getattr(db_obj, name, None)
+                    if isinstance(val, datetime):
+                        log.info(f"[DEBUG repo.create] {self.model.__tablename__}.{name} = {val} (tzinfo={getattr(val, 'tzinfo', None)})")
+        except Exception as e:
+            log.warning(f"[DEBUG repo.create] No se pudieron inspeccionar columnas de {self.model.__name__}: {e}")
 
         # Explicitly set usuario_id column
         if hasattr(self.model, 'usuario_id'):
@@ -316,10 +338,10 @@ class IRepository(Generic[ModelType, SchemaType]):
             # Build audit object
             audit_data = LogsAuditoriaCreate(
                 entidad=self.model.__tablename__,
-                entidad_id=str(db_obj.id),
-                accion='DELETE',
-                valor_anterior=AnyUtils.serialize_data(db_obj_old),
-                usuario_id=current_user_id.get()
+                    entidad_id=str(db_obj.id),
+                    accion='DELETE',
+                    valor_anterior=AnyUtils.serialize_data(db_obj_old),
+                    usuario_id=current_user_id.get()
             )
 
             # Insert the audit object register

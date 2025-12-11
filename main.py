@@ -21,6 +21,7 @@ from core.middleware.time_middleware import TimeMiddleware
 from utils.database_util import DatabaseUtil
 from utils.logger_util import LoggerUtil
 from utils.message_util import MessageUtil
+from utils.time_util import get_app_timezone, now_utc, now_local
 
 # Env variables Setup
 API_HOST = get_settings().API_HOST
@@ -41,6 +42,13 @@ async def lifespan(app: FastAPI):
     try:
         # Startup logic
         log.info("Application startup")
+        # Log timezone and current times for debugging
+        try:
+            tz = get_app_timezone()
+            log.info(f"APP_TIMEZONE={tz}")
+            log.info(f"now_utc={now_utc().isoformat()} now_local={now_local().isoformat()}")
+        except Exception as e:
+            log.warning(f"No se pudo leer APP_TIMEZONE en startup: {e}")
         await startup_event()
         yield
     finally:

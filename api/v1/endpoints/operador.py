@@ -21,7 +21,7 @@ from services.pesadas_service import PesadasService
 from services.viajes_service import ViajesService
 from utils.logger_util import LoggerUtil
 from utils.response_util import ResponseUtil
-from utils.time_util import normalize_to_utc
+from utils.time_util import normalize_to_app_tz
 
 log = LoggerUtil()
 
@@ -44,6 +44,15 @@ router = APIRouter(prefix="/integrador", tags=["Integrador"],  dependencies=[Dep
 async def create_buque(
         flota: ViajeBuqueExtCreate,
         service: ViajesService = Depends(get_viajes_service)):
+    # Log de depuración: mostrar valores de fecha recibidos y su tzinfo
+    try:
+        fecha_llegada = getattr(flota, 'fecha_llegada', None)
+        fecha_salida = getattr(flota, 'fecha_salida', None)
+        log.info(f"[DEBUG create_buque] fecha_llegada raw: {fecha_llegada} (tzinfo={getattr(fecha_llegada, 'tzinfo', None)})")
+        log.info(f"[DEBUG create_buque] fecha_salida raw:  {fecha_salida} (tzinfo={getattr(fecha_salida, 'tzinfo', None)})")
+    except Exception as e:
+        log.warning(f"[DEBUG create_buque] Error al inspeccionar fechas del payload: {e}")
+
     log.info(f"Payload recibido: Buque {flota}")
     try:
         await service.create_buque_nuevo(flota)
@@ -306,7 +315,7 @@ async def in_camion(
     log.info(f"Payload recibido: Flota {puerto_id} - Ingreso ")
     try:
         # Normalizar fecha_ingreso a UTC
-        fecha_ingreso_utc = normalize_to_utc(fecha_ingreso)
+        fecha_ingreso_utc = normalize_to_app_tz(fecha_ingreso)
 
         service_data = await service.chg_camion_ingreso(puerto_id, fecha_ingreso_utc)
         log.info(f"Ingreso de flota {puerto_id} marcada exitosamente.")
@@ -348,7 +357,7 @@ async def out_camion(
     log.info(f"Payload recibido: Camion {puerto_id} - Salida")
     try:
         # Normalizar fecha_salida a UTC
-        fecha_salida_utc = normalize_to_utc(fecha_salida)
+        fecha_salida_utc = normalize_to_app_tz(fecha_salida)
 
         await service.chg_camion_salida(puerto_id, fecha_salida_utc, peso_real)
         log.info(f"Salida de camion {puerto_id} marcada exitosamente.")

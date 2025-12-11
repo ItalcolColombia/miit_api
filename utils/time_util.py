@@ -1,7 +1,11 @@
-from datetime import datetime, timezone
 import os
-from zoneinfo import ZoneInfo
+from datetime import datetime, timezone, timedelta
 from typing import Optional
+from zoneinfo import ZoneInfo
+
+from utils.logger_util import LoggerUtil
+
+log = LoggerUtil()
 
 
 def get_app_timezone() -> str:
@@ -16,20 +20,42 @@ def _parse_iso_datetime(value: str) -> datetime:
     return datetime.fromisoformat(value)
 
 
+def _load_zone(tz_name: str):
+    """Intenta cargar ZoneInfo y si falla aplica fallback conocido (ej. America/Bogota -> -5h).
+
+    Devuelve un objeto tzinfo.
+    """
+    try:
+        return ZoneInfo(tz_name)
+    except Exception as e:
+        tz_lower = (tz_name or '').lower()
+        if tz_lower in ('america/bogota', 'bogota'):
+            log.warning(f"ZoneInfo('{tz_name}') falló ({e}), usando fallback UTC-5")
+            return timezone(timedelta(hours=-5))
+        if tz_lower.startswith('utc') and ('+' in tz_lower or '-' in tz_lower):
+            try:
+                sign = -1 if '-' in tz_lower else 1
+                parts = tz_lower.replace('utc', '').replace('+', '').replace('-', '').split(':')
+                hours = int(parts[0]) if parts[0] else 0
+                mins = int(parts[1]) if len(parts) > 1 else 0
+                return timezone(timedelta(hours=sign * hours, minutes=sign * mins))
+            except Exception:
+                pass
+        log.warning(f"ZoneInfo('{tz_name}') falló ({e}), usando fallback UTC")
+        return timezone.utc
+
+
 def ensure_aware_in_app_tz(dt: datetime) -> datetime:
     """Asegura que dt sea timezone-aware en la zona configurada por APP_TIMEZONE.
 
+    - Si dt es None -> None
     - Si dt es naive -> se le asume la zona APP_TIMEZONE.
     - Si dt ya tiene tzinfo -> se convierte a la zona APP_TIMEZONE.
     """
     if dt is None:
         return None
     tz_name = get_app_timezone()
-    try:
-        app_tz = ZoneInfo(tz_name)
-    except Exception:
-        # Fallback a UTC si la zona no existe
-        app_tz = timezone.utc
+    app_tz = _load_zone(tz_name)
 
     if dt.tzinfo is None:
         return dt.replace(tzinfo=app_tz)
@@ -63,6 +89,31 @@ def normalize_to_utc(value: Optional[object]) -> Optional[datetime]:
     return dt.astimezone(timezone.utc)
 
 
+def normalize_to_app_tz(value: Optional[object]) -> Optional[datetime]:
+    """Toma un str o datetime (naive o aware) y devuelve un datetime timezone-aware en APP_TIMEZONE.
+
+    - Si value es None -> None
+    - Si es str -> parsea ISO
+    - Si es naive -> asigna APP_TIMEZONE como tzinfo (no convierte)
+    - Si es aware -> lo convierte a APP_TIMEZONE
+    """
+    if value is None:
+        return None
+
+    if isinstance(value, str):
+        dt = _parse_iso_datetime(value)
+    elif isinstance(value, datetime):
+        dt = value
+    else:
+        return value
+
+    app_tz = _load_zone(get_app_timezone())
+    if dt.tzinfo is None:
+        # asignar la zona sin convertir la hora de pared
+        return dt.replace(tzinfo=app_tz)
+    return dt.astimezone(app_tz)
+
+
 def utc_to_app_tz(dt: Optional[datetime]) -> Optional[datetime]:
     """Convierte un datetime aware UTC a la zona configurada por APP_TIMEZONE.
 
@@ -74,10 +125,7 @@ def utc_to_app_tz(dt: Optional[datetime]) -> Optional[datetime]:
         # interpretar naive como UTC
         dt = dt.replace(tzinfo=timezone.utc)
     tz_name = get_app_timezone()
-    try:
-        app_tz = ZoneInfo(tz_name)
-    except Exception:
-        app_tz = timezone.utc
+    app_tz = _load_zone(tz_name)
     return dt.astimezone(app_tz)
 
 
@@ -114,10 +162,7 @@ def ensure_aware_local(dt: Optional[datetime]) -> Optional[datetime]:
 def now_local() -> datetime:
     """Devuelve el datetime actual con tzaware en la zona configurada por APP_TIMEZONE."""
     tz_name = get_app_timezone()
-    try:
-        app_tz = ZoneInfo(tz_name)
-    except Exception:
-        app_tz = timezone.utc
+    app_tz = _load_zone(tz_name)
     return datetime.now(app_tz)
 
 

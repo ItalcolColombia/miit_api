@@ -3,8 +3,8 @@
 from typing import Any, AsyncGenerator
 
 from asyncpg.exceptions import InvalidCachedStatementError
+from sqlalchemy import event
 from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession
-from sqlalchemy import event, text
 from sqlalchemy.orm import declarative_base, sessionmaker
 
 from core.exceptions.db_exception import DatabaseSQLAlchemyException

@@ -31,7 +31,6 @@ from services.materiales_service import MaterialesService
 from services.transacciones_service import TransaccionesService
 from utils.any_utils import AnyUtils
 from utils.logger_util import LoggerUtil
-from utils.time_util import ensure_aware_local, normalize_to_utc
 
 log = LoggerUtil()
 
@@ -265,7 +264,15 @@ class ViajesService:
             # Salvaguarda: asegurar que las fechas estén en UTC (aceptar casos donde el validador no se ejecutó)
             for f in ("fecha_llegada", "fecha_salida", "fecha_hora"):
                 if f in viaje_data and viaje_data[f] is not None:
-                    viaje_data[f] = normalize_to_utc(viaje_data[f])
+                    from utils.time_util import normalize_to_app_tz
+                    viaje_data[f] = normalize_to_app_tz(viaje_data[f])
+
+            # Log de depuración: mostrar cómo quedaron las fechas antes de crear el registro
+            try:
+                log.info(f"[DEBUG create_buque_nuevo] viaje_data fecha_llegada: {viaje_data.get('fecha_llegada')} (tzinfo={getattr(viaje_data.get('fecha_llegada'), 'tzinfo', None)})")
+                log.info(f"[DEBUG create_buque_nuevo] viaje_data fecha_salida:  {viaje_data.get('fecha_salida')} (tzinfo={getattr(viaje_data.get('fecha_salida'), 'tzinfo', None)})")
+            except Exception:
+                pass
 
             # 5. Crear registro en la base de datos
             db_viaje = ViajeCreate(**viaje_data)
@@ -390,13 +397,28 @@ class ViajesService:
 
             # 5. Ajustar el schema al requerido
             viaje_data = viaje_create.model_dump(exclude={"referencia", "puntos"})
+            # DEBUG: inspeccionar viaje_data después de model_dump
+            try:
+                vll = viaje_data.get('fecha_llegada')
+                vls = viaje_data.get('fecha_salida')
+                log.info(f"[DEBUG create_camion_nuevo MODEL_DUMP] fecha_llegada: {vll} (type={type(vll)}, tzinfo={getattr(vll, 'tzinfo', None)})")
+                log.info(f"[DEBUG create_camion_nuevo MODEL_DUMP] fecha_salida:  {vls} (type={type(vls)}, tzinfo={getattr(vls, 'tzinfo', None)})")
+            except Exception:
+                pass
+
             viaje_data["flota_id"] = flota.id
             viaje_data["material_id"] = material_id
 
             # Salvaguarda: asegurar que las fechas estén en UTC
             for f in ("fecha_llegada", "fecha_salida", "fecha_hora"):
                 if f in viaje_data and viaje_data[f] is not None:
-                    viaje_data[f] = normalize_to_utc(viaje_data[f])
+                    from utils.time_util import normalize_to_app_tz
+                    before_val = viaje_data[f]
+                    viaje_data[f] = normalize_to_app_tz(viaje_data[f])
+                    try:
+                        log.info(f"[DEBUG create_camion_nuevo NORMALIZE] field={f} before={before_val} (type={type(before_val)}, tzinfo={getattr(before_val, 'tzinfo', None)}) after={viaje_data[f]} (type={type(viaje_data[f])}, tzinfo={getattr(viaje_data[f], 'tzinfo', None)})")
+                    except Exception:
+                        pass
 
             # 6. Crear registro en la base de datos
             db_viaje = ViajeCreate(**viaje_data)
@@ -600,11 +622,10 @@ class ViajesService:
                 raise EntityNotFoundException(
                     f"La flota es del tipo '{flota.tipo}' diferente al tipo esperado 'camion'")
 
+            from utils.time_util import normalize_to_app_tz
             update_fields = {
-                # Convertir la fecha recibida a la zona local configurada (TZ)
-                # Esto asegura que si el cliente envía una fecha naive o en UTC,
-                # la guardemos con la zona local (p. ej. America/Bogota).
-                "fecha_salida": ensure_aware_local(fecha),
+                # Guardar la hora tal como llegó el cliente, asumiendo APP_TIMEZONE
+                "fecha_salida": normalize_to_app_tz(fecha),
                 "peso_real": peso
             }
             update_data = ViajeUpdate(**update_fields)

@@ -1,5 +1,4 @@
 from datetime import timedelta
-from utils.time_util import now_utc
 from typing import Optional
 
 import jwt
@@ -19,6 +18,7 @@ from core.config.settings import get_settings
 from core.exceptions.base_exception import BasedException
 from core.exceptions.jwt_exception import UnauthorizedToken
 from utils.logger_util import LoggerUtil
+from utils.time_util import now_utc
 
 log = LoggerUtil()
 
