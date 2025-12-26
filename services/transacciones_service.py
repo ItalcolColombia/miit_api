@@ -336,7 +336,8 @@ class TransaccionesService:
                         observacion=None,
                         peso=peso_acc,
                         saldo_anterior=saldo_anterior,
-                        saldo_nuevo=saldo_nuevo
+                        saldo_nuevo=saldo_nuevo,
+                        usuario_id=current_user_id.get()
                     )
                     session.add(mov_obj)
                     await session.flush()
