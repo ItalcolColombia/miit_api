@@ -26,8 +26,8 @@ class FlotaCreate(BaseSchema):
     puntos: Optional[int] = None
     fecha_hora: Optional[datetime] = None
     usuario_id: Optional[int] = None
-    estado_puerto: Optional[bool] = True
-    estado_operador: Optional[bool] = True
+    estado_puerto: Optional[bool] = False
+    estado_operador: Optional[bool] = False
 
 
     model_config = ConfigDict(
@@ -37,8 +37,8 @@ class FlotaCreate(BaseSchema):
                 "tipo": "buque",
                 "referencia": "LIBERTY ISLAND",
                 "puntos": None,
-                "estado_puerto": True,
-                "estado_operador": True,
+                "estado_puerto": False,
+                "estado_operador": False,
             }
         }
     )

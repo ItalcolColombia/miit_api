@@ -319,7 +319,6 @@ class VUsuariosRoles(Base):
     usuario_id = Column(Integer, nullable=True)
     usuario = Column(String(200))
 
-
 class VRolesPermisos(Base):
     __tablename__ = "v_roles_permisos"
     rol_id = Column(Integer)
@@ -341,3 +340,17 @@ class VAlmMateriales(Base):
     fecha_hora = Column(DateTime(timezone=True))
     usuario_id = Column(Integer, nullable=True)
     usuario = Column(String(200))
+
+class SaldoSnapshotScada(Base):
+    __tablename__ = 'saldo_snapshot_scada'
+    id = Column(Integer, primary_key=True, index=True)
+    pesada_id = Column(Integer(), ForeignKey('pesadas.id'), nullable=False)
+    # Ahora permitimos almacenamiento_id nullable para soportar snapshots que solo aplican a material
+    almacenamiento_id = Column(Integer, nullable=True)
+    material_id = Column(Integer, nullable=True)
+    saldo_anterior = Column(Numeric(15,3), nullable=False)
+    saldo_nuevo = Column(Numeric(15,3), nullable=False)
+    fecha_registro = Column(DateTime(timezone=True), server_default=func.timezone('America/Bogota', func.now()), onupdate=func.timezone('America/Bogota', func.now()))
+    __table_args__ = (
+        UniqueConstraint('pesada_id', name='uk_snapshot_pesada'),
+    )

@@ -18,8 +18,11 @@ from schemas.pesadas_corte_schema import PesadasCalculate, PesadasCorteCreate, P
     PesadaCorteRetrieve
 from schemas.pesadas_schema import PesadaResponse, PesadaCreate, PesadaUpdate, VPesadasAcumResponse
 from schemas.transacciones_schema import TransaccionUpdate
+from schemas.saldo_snapshot_schema import SaldoSnapshotCreate
 from utils.logger_util import LoggerUtil
-from utils.time_util import now_local
+from utils.any_utils import AnyUtils
+from core.config.context import current_user_id
+from schemas.logs_auditoria_schema import LogsAuditoriaCreate
 
 log = LoggerUtil()
 
@@ -58,7 +61,9 @@ class PesadasService:
             if await self._repo.find_one(transaccion_id=trans_id, consecutivo=pesada_data.consecutivo):
                 raise EntityAlreadyRegisteredException(f"En la transacción {trans_id} ya existe una pesada con ese consecutivo '{pesada_data.consecutivo}'")
 
-            pesada_model = Pesadas(**pesada_data.model_dump())
+            # Excluir campos de snapshot que no forman parte del modelo ORM Pesadas
+            pesada_payload = pesada_data.model_dump(exclude={'saldo_anterior', 'saldo_nuevo'})
+            pesada_model = Pesadas(**pesada_payload)
 
             # Si el repositorio tiene una sesión DB (runtime), realizar ambas operaciones en una transacción
             session = getattr(self._repo, 'db', None)
@@ -78,6 +83,21 @@ class PesadasService:
                                 new_s.add(pesada_model)
                                 await new_s.flush()
                                 await new_s.refresh(pesada_model)
+                                # Registrar auditoría de creación de pesada (sesión independiente)
+                                try:
+                                    audit_pes = LogsAuditoriaCreate(
+                                        entidad='pesadas',
+                                        entidad_id=str(getattr(pesada_model, 'id', None)),
+                                        accion='CREATE',
+                                        valor_anterior=None,
+                                        valor_nuevo=AnyUtils.serialize_orm_object(pesada_model),
+                                        usuario_id=current_user_id.get()
+                                    )
+                                    # usar auditor del repositorio si está disponible
+                                    if getattr(self._repo, 'auditor', None) is not None:
+                                        await self._repo.auditor.log_audit(audit_log_data=audit_pes)
+                                except Exception as e_aud:
+                                    log.error(f"No se pudo registrar auditoría para pesada (sesión independiente): {e_aud}")
 
                                 from sqlalchemy import select as _select
                                 result = await new_s.execute(_select(Transacciones).filter(Transacciones.id == int(trans_id)))
@@ -86,28 +106,115 @@ class PesadasService:
                                     raise EntityNotFoundException(f"Transacción con ID {trans_id} no encontrada para actualizar a 'Proceso'.")
                                 tran_obj.estado = 'Proceso'
                                 await new_s.flush()
+
+                                # Si vienen saldos en la petición, crear snapshot en la misma transacción
+                                try:
+                                    sa = getattr(pesada_data, 'saldo_anterior', None)
+                                    sn = getattr(pesada_data, 'saldo_nuevo', None)
+                                    if sa is not None and sn is not None:
+                                        # Obtener almacenamiento y material desde la transacción si es posible
+                                        almacenamiento_id = getattr(tran_obj, 'origen_id', None) or getattr(tran_obj, 'destino_id', None) or None
+                                        material_id = getattr(tran_obj, 'material_id', None)
+                                        snapshot_data = SaldoSnapshotCreate(
+                                            pesada_id=int(pesada_model.id),
+                                            almacenamiento_id=int(almacenamiento_id) if almacenamiento_id is not None else None,
+                                            material_id=int(material_id) if material_id is not None else None,
+                                            saldo_anterior=sa,
+                                            saldo_nuevo=sn
+                                        )
+                                        # crear directamente usando ORM dentro de la sesión
+                                        from database.models import SaldoSnapshotScada
+                                        s_obj = SaldoSnapshotScada(**snapshot_data.model_dump())
+                                        new_s.add(s_obj)
+                                        await new_s.flush()
+                                        # Registrar auditoría del snapshot creado en la sesión independiente
+                                        try:
+                                            audit_snap = LogsAuditoriaCreate(
+                                                entidad='saldo_snapshot_scada',
+                                                entidad_id=str(getattr(s_obj, 'id', None)),
+                                                accion='CREATE',
+                                                valor_anterior=None,
+                                                valor_nuevo=AnyUtils.serialize_orm_object(s_obj),
+                                                usuario_id=current_user_id.get()
+                                            )
+                                            if getattr(self._repo, 'auditor', None) is not None:
+                                                await self._repo.auditor.log_audit(audit_log_data=audit_snap)
+                                        except Exception as e_aud:
+                                            log.error(f"No se pudo registrar auditoría para snapshot (sesión independiente): {e_aud}")
+                                except Exception as e_snap:
+                                    log.error(f"No se pudo crear snapshot en transacción independiente: {e_snap}", exc_info=True)
+
                         log.info(f"create_pesada: sesión independiente commit completado para transaccion {trans_id}.")
                         return PesadaResponse.model_validate(pesada_model)
                     else:
-                         async with session.begin():
-                             # Crear pesada
-                             session.add(pesada_model)
-                             await session.flush()
-                             await session.refresh(pesada_model)
+                        async with session.begin():
+                            # Crear pesada
+                            session.add(pesada_model)
+                            await session.flush()
+                            await session.refresh(pesada_model)
+                            # Registrar auditoría de creación de pesada (sesión principal)
+                            try:
+                                audit_pes = LogsAuditoriaCreate(
+                                    entidad='pesadas',
+                                    entidad_id=str(getattr(pesada_model, 'id', None)),
+                                    accion='CREATE',
+                                    valor_anterior=None,
+                                    valor_nuevo=AnyUtils.serialize_orm_object(pesada_model),
+                                    usuario_id=current_user_id.get()
+                                )
+                                if getattr(self._repo, 'auditor', None) is not None:
+                                    await self._repo.auditor.log_audit(audit_log_data=audit_pes)
+                            except Exception as e_aud:
+                                log.error(f"No se pudo registrar auditoría para pesada (sesión principal): {e_aud}")
 
-                             # Actualizar transacción: debe existir y se actualiza a 'Proceso'
-                             from sqlalchemy import select
-                             result = await session.execute(select(Transacciones).filter(Transacciones.id == int(trans_id)))
-                             tran_obj = result.scalar_one_or_none()
-                             if tran_obj is None:
-                                 # Forzar rollback
-                                 raise EntityNotFoundException(f"Transacción con ID {trans_id} no encontrada para actualizar a 'Proceso'.")
-                             tran_obj.estado = 'Proceso'
-                             # flush cambios
-                             await session.flush()
+                            # Actualizar transacción: debe existir y se actualiza a 'Proceso'
+                            from sqlalchemy import select
+                            result = await session.execute(select(Transacciones).filter(Transacciones.id == int(trans_id)))
+                            tran_obj = result.scalar_one_or_none()
+                            if tran_obj is None:
+                                # Forzar rollback
+                                raise EntityNotFoundException(f"Transacción con ID {trans_id} no encontrada para actualizar a 'Proceso'.")
+                            tran_obj.estado = 'Proceso'
+                            # flush cambios
+                            await session.flush()
 
-                    log.info(f"Pesada creada con referencia: {getattr(pesada_model, 'referencia', None)} y transacción {trans_id} actualizada a 'Proceso' (transaccional).")
-                    return PesadaResponse.model_validate(pesada_model)
+                            # Si vienen saldos en la petición, crear snapshot usando la misma sesión
+                            try:
+                                sa = getattr(pesada_data, 'saldo_anterior', None)
+                                sn = getattr(pesada_data, 'saldo_nuevo', None)
+                                if sa is not None and sn is not None:
+                                    from database.models import SaldoSnapshotScada
+                                    almacenamiento_id = getattr(tran_obj, 'origen_id', None) or getattr(tran_obj, 'destino_id', None) or None
+                                    material_id = getattr(tran_obj, 'material_id', None)
+                                    s_obj = SaldoSnapshotScada(
+                                        pesada_id=int(pesada_model.id),
+                                        almacenamiento_id=int(almacenamiento_id) if almacenamiento_id is not None else None,
+                                        material_id=int(material_id) if material_id is not None else None,
+                                        saldo_anterior=sa,
+                                        saldo_nuevo=sn
+                                    )
+                                    session.add(s_obj)
+                                    await session.flush()
+                                    # Registrar auditoría del snapshot creado (sesión principal)
+                                    try:
+                                        audit_snap = LogsAuditoriaCreate(
+                                            entidad='saldo_snapshot_scada',
+                                            entidad_id=str(getattr(s_obj, 'id', None)),
+                                            accion='CREATE',
+                                            valor_anterior=None,
+                                            valor_nuevo=AnyUtils.serialize_orm_object(s_obj),
+                                            usuario_id=current_user_id.get()
+                                        )
+                                        if getattr(self._repo, 'auditor', None) is not None:
+                                            await self._repo.auditor.log_audit(audit_log_data=audit_snap)
+                                    except Exception as e_aud:
+                                        log.error(f"No se pudo registrar auditoría para snapshot (sesión principal): {e_aud}")
+                            except Exception as e_snap:
+                                log.error(f"No se pudo crear snapshot en transacción principal: {e_snap}", exc_info=True)
+
+                        log.info(f"Pesada creada con referencia: {getattr(pesada_model, 'referencia', None)} y transacción {trans_id} actualizada a 'Proceso' (transaccional).")
+                        return PesadaResponse.model_validate(pesada_model)
+
                 except Exception as e_transact:
                     log.error(f"Error transaccional creando pesada y actualizando transacción {trans_id}: {e_transact}", exc_info=True)
                     # normalizar error
@@ -122,7 +229,47 @@ class PesadasService:
             created_pesada = await self._repo.create(pesada_model)
             log.info(f"Pesada creada con referencia: {getattr(created_pesada, 'referencia', None)} (fallback no transaccional)")
 
-            # Intentar actualizar el estado de la transacción relacionada a 'Proceso' (no crítico en fallback)
+            # Intentar crear snapshot en fallback si vienen campos de saldo
+            try:
+                sa = getattr(pesada_data, 'saldo_anterior', None)
+                sn = getattr(pesada_data, 'saldo_nuevo', None)
+                if sa is not None and sn is not None:
+                    # Intentar crear snapshot en una sesión nueva (no crítico)
+                    async with DatabaseConfiguration._async_session() as s:
+                        async with s.begin():
+                            from database.models import SaldoSnapshotScada
+                            # intentar obtener transaccion para relacionar almacenamiento/material
+                            from sqlalchemy import select
+                            result = await s.execute(select(Transacciones).filter(Transacciones.id == int(trans_id)))
+                            tran_obj = result.scalar_one_or_none()
+                            almacenamiento_id = getattr(tran_obj, 'origen_id', None) or getattr(tran_obj, 'destino_id', None) or None
+                            material_id = getattr(tran_obj, 'material_id', None)
+                            s_obj = SaldoSnapshotScada(
+                                pesada_id=int(created_pesada.id),
+                                almacenamiento_id=int(almacenamiento_id) if almacenamiento_id is not None else None,
+                                material_id=int(material_id) if material_id is not None else None,
+                                saldo_anterior=sa,
+                                saldo_nuevo=sn
+                            )
+                            s.add(s_obj)
+                            await s.flush()
+                            # Registrar auditoría del snapshot creado (fallback, sesión nueva)
+                            try:
+                                audit_snap = LogsAuditoriaCreate(
+                                    entidad='saldo_snapshot_scada',
+                                    entidad_id=str(getattr(s_obj, 'id', None)),
+                                    accion='CREATE',
+                                    valor_anterior=None,
+                                    valor_nuevo=AnyUtils.serialize_orm_object(s_obj),
+                                    usuario_id=current_user_id.get()
+                                )
+                                if getattr(self._repo, 'auditor', None) is not None:
+                                    await self._repo.auditor.log_audit(audit_log_data=audit_snap)
+                            except Exception as e_aud:
+                                log.error(f"No se pudo registrar auditoría para snapshot (fallback): {e_aud}")
+            except Exception as e_snap:
+                log.error(f"No fue posible crear snapshot de saldo en fallback: {e_snap}", exc_info=True)
+
             try:
                 if self._trans_repo is not None:
                     # Rellenar explícitamente campos opcionales para evitar advertencias estáticas
@@ -158,7 +305,8 @@ class PesadasService:
             BasedException: For unexpected errors during the update process.
         """
         try:
-            pesada_model = Pesadas(**pesada.model_dump())
+            pesada_payload = pesada.model_dump(exclude={'saldo_anterior', 'saldo_nuevo'})
+            pesada_model = Pesadas(**pesada_payload)
             updated_pesada = await self._repo.update(pesada_id, pesada_model)
             log.info(f"Pesada actualizada con ID: {pesada_id}")
             return PesadaResponse.model_validate(updated_pesada) if updated_pesada else None
@@ -498,7 +646,7 @@ class PesadasService:
         3) Construir rangos de pesadas para marcar como leídas.
         4) Intentar crear registros en pesadas_corte (no crítico).
         5) Marcar las pesadas como leídas.
-        6) Construir y devolver la respuesta, preferiendo datos de pesadas_corte
+        6) Construir y devolver la respuesta, prefiriendo datos de pesadas_corte
         """
         try:
             # 1. Obtener transaccion a partir del puerto_id consultando Transacciones.ref1 == puerto_id

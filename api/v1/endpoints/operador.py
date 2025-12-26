@@ -6,6 +6,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 
 from core.di.service_injection import get_viajes_service, get_pesadas_service
 from core.enums.user_role_enum import UserRoleEnum
+from core.exceptions.base_exception import BasedException
 from core.exceptions.entity_exceptions import EntityNotFoundException
 from schemas.bls_schema import BlsExtCreate
 from schemas.pesadas_schema import VPesadasAcumResponse
@@ -24,9 +25,6 @@ from utils.response_util import ResponseUtil
 from utils.time_util import normalize_to_app_tz
 
 log = LoggerUtil()
-
-
-
 response_json = ResponseUtil.json_response
 router = APIRouter(prefix="/integrador", tags=["Integrador"],  dependencies=[Depends(AuthService.require_access(roles=[UserRoleEnum.ADMINISTRADOR, UserRoleEnum.INTEGRADOR]))])
 
@@ -45,15 +43,15 @@ async def create_buque(
         flota: ViajeBuqueExtCreate,
         service: ViajesService = Depends(get_viajes_service)):
     # Log de depuración: mostrar valores de fecha recibidos y su tzinfo
-    try:
-        fecha_llegada = getattr(flota, 'fecha_llegada', None)
-        fecha_salida = getattr(flota, 'fecha_salida', None)
-        log.info(f"[DEBUG create_buque] fecha_llegada raw: {fecha_llegada} (tzinfo={getattr(fecha_llegada, 'tzinfo', None)})")
-        log.info(f"[DEBUG create_buque] fecha_salida raw:  {fecha_salida} (tzinfo={getattr(fecha_salida, 'tzinfo', None)})")
-    except Exception as e:
-        log.warning(f"[DEBUG create_buque] Error al inspeccionar fechas del payload: {e}")
-
-    log.info(f"Payload recibido: Buque {flota}")
+    # try:
+    #     fecha_llegada = getattr(flota, 'fecha_llegada', None)
+    #     fecha_salida = getattr(flota, 'fecha_salida', None)
+    #     log.info(f"[DEBUG create_buque] fecha_llegada raw: {fecha_llegada} (tzinfo={getattr(fecha_llegada, 'tzinfo', None)})")
+    #     log.info(f"[DEBUG create_buque] fecha_salida raw:  {fecha_salida} (tzinfo={getattr(fecha_salida, 'tzinfo', None)})")
+    # except Exception as e:
+    #     log.warning(f"[DEBUG create_buque] Error al inspeccionar fechas del payload: {e}")
+    #
+    # log.info(f"Payload recibido: Buque {flota}")
     try:
         await service.create_buque_nuevo(flota)
         log.info(f"Buque {flota.puerto_id} registrado")
@@ -284,6 +282,13 @@ async def create_camion(
             data={"cargoPit": 1} # Valor por defecto del pit
         )
 
+    except BasedException as be:
+        # Manejar errores controlados desde el servicio (ej. violación de unicidad)
+        log.error(f"Flota {flota.puerto_id} no registrada (BasedException): {be}")
+        return response_json(
+            status_code=getattr(be, 'status_code', status.HTTP_400_BAD_REQUEST),
+            message=str(getattr(be, 'message', str(be)))
+        )
     except HTTPException as http_exc:
         log.error(f"Flota {flota.puerto_id} no registrada: {http_exc.detail}")
         return response_json(
@@ -314,11 +319,18 @@ async def in_camion(
         service: ViajesService = Depends(get_viajes_service)):
     log.info(f"Payload recibido: Flota {puerto_id} - Ingreso ")
     try:
-        # Normalizar fecha_ingreso a UTC
         fecha_ingreso_utc = normalize_to_app_tz(fecha_ingreso)
 
         service_data = await service.chg_camion_ingreso(puerto_id, fecha_ingreso_utc)
-        log.info(f"Ingreso de flota {puerto_id} marcada exitosamente.")
+
+        try:
+            await service.chg_estado_flota_simple(puerto_id, estado_puerto=True, estado_operador=True)
+            log.info(f"Flags estado_puerto y estado_operador para {puerto_id} puestos en True tras ingreso de camión.")
+        except Exception as e_flags:
+            # No bloquear la respuesta por un fallo actualizando flags, pero loguear
+            log.warning(f"No se pudo actualizar flags de flota para {puerto_id} tras ingreso de camión: {e_flags}")
+
+        log.info(f"Ingreso de flota {puerto_id} marcado exitosamente.")
         return response_json(
             status_code=status.HTTP_200_OK,
             message=f"Modificación de cita de camión realizada exitosamente",
@@ -360,10 +372,16 @@ async def out_camion(
         fecha_salida_utc = normalize_to_app_tz(fecha_salida)
 
         await service.chg_camion_salida(puerto_id, fecha_salida_utc, peso_real)
+        try:
+            await service.chg_estado_flota(puerto_id, estado_puerto=False)
+            log.info(f"Estado de puerto para flota {puerto_id} puesto en False tras egreso de camión.")
+        except Exception as e_state:
+            log.warning(f"No se pudo actualizar estado_puerto para {puerto_id} tras egreso de camión: {e_state}")
+
         log.info(f"Salida de camion {puerto_id} marcada exitosamente.")
         return response_json(
             status_code=status.HTTP_200_OK,
-            message=f"Registro cita camión actualizada exitosamente",
+            message=f"Salida de camion {puerto_id} marcada exitosamente.",
         )
 
     except HTTPException as http_exc:

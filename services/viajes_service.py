@@ -5,6 +5,7 @@ from typing import List, Optional
 import httpx
 from fastapi_pagination import Page, Params
 from sqlalchemy import select
+from sqlalchemy.exc import IntegrityError
 from starlette import status
 
 from core.config.settings import get_settings
@@ -422,7 +423,19 @@ class ViajesService:
 
             # 6. Crear registro en la base de datos
             db_viaje = ViajeCreate(**viaje_data)
-            await self._repo.create(db_viaje)
+            try:
+                await self._repo.create(db_viaje)
+            except IntegrityError as ie:
+                # Log completo para debugging
+                log.error(f"IntegrityError creando viaje para puerto_id {viaje_create.puerto_id}: {ie}", exc_info=True)
+                # Intentar obtener detalle legible si viene del driver
+                detail = getattr(getattr(ie, 'orig', None), 'detail', None) or str(ie)
+                # Normalizar mensaje para usuario
+                if 'uk_viajes' in str(detail) or 'viajes' in str(detail):
+                    user_msg = f"Ya existe un viaje para la combinación (flota_id, viaje_origen) o restricción única violada: {detail}"
+                else:
+                    user_msg = f"Violación de integridad al crear viaje: {detail}"
+                raise BasedException(message=user_msg, status_code=status.HTTP_409_CONFLICT)
 
             # 7. Consultar el viaje recién añadido
             created_viaje = await self.get_viaje_by_puerto_id(viaje_create.puerto_id)
@@ -432,6 +445,9 @@ class ViajesService:
             return ViajesResponse(**created_viaje.__dict__)
         except (EntityAlreadyRegisteredException, EntityNotFoundException) as e:
             raise e
+        except BasedException:
+            # Re-lanzar BasedException sin wrapping adicional
+            raise
         except Exception as e:
             log.error(f"Error inesperado a crear camion y/o cita con puerto_id {viaje_create.puerto_id}: {e}", exc_info=True)
             raise BasedException(
@@ -464,7 +480,7 @@ class ViajesService:
             if not flota:
                 raise EntityNotFoundException(f"Flota con id '{viaje.flota_id}' no existe")
 
-            updated_flota = await self.flotas_service.update_status(flota,estado_puerto, estado_operador)
+            updated_flota = await self.flotas_service.update_status(flota, estado_puerto, estado_operador)
 
             # Solo notificar si el cambio de estado es para finalizado
             if estado_operador is not None:
@@ -494,6 +510,33 @@ class ViajesService:
             raise e
         except Exception as e:
             log.error(f"Error al cambiar estado de flota con puerto_id {puerto_id}: {str(e)}")
+            raise BasedException(
+                message=f"Error al cambiar el estado de flota con puerto_id {puerto_id} : {str(e)}",
+                status_code=status.HTTP_424_FAILED_DEPENDENCY
+            )
+
+    async def chg_estado_flota_simple(self, puerto_id: str, estado_puerto: Optional[bool] = None, estado_operador: Optional[bool] = None) -> FlotasResponse:
+        """
+        Cambia únicamente los flags de la flota asociados al viaje (estado_puerto, estado_operador)
+        sin ejecutar la lógica adicional que existe en `chg_estado_flota` (no intenta finalizar
+        transacciones ni preparar notificaciones externas).
+        """
+        try:
+            viaje = await self.get_viaje_by_puerto_id(puerto_id)
+            if not viaje:
+                raise EntityNotFoundException(f"Viaje con puerto_id: '{puerto_id}' no existe")
+
+            flota = await self.flotas_service.get_flota(viaje.flota_id)
+            if not flota:
+                raise EntityNotFoundException(f"Flota con id '{viaje.flota_id}' no existe")
+
+            # Llamamos directamente al servicio de flotas para actualizar los flags
+            updated_flota = await self.flotas_service.update_status(flota, estado_puerto, estado_operador)
+            return updated_flota
+        except EntityNotFoundException:
+            raise
+        except Exception as e:
+            log.error(f"Error al cambiar estado simple de flota con puerto_id {puerto_id}: {str(e)}")
             raise BasedException(
                 message=f"Error al cambiar el estado de flota con puerto_id {puerto_id} : {str(e)}",
                 status_code=status.HTTP_424_FAILED_DEPENDENCY
