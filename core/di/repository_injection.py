@@ -13,7 +13,8 @@ from database.models import (
     Movimientos,
     Pesadas,
     Transacciones,
-    Viajes, PesadasCorte
+    Viajes, PesadasCorte,
+    Ajustes
 )
 from repositories.almacenamientos_materiales_repository import AlmacenamientosMaterialesRepository
 # Repositories
@@ -28,6 +29,7 @@ from repositories.pesadas_repository import PesadasRepository
 from repositories.transacciones_repository import TransaccionesRepository
 from repositories.usuarios_repository import UsuariosRepository
 from repositories.viajes_repository import ViajesRepository
+from repositories.ajustes_repository import AjustesRepository
 from schemas.almacenamientos_materiales_schema import AlmacenamientoMaterialesResponse
 # Schemas
 from schemas.almacenamientos_schema import AlmacenamientoResponse
@@ -41,6 +43,7 @@ from schemas.pesadas_schema import PesadaResponse
 from schemas.transacciones_schema import TransaccionResponse
 from schemas.usuarios_schema import UsuariosResponse
 from schemas.viajes_schema import ViajesResponse
+from schemas.ajustes_schema import AjusteResponse
 from services.logs_auditoria_service import DatabaseAuditor
 from .database_injection import get_db
 
@@ -123,3 +126,9 @@ async def get_transacciones_repository(
         auditor: Auditor = Depends(get_auditor_service)
 ) -> TransaccionesRepository:
     return TransaccionesRepository(Transacciones, TransaccionResponse, session, auditor)
+
+async def get_ajustes_repository(
+        session: AsyncSession = Depends(get_db),
+        auditor: Auditor = Depends(get_auditor_service)
+) -> AjustesRepository:
+    return AjustesRepository(Ajustes, AjusteResponse, session, auditor)

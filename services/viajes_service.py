@@ -5,6 +5,7 @@ from typing import List, Optional
 import httpx
 from fastapi_pagination import Page, Params
 from sqlalchemy import select
+from sqlalchemy.exc import IntegrityError
 from starlette import status
 
 from core.config.settings import get_settings
@@ -261,6 +262,19 @@ class ViajesService:
             viaje_data = viaje_create.model_dump(exclude={"referencia", "estado"})
             viaje_data["flota_id"] = flota.id
 
+            # Salvaguarda: asegurar que las fechas estén en UTC (aceptar casos donde el validador no se ejecutó)
+            for f in ("fecha_llegada", "fecha_salida", "fecha_hora"):
+                if f in viaje_data and viaje_data[f] is not None:
+                    from utils.time_util import normalize_to_app_tz
+                    viaje_data[f] = normalize_to_app_tz(viaje_data[f])
+
+            # Log de depuración: mostrar cómo quedaron las fechas antes de crear el registro
+            try:
+                log.info(f"[DEBUG create_buque_nuevo] viaje_data fecha_llegada: {viaje_data.get('fecha_llegada')} (tzinfo={getattr(viaje_data.get('fecha_llegada'), 'tzinfo', None)})")
+                log.info(f"[DEBUG create_buque_nuevo] viaje_data fecha_salida:  {viaje_data.get('fecha_salida')} (tzinfo={getattr(viaje_data.get('fecha_salida'), 'tzinfo', None)})")
+            except Exception:
+                pass
+
             # 5. Crear registro en la base de datos
             db_viaje = ViajeCreate(**viaje_data)
             await self._repo.create(db_viaje)
@@ -384,12 +398,44 @@ class ViajesService:
 
             # 5. Ajustar el schema al requerido
             viaje_data = viaje_create.model_dump(exclude={"referencia", "puntos"})
+            # DEBUG: inspeccionar viaje_data después de model_dump
+            try:
+                vll = viaje_data.get('fecha_llegada')
+                vls = viaje_data.get('fecha_salida')
+                log.info(f"[DEBUG create_camion_nuevo MODEL_DUMP] fecha_llegada: {vll} (type={type(vll)}, tzinfo={getattr(vll, 'tzinfo', None)})")
+                log.info(f"[DEBUG create_camion_nuevo MODEL_DUMP] fecha_salida:  {vls} (type={type(vls)}, tzinfo={getattr(vls, 'tzinfo', None)})")
+            except Exception:
+                pass
+
             viaje_data["flota_id"] = flota.id
             viaje_data["material_id"] = material_id
 
+            # Salvaguarda: asegurar que las fechas estén en UTC
+            for f in ("fecha_llegada", "fecha_salida", "fecha_hora"):
+                if f in viaje_data and viaje_data[f] is not None:
+                    from utils.time_util import normalize_to_app_tz
+                    before_val = viaje_data[f]
+                    viaje_data[f] = normalize_to_app_tz(viaje_data[f])
+                    try:
+                        log.info(f"[DEBUG create_camion_nuevo NORMALIZE] field={f} before={before_val} (type={type(before_val)}, tzinfo={getattr(before_val, 'tzinfo', None)}) after={viaje_data[f]} (type={type(viaje_data[f])}, tzinfo={getattr(viaje_data[f], 'tzinfo', None)})")
+                    except Exception:
+                        pass
+
             # 6. Crear registro en la base de datos
             db_viaje = ViajeCreate(**viaje_data)
-            await self._repo.create(db_viaje)
+            try:
+                await self._repo.create(db_viaje)
+            except IntegrityError as ie:
+                # Log completo para debugging
+                log.error(f"IntegrityError creando viaje para puerto_id {viaje_create.puerto_id}: {ie}", exc_info=True)
+                # Intentar obtener detalle legible si viene del driver
+                detail = getattr(getattr(ie, 'orig', None), 'detail', None) or str(ie)
+                # Normalizar mensaje para usuario
+                if 'uk_viajes' in str(detail) or 'viajes' in str(detail):
+                    user_msg = f"Ya existe un viaje para la combinación (flota_id, viaje_origen) o restricción única violada: {detail}"
+                else:
+                    user_msg = f"Violación de integridad al crear viaje: {detail}"
+                raise BasedException(message=user_msg, status_code=status.HTTP_409_CONFLICT)
 
             # 7. Consultar el viaje recién añadido
             created_viaje = await self.get_viaje_by_puerto_id(viaje_create.puerto_id)
@@ -399,6 +445,9 @@ class ViajesService:
             return ViajesResponse(**created_viaje.__dict__)
         except (EntityAlreadyRegisteredException, EntityNotFoundException) as e:
             raise e
+        except BasedException:
+            # Re-lanzar BasedException sin wrapping adicional
+            raise
         except Exception as e:
             log.error(f"Error inesperado a crear camion y/o cita con puerto_id {viaje_create.puerto_id}: {e}", exc_info=True)
             raise BasedException(
@@ -431,7 +480,7 @@ class ViajesService:
             if not flota:
                 raise EntityNotFoundException(f"Flota con id '{viaje.flota_id}' no existe")
 
-            updated_flota = await self.flotas_service.update_status(flota,estado_puerto, estado_operador)
+            updated_flota = await self.flotas_service.update_status(flota, estado_puerto, estado_operador)
 
             # Solo notificar si el cambio de estado es para finalizado
             if estado_operador is not None:
@@ -461,6 +510,33 @@ class ViajesService:
             raise e
         except Exception as e:
             log.error(f"Error al cambiar estado de flota con puerto_id {puerto_id}: {str(e)}")
+            raise BasedException(
+                message=f"Error al cambiar el estado de flota con puerto_id {puerto_id} : {str(e)}",
+                status_code=status.HTTP_424_FAILED_DEPENDENCY
+            )
+
+    async def chg_estado_flota_simple(self, puerto_id: str, estado_puerto: Optional[bool] = None, estado_operador: Optional[bool] = None) -> FlotasResponse:
+        """
+        Cambia únicamente los flags de la flota asociados al viaje (estado_puerto, estado_operador)
+        sin ejecutar la lógica adicional que existe en `chg_estado_flota` (no intenta finalizar
+        transacciones ni preparar notificaciones externas).
+        """
+        try:
+            viaje = await self.get_viaje_by_puerto_id(puerto_id)
+            if not viaje:
+                raise EntityNotFoundException(f"Viaje con puerto_id: '{puerto_id}' no existe")
+
+            flota = await self.flotas_service.get_flota(viaje.flota_id)
+            if not flota:
+                raise EntityNotFoundException(f"Flota con id '{viaje.flota_id}' no existe")
+
+            # Llamamos directamente al servicio de flotas para actualizar los flags
+            updated_flota = await self.flotas_service.update_status(flota, estado_puerto, estado_operador)
+            return updated_flota
+        except EntityNotFoundException:
+            raise
+        except Exception as e:
+            log.error(f"Error al cambiar estado simple de flota con puerto_id {puerto_id}: {str(e)}")
             raise BasedException(
                 message=f"Error al cambiar el estado de flota con puerto_id {puerto_id} : {str(e)}",
                 status_code=status.HTTP_424_FAILED_DEPENDENCY
@@ -589,8 +665,10 @@ class ViajesService:
                 raise EntityNotFoundException(
                     f"La flota es del tipo '{flota.tipo}' diferente al tipo esperado 'camion'")
 
+            from utils.time_util import normalize_to_app_tz
             update_fields = {
-                "fecha_salida": fecha,
+                # Guardar la hora tal como llegó el cliente, asumiendo APP_TIMEZONE
+                "fecha_salida": normalize_to_app_tz(fecha),
                 "peso_real": peso
             }
             update_data = ViajeUpdate(**update_fields)
@@ -690,6 +768,7 @@ class ViajesService:
             from utils.any_utils import AnyUtils
             from decimal import Decimal
             from datetime import datetime, timezone
+            from utils.time_util import now_local
             import asyncio
             import httpx
             import uuid
@@ -725,7 +804,8 @@ class ViajesService:
 
                 fecha = it.get('fecha_hora', None)
                 if fecha is None:
-                    fecha_iso = datetime.now(timezone.utc).isoformat()
+                    # Use the container local timezone (configured via TZ) for timestamps
+                    fecha_iso = now_local().isoformat()
                 else:
                     try:
                         fecha_iso = fecha if isinstance(fecha, str) else (fecha.isoformat() if hasattr(fecha, 'isoformat') else str(fecha))
@@ -754,12 +834,17 @@ class ViajesService:
                     raise BasedException(message="No hay registros para enviar", status_code=status.HTTP_400_BAD_REQUEST)
                 # intentar determinar la última por fecha_hora
                 def _parse_date(v):
-                    try:
+                     try:
                         if isinstance(v, str):
-                            return datetime.fromisoformat(v.replace('Z', '+00:00'))
+                            # Try parsing aware ISO strings first; if missing tz info, assume local
+                            try:
+                                return datetime.fromisoformat(v)
+                            except Exception:
+                                # Fallback: treat strings ending with Z as UTC
+                                return datetime.fromisoformat(v.replace('Z', '+00:00'))
                         return v
-                    except Exception:
-                        return datetime.min.replace(tzinfo=timezone.utc)
+                     except Exception:
+                         return datetime.min.replace(tzinfo=timezone.utc)
 
                 last_item = max(payloads, key=lambda x: _parse_date(x.get('fecha_hora')))
                 # preparar headers: Idempotency-Key y X-Correlation-Id

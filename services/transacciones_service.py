@@ -1,18 +1,23 @@
-from datetime import datetime
 from typing import List, Optional
+from decimal import Decimal
 
 from fastapi_pagination import Page, Params
 from sqlalchemy import select
+from sqlalchemy import update as sqlalchemy_update
 from starlette import status
 
+from core.config.context import current_user_id
 from core.exceptions.base_exception import BasedException
 from core.exceptions.entity_exceptions import EntityNotFoundException, EntityAlreadyRegisteredException
+from database.connection import DatabaseConfiguration
 from database.models import Transacciones
 from repositories.transacciones_repository import TransaccionesRepository
 from schemas.transacciones_schema import TransaccionResponse, TransaccionCreate, TransaccionUpdate
 from services.movimientos_service import MovimientosService
 from services.pesadas_service import PesadasService
+from utils.any_utils import AnyUtils
 from utils.logger_util import LoggerUtil
+from utils.time_util import now_local
 
 log = LoggerUtil()
 
@@ -204,11 +209,26 @@ class TransaccionesService:
             BasedException: For unexpected errors during the creation process.
         """
         try:
-            # 1. Validar si transacción ya existe
-            if await self._repo.find_one(viaje_id=tran_data.viaje_id, estado='Proceso' ):
-                raise EntityAlreadyRegisteredException(f"Ya existe transacción en proceso del viaje '{tran_data.viaje_id}'")
+            # Si la nueva transacción trae bl_id, impedir duplicados por (viaje_id, bl_id)
+            bl_id = getattr(tran_data, 'bl_id', None)
+            if bl_id is not None:
+                existing = await self._repo.find_one(viaje_id=tran_data.viaje_id, bl_id=bl_id)
+                if existing:
+                    # Permitir si la transacción existente es de distinto 'tipo'
+                    existing_tipo = getattr(existing, 'tipo', None)
+                    new_tipo = getattr(tran_data, 'tipo', None)
+                    try:
+                        if existing_tipo is not None and new_tipo is not None and str(existing_tipo).strip().lower() != str(new_tipo).strip().lower():
+                            log.info(f"create_transaccion_if_not_exists: existe transaccion con viaje_id={tran_data.viaje_id} y bl_id={bl_id} pero de tipo distinto ('{existing_tipo}' != '{new_tipo}'), permitiendo creación")
+                        else:
+                            raise EntityAlreadyRegisteredException(f"Ya existe transacción para viaje '{tran_data.viaje_id}' con bl_id '{bl_id}' y tipo '{existing_tipo}'")
+                    except EntityAlreadyRegisteredException:
+                        raise
+                    except Exception as e_check:
+                        # Si hay algún problema validando tipos, evitar crear duplicado por seguridad
+                        log.error(f"Error validando existencia de transacción (viaje_id={tran_data.viaje_id}, bl_id={bl_id}): {e_check}", exc_info=True)
+                        raise EntityAlreadyRegisteredException(f"Ya existe transacción para viaje '{tran_data.viaje_id}' con bl_id '{bl_id}'")
 
-            # 2. Se crea transacción si esta no existe en la BD
             tran_nueva = await self._repo.create(tran_data)
             return tran_nueva
         except EntityAlreadyRegisteredException as e:
@@ -235,7 +255,7 @@ class TransaccionesService:
             BasedException: If the transaction is not in 'Activa' state or for unexpected errors.
         """
         try:
-            # 1. Obtener la transacción y validar su estado
+            # 1. Obtener la transacción y validar su estado (usamos repo sólo para leer)
             tran = await self.get_transaccion(tran_id)
             if tran is None:
                 raise EntityNotFoundException(f"La transacción con ID '{tran_id}' no fue encontrada.")
@@ -248,40 +268,155 @@ class TransaccionesService:
 
             # 2. Se obtiene sumatoria de pesadas para setear peso real
             pesada = await self.pesadas_service.get_pesada_acumulada(tran_id=tran.id)
+            peso_acc = Decimal(getattr(pesada, 'peso', 0) or 0)
 
-            # 2. Se prepara los datos para actualizar la transacción
+            # 3. Ejecutar operaciones en una única transacción DB
+            async with DatabaseConfiguration._async_session() as session:
+                async with session.begin():
+                    # Recuperar objeto Transacciones ORM
+                    from sqlalchemy import select as _select
+                    result = await session.execute(_select(Transacciones).where(Transacciones.id == int(tran_id)))
+                    tran_obj = result.scalar_one_or_none()
+                    if tran_obj is None:
+                        raise EntityNotFoundException(f"Transacción con ID {tran_id} no encontrada (dentro de sesión).")
 
-            update_fields = {
-                "estado": "Finalizada",
-                "fecha_fin": datetime.now(),
-                "peso_real" : pesada.peso,
-            }
+                    # Validar tipo exacto: 'Despacho' o 'Recibo'
+                    tipo_tran_raw = getattr(tran_obj, 'tipo', None)
+                    if tipo_tran_raw is None:
+                        raise BasedException(message="Transacción sin campo 'tipo'.", status_code=status.HTTP_400_BAD_REQUEST)
+                    tipo_lower = str(tipo_tran_raw).strip().lower()
+                    if tipo_lower == 'despacho':
+                        mov_tipo = 'Salida'
+                        almacen_id = getattr(tran_obj, 'origen_id', None)
+                    elif tipo_lower == 'recibo':
+                        mov_tipo = 'Entrada'
+                        almacen_id = getattr(tran_obj, 'destino_id', None) or getattr(tran_obj, 'origen_id', None)
+                    else:
+                        raise BasedException(message=f"Tipo de transacción '{tipo_tran_raw}' no soportado para finalización automática.", status_code=status.HTTP_400_BAD_REQUEST)
 
-            update_data = TransaccionUpdate(**update_fields)
+                    if almacen_id is None:
+                        raise BasedException(message="No se encontró almacenamiento asociado (origen/destino) para crear movimiento.", status_code=status.HTTP_400_BAD_REQUEST)
 
-            # 3. Se actualiza la transacción en la base de datos
-            updated = await self._repo.update(tran_id, update_data)
+                    # Capturar valores previos para auditoría de la transacción
+                    valor_prev = {
+                        'estado': getattr(tran_obj, 'estado', None),
+                        'fecha_fin': getattr(tran_obj, 'fecha_fin', None),
+                        'peso_real': getattr(tran_obj, 'peso_real', None)
+                    }
 
-            # #5. Se consulta saldo anterior
-            #
-            # # 5. Preparar y crear el movimiento asociado
-            # movimiento_data = MovimientosCreate(
-            #     transaccion_id= tran_id,
-            #     almacenamiento_id=tran.origen_id,
-            #     material_id=tran.material_id,
-            #     tipo='Entrada',
-            #     accion='Automático',
-            #     peso=tran.peso,
-            #     saldo_anterior=
-            #     saldo_nuevo=
-            #
-            # )
-            #
-            #
-            # new_movimiento = await self.movimiento_service.create_movimiento(movimiento_data)
+                    # Aplicar cambios a la transacción
+                    tran_obj.estado = 'Finalizada'
+                    tran_obj.fecha_fin = now_local()
+                    tran_obj.peso_real = peso_acc
 
-            # 5. Retornar los resultados
-            return updated
+                    # --- Obtener saldo anterior desde la vista VAlmMateriales ---
+                    from database.models import VAlmMateriales, Movimientos, AlmacenamientosMateriales
+                    saldo_anterior = Decimal('0')
+                    try:
+                        res = await session.execute(_select(VAlmMateriales).where(VAlmMateriales.almacenamiento_id == int(almacen_id), VAlmMateriales.material_id == int(getattr(tran_obj, 'material_id', 0))))
+                        vrow = res.scalar_one_or_none()
+                        if vrow is not None:
+                            saldo_anterior = Decimal(getattr(vrow, 'saldo', 0) or 0)
+                    except Exception as e_saldo:
+                        log.error(f"Error consultando saldo anterior en VAlmMateriales: {e_saldo}")
+
+                    # Calcular saldo nuevo
+                    if mov_tipo == 'Salida':
+                        saldo_nuevo = saldo_anterior - peso_acc
+                    else:
+                        saldo_nuevo = saldo_anterior + peso_acc
+
+                    # Crear objeto Movimientos ORM
+                    mov_obj = Movimientos(
+                        transaccion_id=int(tran_id),
+                        almacenamiento_id=int(almacen_id),
+                        material_id=int(getattr(tran_obj, 'material_id', None)),
+                        tipo=mov_tipo,
+                        accion='Automático',
+                        observacion=None,
+                        peso=peso_acc,
+                        saldo_anterior=saldo_anterior,
+                        saldo_nuevo=saldo_nuevo,
+                        usuario_id=current_user_id.get()
+                    )
+                    session.add(mov_obj)
+                    await session.flush()
+                    await session.refresh(mov_obj)
+
+                    # Actualizar tabla almacenamientos_materiales (registro existente) con nuevo saldo
+                    try:
+                        # Intentar actualizar el registro existente
+                        update_stmt = (
+                            sqlalchemy_update(AlmacenamientosMateriales)
+                            .where(AlmacenamientosMateriales.c.almacenamiento_id == int(almacen_id))
+                            .where(AlmacenamientosMateriales.c.material_id == int(getattr(tran_obj, 'material_id', 0)))
+                            .values(saldo=saldo_nuevo, fecha_hora=now_local(), usuario_id=current_user_id.get())
+                        )
+                        res_update = await session.execute(update_stmt)
+                        # Si no se actualizó ninguna fila, insertar el registro
+                        rowcount = getattr(res_update, 'rowcount', None)
+                        if not rowcount:
+                            insert_stmt = AlmacenamientosMateriales.insert().values(
+                                almacenamiento_id=int(almacen_id),
+                                material_id=int(getattr(tran_obj, 'material_id', 0)),
+                                saldo=saldo_nuevo,
+                                fecha_hora=now_local(),
+                                usuario_id=current_user_id.get()
+                            )
+                            await session.execute(insert_stmt)
+                    except Exception as e_update_alm:
+                        log.error(f"Error actualizando almacenamientos_materiales para almacen {almacen_id}: {e_update_alm}")
+
+                    # Flush/commit handled by context manager
+
+                    # Auditoría: construir valor nuevo para la transacción
+                    valor_new = {
+                        'estado': getattr(tran_obj, 'estado', None),
+                        'fecha_fin': getattr(tran_obj, 'fecha_fin', None),
+                        'peso_real': getattr(tran_obj, 'peso_real', None)
+                    }
+
+                    # Registrar auditoría para transacción
+                    try:
+                        audit_tr = AnyUtils.serialize_data(valor_prev)
+                        await self._repo.auditor.log_audit(
+                            audit_log_data=__import__('schemas.logs_auditoria_schema', fromlist=['LogsAuditoriaCreate']).LogsAuditoriaCreate(
+                                entidad='transacciones',
+                                entidad_id=str(tran_obj.id),
+                                accion='UPDATE',
+                                valor_anterior=AnyUtils.serialize_data(valor_prev),
+                                valor_nuevo=AnyUtils.serialize_data(valor_new),
+                                usuario_id=current_user_id.get()
+                            )
+                        )
+                    except Exception as e_aud_tr:
+                        log.error(f"No se pudo registrar auditoría para transacción {tran_id}: {e_aud_tr}")
+
+                    # Registrar auditoría para movimiento creado
+                    try:
+                        await self.mov_service._repo.auditor.log_audit(
+                            audit_log_data=__import__('schemas.logs_auditoria_schema', fromlist=['LogsAuditoriaCreate']).LogsAuditoriaCreate(
+                                entidad='movimientos',
+                                entidad_id=str(getattr(mov_obj, 'id', None)),
+                                accion='CREATE',
+                                valor_anterior=None,
+                                valor_nuevo=AnyUtils.serialize_orm_object(mov_obj),
+                                usuario_id=current_user_id.get()
+                            )
+                        )
+                    except Exception as e_aud_mov:
+                        log.error(f"No se pudo registrar auditoría para movimiento asociado a transacción {tran_id}: {e_aud_mov}")
+
+                    # Refrescar transaccion
+                    await session.refresh(tran_obj)
+
+                    # Mapear a esquema de respuesta
+                    from schemas.transacciones_schema import TransaccionResponse as _TR
+                    updated_resp = _TR.model_validate(tran_obj)
+
+            # Fin de la sesión/commit
+            return updated_resp
+
         except EntityNotFoundException as e:
             raise e
         except BasedException as e:

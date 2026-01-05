@@ -3,26 +3,36 @@ from typing import List, Optional
 
 from fastapi_pagination import Page, Params
 from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
 from starlette import status
 
 from core.exceptions.base_exception import BasedException
 from core.exceptions.db_exception import DatabaseSQLAlchemyException
 from core.exceptions.entity_exceptions import EntityNotFoundException, EntityAlreadyRegisteredException
-from database.models import Pesadas
+from database.connection import DatabaseConfiguration
+from database.models import Pesadas, Transacciones
 from repositories.pesadas_corte_repository import PesadasCorteRepository
 from repositories.pesadas_repository import PesadasRepository
+from repositories.transacciones_repository import TransaccionesRepository
 from schemas.pesadas_corte_schema import PesadasCalculate, PesadasCorteCreate, PesadasRange, \
     PesadaCorteRetrieve
 from schemas.pesadas_schema import PesadaResponse, PesadaCreate, PesadaUpdate, VPesadasAcumResponse
+from schemas.transacciones_schema import TransaccionUpdate
+from schemas.saldo_snapshot_schema import SaldoSnapshotCreate
 from utils.logger_util import LoggerUtil
+from utils.any_utils import AnyUtils
+from core.config.context import current_user_id
+from schemas.logs_auditoria_schema import LogsAuditoriaCreate
 
 log = LoggerUtil()
 
 class PesadasService:
 
-    def __init__(self, pesada_repository: PesadasRepository, pesadas_corte_repository: PesadasCorteRepository) -> None:
+    def __init__(self, pesada_repository: PesadasRepository, pesadas_corte_repository: PesadasCorteRepository, transacciones_repository: Optional[TransaccionesRepository] = None) -> None:
         self._repo = pesada_repository
         self._repo_corte = pesadas_corte_repository
+        # Repositorio de transacciones (opcional, inyectado por DI). Se usa para actualizar el estado a 'Proceso' cuando se crea una pesada.
+        self._trans_repo = transacciones_repository
 
     async def create_pesada(self, pesada_data: PesadaCreate) -> PesadaResponse:
         """
@@ -36,12 +46,243 @@ class PesadasService:
 
         Raises:
             BasedException: For unexpected errors during the creation process.
+            EntityAlreadyRegisteredException: If a pesada with the same transaction ID and consecutivo already exists.
         """
+        # Validar que venga la transacción asociada: sin transacción no se puede crear la pesada
+        trans_id = getattr(pesada_data, 'transaccion_id', None)
+        if trans_id is None:
+            raise BasedException(
+                message="Para crear una pesada se requiere 'transaccion_id'.",
+                status_code=status.HTTP_400_BAD_REQUEST
+            )
+
         try:
-            pesada_model = Pesadas(**pesada_data.model_dump())
+            # Verificar existencia previa: mismo transaccion_id y consecutivo
+            if await self._repo.find_one(transaccion_id=trans_id, consecutivo=pesada_data.consecutivo):
+                raise EntityAlreadyRegisteredException(f"En la transacción {trans_id} ya existe una pesada con ese consecutivo '{pesada_data.consecutivo}'")
+
+            # Excluir campos de snapshot que no forman parte del modelo ORM Pesadas
+            pesada_payload = pesada_data.model_dump(exclude={'saldo_anterior', 'saldo_nuevo'})
+            pesada_model = Pesadas(**pesada_payload)
+
+            # Si el repositorio tiene una sesión DB (runtime), realizar ambas operaciones en una transacción
+            session = getattr(self._repo, 'db', None)
+            # Detectar si la propiedad `db` del repo es una AsyncSession real. En tests
+            # los mocks pueden exponer `.db` como un Mock (truthy) y esto hacía que el
+            # flujo intentara usar una sesión real contra la DB. Comprobar instancia evita eso.
+            if isinstance(session, AsyncSession) and hasattr(session, 'begin'):
+                try:
+                    # Si ya existe una transacción activa en la sesión, no intentar crear otra
+                    if getattr(session, 'in_transaction', None) and session.in_transaction():
+                        # La sesión ya tiene transacción activa. Para asegurar que la pesada se persista
+                        # (no depender del commit de la transacción exterior) abrimos una sesión
+                        # independiente y realizamos la creación y actualización allí (commit inmediato).
+                        log.info(f"create_pesada: session ya tiene transacción activa; usando sesión independiente para commit inmediato de transaccion {trans_id}.")
+                        async with DatabaseConfiguration._async_session() as new_s:
+                            async with new_s.begin():
+                                new_s.add(pesada_model)
+                                await new_s.flush()
+                                await new_s.refresh(pesada_model)
+                                # Registrar auditoría de creación de pesada (sesión independiente)
+                                try:
+                                    audit_pes = LogsAuditoriaCreate(
+                                        entidad='pesadas',
+                                        entidad_id=str(getattr(pesada_model, 'id', None)),
+                                        accion='CREATE',
+                                        valor_anterior=None,
+                                        valor_nuevo=AnyUtils.serialize_orm_object(pesada_model),
+                                        usuario_id=current_user_id.get()
+                                    )
+                                    # usar auditor del repositorio si está disponible
+                                    if getattr(self._repo, 'auditor', None) is not None:
+                                        await self._repo.auditor.log_audit(audit_log_data=audit_pes)
+                                except Exception as e_aud:
+                                    log.error(f"No se pudo registrar auditoría para pesada (sesión independiente): {e_aud}")
+
+                                from sqlalchemy import select as _select
+                                result = await new_s.execute(_select(Transacciones).filter(Transacciones.id == int(trans_id)))
+                                tran_obj = result.scalar_one_or_none()
+                                if tran_obj is None:
+                                    raise EntityNotFoundException(f"Transacción con ID {trans_id} no encontrada para actualizar a 'Proceso'.")
+                                tran_obj.estado = 'Proceso'
+                                await new_s.flush()
+
+                                # Si vienen saldos en la petición, crear snapshot en la misma transacción
+                                try:
+                                    sa = getattr(pesada_data, 'saldo_anterior', None)
+                                    sn = getattr(pesada_data, 'saldo_nuevo', None)
+                                    if sa is not None and sn is not None:
+                                        # Obtener almacenamiento y material desde la transacción si es posible
+                                        almacenamiento_id = getattr(tran_obj, 'origen_id', None) or getattr(tran_obj, 'destino_id', None) or None
+                                        material_id = getattr(tran_obj, 'material_id', None)
+                                        snapshot_data = SaldoSnapshotCreate(
+                                            pesada_id=int(pesada_model.id),
+                                            almacenamiento_id=int(almacenamiento_id) if almacenamiento_id is not None else None,
+                                            material_id=int(material_id) if material_id is not None else None,
+                                            saldo_anterior=sa,
+                                            saldo_nuevo=sn
+                                        )
+                                        # crear directamente usando ORM dentro de la sesión
+                                        from database.models import SaldoSnapshotScada
+                                        s_obj = SaldoSnapshotScada(**snapshot_data.model_dump())
+                                        new_s.add(s_obj)
+                                        await new_s.flush()
+                                        # Registrar auditoría del snapshot creado en la sesión independiente
+                                        try:
+                                            audit_snap = LogsAuditoriaCreate(
+                                                entidad='saldo_snapshot_scada',
+                                                entidad_id=str(getattr(s_obj, 'id', None)),
+                                                accion='CREATE',
+                                                valor_anterior=None,
+                                                valor_nuevo=AnyUtils.serialize_orm_object(s_obj),
+                                                usuario_id=current_user_id.get()
+                                            )
+                                            if getattr(self._repo, 'auditor', None) is not None:
+                                                await self._repo.auditor.log_audit(audit_log_data=audit_snap)
+                                        except Exception as e_aud:
+                                            log.error(f"No se pudo registrar auditoría para snapshot (sesión independiente): {e_aud}")
+                                except Exception as e_snap:
+                                    log.error(f"No se pudo crear snapshot en transacción independiente: {e_snap}", exc_info=True)
+
+                        log.info(f"create_pesada: sesión independiente commit completado para transaccion {trans_id}.")
+                        return PesadaResponse.model_validate(pesada_model)
+                    else:
+                        async with session.begin():
+                            # Crear pesada
+                            session.add(pesada_model)
+                            await session.flush()
+                            await session.refresh(pesada_model)
+                            # Registrar auditoría de creación de pesada (sesión principal)
+                            try:
+                                audit_pes = LogsAuditoriaCreate(
+                                    entidad='pesadas',
+                                    entidad_id=str(getattr(pesada_model, 'id', None)),
+                                    accion='CREATE',
+                                    valor_anterior=None,
+                                    valor_nuevo=AnyUtils.serialize_orm_object(pesada_model),
+                                    usuario_id=current_user_id.get()
+                                )
+                                if getattr(self._repo, 'auditor', None) is not None:
+                                    await self._repo.auditor.log_audit(audit_log_data=audit_pes)
+                            except Exception as e_aud:
+                                log.error(f"No se pudo registrar auditoría para pesada (sesión principal): {e_aud}")
+
+                            # Actualizar transacción: debe existir y se actualiza a 'Proceso'
+                            from sqlalchemy import select
+                            result = await session.execute(select(Transacciones).filter(Transacciones.id == int(trans_id)))
+                            tran_obj = result.scalar_one_or_none()
+                            if tran_obj is None:
+                                # Forzar rollback
+                                raise EntityNotFoundException(f"Transacción con ID {trans_id} no encontrada para actualizar a 'Proceso'.")
+                            tran_obj.estado = 'Proceso'
+                            # flush cambios
+                            await session.flush()
+
+                            # Si vienen saldos en la petición, crear snapshot usando la misma sesión
+                            try:
+                                sa = getattr(pesada_data, 'saldo_anterior', None)
+                                sn = getattr(pesada_data, 'saldo_nuevo', None)
+                                if sa is not None and sn is not None:
+                                    from database.models import SaldoSnapshotScada
+                                    almacenamiento_id = getattr(tran_obj, 'origen_id', None) or getattr(tran_obj, 'destino_id', None) or None
+                                    material_id = getattr(tran_obj, 'material_id', None)
+                                    s_obj = SaldoSnapshotScada(
+                                        pesada_id=int(pesada_model.id),
+                                        almacenamiento_id=int(almacenamiento_id) if almacenamiento_id is not None else None,
+                                        material_id=int(material_id) if material_id is not None else None,
+                                        saldo_anterior=sa,
+                                        saldo_nuevo=sn
+                                    )
+                                    session.add(s_obj)
+                                    await session.flush()
+                                    # Registrar auditoría del snapshot creado (sesión principal)
+                                    try:
+                                        audit_snap = LogsAuditoriaCreate(
+                                            entidad='saldo_snapshot_scada',
+                                            entidad_id=str(getattr(s_obj, 'id', None)),
+                                            accion='CREATE',
+                                            valor_anterior=None,
+                                            valor_nuevo=AnyUtils.serialize_orm_object(s_obj),
+                                            usuario_id=current_user_id.get()
+                                        )
+                                        if getattr(self._repo, 'auditor', None) is not None:
+                                            await self._repo.auditor.log_audit(audit_log_data=audit_snap)
+                                    except Exception as e_aud:
+                                        log.error(f"No se pudo registrar auditoría para snapshot (sesión principal): {e_aud}")
+                            except Exception as e_snap:
+                                log.error(f"No se pudo crear snapshot en transacción principal: {e_snap}", exc_info=True)
+
+                        log.info(f"Pesada creada con referencia: {getattr(pesada_model, 'referencia', None)} y transacción {trans_id} actualizada a 'Proceso' (transaccional).")
+                        return PesadaResponse.model_validate(pesada_model)
+
+                except Exception as e_transact:
+                    log.error(f"Error transaccional creando pesada y actualizando transacción {trans_id}: {e_transact}", exc_info=True)
+                    # normalizar error
+                    if isinstance(e_transact, EntityNotFoundException):
+                        raise e_transact
+                    raise BasedException(
+                        message=f"Error inesperado al crear la pesada y actualizar la transacción: {str(e_transact)}",
+                        status_code=status.HTTP_500_INTERNAL_SERVER_ERROR
+                    )
+
+            # Fallback (por ejemplo durante tests donde repositorio es un mock): usar comportamiento anterior
             created_pesada = await self._repo.create(pesada_model)
-            log.info(f"Pesada creada con referencia: {created_pesada.referencia}")
+            log.info(f"Pesada creada con referencia: {getattr(created_pesada, 'referencia', None)} (fallback no transaccional)")
+
+            # Intentar crear snapshot en fallback si vienen campos de saldo
+            try:
+                sa = getattr(pesada_data, 'saldo_anterior', None)
+                sn = getattr(pesada_data, 'saldo_nuevo', None)
+                if sa is not None and sn is not None:
+                    # Intentar crear snapshot en una sesión nueva (no crítico)
+                    async with DatabaseConfiguration._async_session() as s:
+                        async with s.begin():
+                            from database.models import SaldoSnapshotScada
+                            # intentar obtener transaccion para relacionar almacenamiento/material
+                            from sqlalchemy import select
+                            result = await s.execute(select(Transacciones).filter(Transacciones.id == int(trans_id)))
+                            tran_obj = result.scalar_one_or_none()
+                            almacenamiento_id = getattr(tran_obj, 'origen_id', None) or getattr(tran_obj, 'destino_id', None) or None
+                            material_id = getattr(tran_obj, 'material_id', None)
+                            s_obj = SaldoSnapshotScada(
+                                pesada_id=int(created_pesada.id),
+                                almacenamiento_id=int(almacenamiento_id) if almacenamiento_id is not None else None,
+                                material_id=int(material_id) if material_id is not None else None,
+                                saldo_anterior=sa,
+                                saldo_nuevo=sn
+                            )
+                            s.add(s_obj)
+                            await s.flush()
+                            # Registrar auditoría del snapshot creado (fallback, sesión nueva)
+                            try:
+                                audit_snap = LogsAuditoriaCreate(
+                                    entidad='saldo_snapshot_scada',
+                                    entidad_id=str(getattr(s_obj, 'id', None)),
+                                    accion='CREATE',
+                                    valor_anterior=None,
+                                    valor_nuevo=AnyUtils.serialize_orm_object(s_obj),
+                                    usuario_id=current_user_id.get()
+                                )
+                                if getattr(self._repo, 'auditor', None) is not None:
+                                    await self._repo.auditor.log_audit(audit_log_data=audit_snap)
+                            except Exception as e_aud:
+                                log.error(f"No se pudo registrar auditoría para snapshot (fallback): {e_aud}")
+            except Exception as e_snap:
+                log.error(f"No fue posible crear snapshot de saldo en fallback: {e_snap}", exc_info=True)
+
+            try:
+                if self._trans_repo is not None:
+                    # Rellenar explícitamente campos opcionales para evitar advertencias estáticas
+                    update_data = TransaccionUpdate(estado='Proceso') ##TODO actualizar el peso cada vez que se cree una pesada
+                    await self._trans_repo.update(int(trans_id), update_data)
+                    log.info(f"Transacción {trans_id} actualizada a 'Proceso' después de crear pesada (fallback).")
+            except Exception as e_trans:
+                log.error(f"No fue posible actualizar estado de transacción {trans_id} a 'Proceso' en fallback: {e_trans}", exc_info=True)
+
             return PesadaResponse.model_validate(created_pesada)
+        except EntityAlreadyRegisteredException:
+            # Propagar tal cual para capa superior
+            raise
         except Exception as e:
             log.error(f"Error al crear pesada: {e}")
             raise BasedException(
@@ -64,7 +305,8 @@ class PesadasService:
             BasedException: For unexpected errors during the update process.
         """
         try:
-            pesada_model = Pesadas(**pesada.model_dump())
+            pesada_payload = pesada.model_dump(exclude={'saldo_anterior', 'saldo_nuevo'})
+            pesada_model = Pesadas(**pesada_payload)
             updated_pesada = await self._repo.update(pesada_id, pesada_model)
             log.info(f"Pesada actualizada con ID: {pesada_id}")
             return PesadaResponse.model_validate(updated_pesada) if updated_pesada else None
@@ -172,36 +414,12 @@ class PesadasService:
 
     async def create_pesada_if_not_exists(self, pesada_data: PesadaCreate) -> PesadaResponse:
         """
-        Check if a pesada with the same transaction ID and consecutivo already exists. If not, create a new one.
-
-        Args:
-            pesada_data (PesadaCreate): The data for the pesada to be created.
-
-        Returns:
-            PesadaResponse: The existing or newly created pesada object.
-
-        Raises:
-            EntityAlreadyRegisteredException: If a pesada with the same transaction ID and consecutivo already exists.
-            BasedException: For unexpected errors during the creation process.
+        Wrapper kept for backward compatibility: delegates to `create_pesada`.
+        Previous implementation lived here; now the canonical method is
+        `create_pesada` which already enforces the "if not exists" behaviour.
         """
-        try:
-            # 1. Validar si transacción ya existe
-            if await self._repo.find_one(transaccion_id=pesada_data.transaccion_id,
-                                         consecutivo=pesada_data.consecutivo):
-                raise EntityAlreadyRegisteredException(f"En la transacción {pesada_data.transaccion_id} ya existe una pesada con ese consecutivo '{pesada_data.consecutivo}'")
-
-            # 2. Se crea transacción si esta no existe en la BD
-            pesada_nueva = await self._repo.create(pesada_data)
-            return pesada_nueva
-        except EntityAlreadyRegisteredException as e:
-            raise e
-        except Exception as e:
-            log.error(
-                f"Error al crear pesada para transacción {pesada_data.transaccion_id} con consecutivo {pesada_data.consecutivo}: {e}")
-            raise BasedException(
-                message="Error inesperado al crear la pesada.",
-                status_code=status.HTTP_409_CONFLICT
-            )
+        # Delegar a la implementación unificada
+        return await self.create_pesada(pesada_data)
 
     async def create_pesadas_corte_if_not_exists(self, acum_data: List[PesadasCalculate]) -> List[PesadasCorteCreate]:
         """
@@ -418,43 +636,67 @@ class PesadasService:
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
 
-    async def get_pesadas_acumuladas(self, puerto_id: str, tran_id: Optional[int] = None) -> List[VPesadasAcumResponse]:
+    async def get_pesadas_acumuladas(self, puerto_id: str) -> List[VPesadasAcumResponse]:
         """
         Obtener y procesar pesadas acumuladas para un puerto (y opcionalmente una transacción).
 
         Flujo:
-        1) Obtener acumulado agrupado de pesadas no leídas (repo.get_sumatoria_pesadas)
-        2) Validar que hay acumulados (si no, lanzar EntityNotFoundException)
-        3) Construir rangos (primera/ultima) y crear registros en pesadas_corte (creación robusta)
-        4) Marcar las pesadas dentro de los rangos como leídas
-        5) Construir y devolver la lista de VPesadasAcumResponse a partir de los registros de pesadas_corte
+        1) Obtener la transacción en estado 'Proceso' (o la más reciente) para el puerto dado.
+        2) Consultar el acumulado de pesadas nuevas desde la última transacción.
+        3) Construir rangos de pesadas para marcar como leídas.
+        4) Intentar crear registros en pesadas_corte (no crítico).
+        5) Marcar las pesadas como leídas.
+        6) Construir y devolver la respuesta, prefiriendo datos de pesadas_corte
         """
         try:
-            # 1. Obtener acumulado
+            # 1. Obtener transaccion a partir del puerto_id consultando Transacciones.ref1 == puerto_id
+            tran_id = None
+            try:
+                if self._trans_repo is not None:
+                    # find_many devuelve una lista de TransaccionResponse
+                    trans_list = await self._trans_repo.find_many(ref1=puerto_id)
+                    if trans_list:
+                        # Preferir transacciones en estado 'Proceso'
+                        proceso = [t for t in trans_list if getattr(t, 'estado', None) == 'Proceso']
+                        from datetime import datetime
+                        if proceso:
+                            # Si hay varias en 'Proceso', elegir la más reciente por fecha_hora
+                            chosen = max(proceso, key=lambda t: getattr(t, 'fecha_hora') or datetime.min)
+                        else:
+                            # Si no hay en 'Proceso', elegir la más reciente entre todas las encontradas
+                            chosen = max(trans_list, key=lambda t: getattr(t, 'fecha_hora') or datetime.min)
+                        tran_id = getattr(chosen, 'id', None)
+                else:
+                    log.warning("get_pesadas_acumuladas: no hay repositorio de transacciones disponible para buscar ref1 por puerto.")
+            except Exception as e_tran:
+                log.error(f"Error buscando transacciones por ref1={puerto_id}: {e_tran}", exc_info=True)
+                tran_id = None
+
+            # 2. Obtener acumulado
             acumulado = await self._repo.get_sumatoria_pesadas(puerto_id, tran_id)
             if not acumulado:
                 raise EntityNotFoundException("No hay pesadas nuevas por reportar.")
 
-            # 2. Construir rangos para marcar como leídas (solo donde existan ids válidos)
+            # 3. Construir rangos para marcar como leídas (solo donde existan ids válidos)
             pesada_range = [
                 PesadasRange(primera=acum.primera, ultima=acum.ultima, transaccion=acum.transaccion)
                 for acum in acumulado
                 if getattr(acum, 'primera', None) is not None and getattr(acum, 'ultima', None) is not None and getattr(acum, 'transaccion', None) is not None
             ]
 
-            # 3. Intentar crear registros en pesadas_corte y usar esos registros para construir la respuesta.
+            # 4. Intentar crear registros en pesadas_corte y usar esos registros para construir la respuesta.
             pesadas_corte_records = None
             try:
                 pesadas_corte_records = await self.create_pesadas_corte_if_not_exists(acumulado)
             except Exception as e_create:
                 log.error(f"No fue posible crear pesadas_corte (no crítico): {e_create}", exc_info=True)
 
-            # 4. Marcar las pesadas como leídas solo si existen rangos
+            # 5. Marcar las pesadas como leídas solo si existen rangos
             if pesada_range:
                 ids_marcados = await self._repo.mark_pesadas(pesada_range)
                 log.info(f"{len(ids_marcados)} Pesadas marcadas como leído.")
 
-            # 5. Construir la respuesta: preferir registros de pesadas_corte (tienen la ref con el consecutivo por transacción)
+            # 6. Construir la respuesta: preferir registros de pesadas_corte (tienen la ref con el consecutivo por transacción)
             response: List[VPesadasAcumResponse] = []
             from decimal import Decimal
             from datetime import datetime
@@ -473,7 +715,7 @@ class PesadasService:
                         material = getattr(corte, 'material', None) or (corte.get('material') if isinstance(corte, dict) else None) or ''
                         peso_val = getattr(corte, 'peso', None) or (corte.get('peso') if isinstance(corte, dict) else None)
                         puerto = getattr(corte, 'puerto_id', None) or (corte.get('puerto_id') if isinstance(corte, dict) else None) or puerto_id
-                        fecha_hora = getattr(corte, 'fecha_hora', None) or (corte.get('fecha_hora') if isinstance(corte, dict) else None) or datetime.now()
+                        fecha_hora = getattr(corte, 'fecha_hora', None) or (corte.get('fecha_hora') if isinstance(corte, dict) else None) or now_local()
                         usuario_id = getattr(corte, 'usuario_id', None) or (corte.get('usuario_id') if isinstance(corte, dict) else None) or 0
 
                         # Mantener 'consecutivo' del acumulado (viaje)
@@ -522,7 +764,7 @@ class PesadasService:
                     except Exception:
                         peso = Decimal('0')
                     puerto = getattr(acum, 'puerto_id', None) or puerto_id
-                    fecha_hora = getattr(acum, 'fecha_hora', None) or datetime.now()
+                    fecha_hora = getattr(acum, 'fecha_hora', None) or now_local()
                     usuario_id = int(getattr(acum, 'usuario_id', 0) or 0)
 
                     # generar referencia por transacción (serie 1,2,3...) usando gen_pesada_identificador
@@ -621,7 +863,7 @@ class PesadasService:
                     material = getattr(corte, 'material', None) or ""
                     peso_val = getattr(corte, 'peso', None)
                     puerto = getattr(corte, 'puerto_id', None) or puerto_id
-                    fecha_hora = getattr(corte, 'fecha_hora', None) or datetime.now()
+                    fecha_hora = getattr(corte, 'fecha_hora', None) or now_local()
                     usuario_id = getattr(corte, 'usuario_id', None) or 0
                     usuario = getattr(corte, 'usuario', None) or ""
 
@@ -779,5 +1021,114 @@ class PesadasService:
             log.error(f"Error al obtener suma de pesadas para puerto_id {puerto_id}: {e}")
             raise BasedException(
                 message="Error inesperado al obtener la suma de pesadas.",
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
+
+    async def get_pending_for_last_transaccion(self, puerto_id: str) -> List[VPesadasAcumResponse]:
+        """
+        Obtener la sumatoria de pesadas NO leídas (leido=False) únicamente para la última
+        transacción asociada con `puerto_id`.
+
+        Flujo:
+        1. Determinar la última transacción (preferir estado 'Proceso', sino la más reciente) para el puerto.
+        2. Solicitar al repositorio la sumatoria de pesadas no leídas para esa transacción.
+        3. Generar una referencia para el envío final y devolver la lista de VPesadasAcumResponse.
+        """
+        try:
+            # 1. Obtener transaccion a partir del puerto_id consultando Transacciones.ref1 == puerto_id
+            tran_id = None
+            try:
+                if self._trans_repo is not None:
+                    trans_list = await self._trans_repo.find_many(ref1=puerto_id)
+                    if trans_list:
+                        proceso = [t for t in trans_list if getattr(t, 'estado', None) == 'Proceso']
+                        from datetime import datetime
+                        if proceso:
+                            chosen = max(proceso, key=lambda t: getattr(t, 'fecha_hora') or datetime.min)
+                        else:
+                            chosen = max(trans_list, key=lambda t: getattr(t, 'fecha_hora') or datetime.min)
+                        tran_id = getattr(chosen, 'id', None)
+                else:
+                    log.warning("get_pending_for_last_transaccion: no hay repositorio de transacciones disponible para buscar ref1 por puerto.")
+            except Exception as e_tran:
+                log.error(f"Error buscando transacciones por ref1={puerto_id}: {e_tran}", exc_info=True)
+                tran_id = None
+
+            if tran_id is None:
+                raise EntityNotFoundException("No se encontró transacción asociada al puerto especificado.")
+
+            # 2. Obtener acumulado de pesadas no leídas para esa transacción
+            acumulado = await self._repo.get_sumatoria_pesadas(puerto_id, tran_id)
+            if not acumulado:
+                raise EntityNotFoundException("No hay pesadas pendientes de enviar para la última transacción.")
+
+            # --- NUEVO: construir rangos y marcar las pesadas como leídas ---
+            pesada_range = [
+                PesadasRange(primera=acum.primera, ultima=acum.ultima, transaccion=acum.transaccion)
+                for acum in acumulado
+                if getattr(acum, 'primera', None) is not None and getattr(acum, 'ultima', None) is not None and getattr(acum, 'transaccion', None) is not None
+            ]
+
+            if pesada_range:
+                try:
+                    ids_marcados = await self._repo.mark_pesadas(pesada_range)
+                    log.info(f"{len(ids_marcados)} Pesadas marcadas como leído para la última transacción.")
+                except Exception as e_mark:
+                    # No hacer crítico el fallo de marcado: loguear y continuar devolviendo la respuesta
+                    log.error(f"No fue posible marcar pesadas como leídas en get_pending_for_last_transaccion: {e_mark}", exc_info=True)
+
+            # 3. Generar referencia final (usar gen_pesada_identificador para mantener consistencia) y mapear al esquema de respuesta
+            response: List[VPesadasAcumResponse] = []
+            from decimal import Decimal
+            from datetime import datetime
+
+            # generar referencia base usando gen_pesada_identificador
+            try:
+                gen_req = PesadaCorteRetrieve(puerto_id=puerto_id, transaccion=int(tran_id))
+                ref_gen = await self.gen_pesada_identificador(gen_req)
+                referencia_final = f"{ref_gen}F" if ref_gen else None
+            except Exception as e_ref:
+                log.error(f"No fue posible generar referencia para transaccion {tran_id}: {e_ref}", exc_info=True)
+                referencia_final = None
+
+            for acum in acumulado:
+                try:
+                    transaccion = int(getattr(acum, 'transaccion', 0) or 0)
+                    viaje_consec = int(getattr(acum, 'consecutivo', 0) or 0)
+                    pit = int(getattr(acum, 'pit', 0) or 0)
+                    material = getattr(acum, 'material', '') or ''
+                    peso_val = getattr(acum, 'peso', None)
+                    try:
+                        peso = Decimal(peso_val) if peso_val is not None else Decimal('0')
+                    except Exception:
+                        peso = Decimal('0')
+                    puerto = getattr(acum, 'puerto_id', None) or puerto_id
+                    fecha_hora = getattr(acum, 'fecha_hora', None) or now_local()
+                    usuario_id = int(getattr(acum, 'usuario_id', 0) or 0)
+
+                    resp = VPesadasAcumResponse(
+                        referencia=referencia_final,
+                        consecutivo=viaje_consec,
+                        transaccion=0,
+                        pit=pit,
+                        material=material,
+                        peso=peso,
+                        puerto_id=puerto,
+                        fecha_hora=fecha_hora,
+                        usuario_id=usuario_id,
+                        usuario=getattr(acum, 'usuario', "") or "",
+                    )
+                    response.append(resp)
+                except Exception as e_map:
+                    log.error(f"Error mapeando acumulado a VPesadasAcumResponse en pending last: {e_map} - acum: {acum}", exc_info=True)
+
+            return response
+
+        except EntityNotFoundException:
+            raise
+        except Exception as e:
+            log.error(f"Error al obtener pesadas pendientes para la última transacción del puerto_id {puerto_id}: {e}", exc_info=True)
+            raise BasedException(
+                message="Error inesperado al obtener pesadas pendientes.",
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR
             )

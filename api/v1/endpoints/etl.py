@@ -4,7 +4,7 @@ from fastapi import APIRouter, Depends, HTTPException, status, Query
 from fastapi_pagination import Page
 
 from core.di.service_injection import get_viajes_service, get_mat_service, get_mov_service, \
-    get_pesadas_service, get_transacciones_service, get_flotas_service, get_alm_mat_service
+    get_pesadas_service, get_transacciones_service, get_flotas_service, get_alm_mat_service, get_ajustes_service
 from core.enums.user_role_enum import UserRoleEnum
 from schemas.almacenamientos_materiales_schema import VAlmMaterialesResponse
 from schemas.materiales_schema import MaterialesResponse
@@ -21,8 +21,10 @@ from services.movimientos_service import MovimientosService
 from services.pesadas_service import PesadasService
 from services.transacciones_service import TransaccionesService
 from services.viajes_service import ViajesService
+from services.ajustes_service import AjustesService
 from utils.logger_util import LoggerUtil
 from utils.response_util import ResponseUtil
+from schemas.ajustes_schema import AjusteCreate
 
 log = LoggerUtil()
 
@@ -93,6 +95,7 @@ async def get_buques_listado(
             status_code=status.HTTP_200_OK,
             summary="Modificar viaje del buque para actualizar estado por partida",
             description="Evento realizado por la automatización al dar por finalizado el recibo de buque."
+                        "Actualiza el estado_operador a False."
                         "Corresponde a FinalizaBuqueMT.",
             response_model=UpdateResponse,
             responses={
@@ -310,10 +313,10 @@ async def create_pesada(
 ):
     log.info(f"Payload recibido: Pesada {pesada} - Crear")
     try:
-       await service.create_pesada_if_not_exists(pesada)
+       await service.create_pesada(pesada)
        return response_json(
             status_code=status.HTTP_201_CREATED,
-            message="registro exitoso."
+            message="Registro exitoso."
        )
 
     except HTTPException as http_exc:
@@ -409,7 +412,7 @@ async def create_transaccion(
         await service.create_transaccion_if_not_exists(tran)
         return response_json(
             status_code=status.HTTP_201_CREATED,
-            message="registro exitoso."
+            message="Registro exitoso."
         )
 
     except HTTPException as http_exc:
@@ -461,4 +464,51 @@ async def end_transaction(
         return response_json(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             message=f"Error interno: {e}"
+        )
+
+@router.post("/ajustes",
+             status_code=status.HTTP_201_CREATED,
+             summary="Crear un ajuste de saldo de material en almacenamiento",
+             description="Crea un ajuste de saldo y el movimiento asociado, actualizando el saldo en almacenamiento_materiales.",
+             response_model=CreateResponse,
+             responses={
+                 status.HTTP_400_BAD_REQUEST: {"model": ErrorResponse},
+                 status.HTTP_422_UNPROCESSABLE_ENTITY: {"model": ValidationErrorResponse},
+             })
+async def crear_ajuste(
+    data: AjusteCreate,
+    ajustes_service: AjustesService = Depends(get_ajustes_service),
+):
+    log.info(f"Payload recibido: Ajuste {data} - Crear")
+    try:
+        ajuste_resp = await ajustes_service.create_ajuste(data)
+        return response_json(
+            status_code=status.HTTP_201_CREATED,
+            message="Registro exitoso.",
+            data={"ajuste": ajuste_resp}
+        )
+
+    except HTTPException as http_exc:
+        log.error(f"El ajuste no pudo registrarse: {http_exc.detail}")
+        return response_json(
+            status_code=http_exc.status_code,
+            message=http_exc.detail
+        )
+
+    except Exception as e:
+        # BasedException se mapea aquí porque el service lanza BasedException en casos esperados
+        try:
+            from core.exceptions.base_exception import BasedException
+            if isinstance(e, BasedException):
+                return response_json(
+                    status_code=e.status_code,
+                    message=e.message
+                )
+        except Exception:
+            pass
+
+        log.error(f"Error al procesar petición de registro de ajuste: {e}")
+        return response_json(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            message=str(e)
         )

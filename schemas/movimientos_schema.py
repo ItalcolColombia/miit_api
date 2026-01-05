@@ -41,7 +41,7 @@ class MovimientosCreate(MovimientosResponse):
                 "almacenamiento_id": 106,
                 "material_id": 12,
                 "tipo": "Salida",
-                "accion": "Automatico",
+                "accion": "Automático",
                 "observacion": None,
                 "fecha_hora": datetime(2022, 1, 1),
                 "peso": 33420.00,

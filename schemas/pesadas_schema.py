@@ -31,6 +31,9 @@ class PesadaCreate(BaseSchema):
     fecha_hora: Optional[datetime] = None
     usuario_id: Optional[int] = None
     leido: Optional[bool] = False
+    # Campos opcionales para snapshot de saldo SCADA
+    saldo_anterior: Optional[Decimal] = Field(None, max_digits=15, decimal_places=3)
+    saldo_nuevo: Optional[Decimal] = Field(None, max_digits=15, decimal_places=3)
 
     class Config:
         json_schema_extra = {
@@ -42,7 +45,9 @@ class PesadaCreate(BaseSchema):
                 "peso_meta": 0.00,
                 "peso_real": 2150.00,
                 "peso_vuelo": 0.00,
-                "peso_fino": 0.00
+                "peso_fino": 0.00,
+                "saldo_anterior": 1234.123,
+                "saldo_nuevo": 3456.456
             }
         }
 
@@ -57,6 +62,8 @@ class PesadaUpdate(PesadaCreate):
     fecha_hora: Optional[datetime] = None
     usuario_id: Optional[int] = None
     leido: Optional[bool] = False
+    saldo_anterior: Optional[Decimal] = Field(None, max_digits=15, decimal_places=3)
+    saldo_nuevo: Optional[Decimal] = Field(None, max_digits=15, decimal_places=3)
 
 class PesadaResponse(PesadaBase):
     id: int

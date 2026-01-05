@@ -166,3 +166,55 @@ class EndBuqueResponse(BaseResponse):
                 }
             }
         }
+
+
+# Nuevos esquemas específicos para el endpoint /camion-ingreso
+class CamionIngresoData(BaseSchema):
+    cargoPit: Optional[int] = Field(None, description="Valor del pit asignado al camión")
+
+
+class CamionIngresoResponse(BaseResponse):
+    """
+    Response model específico para la modificación de ingreso de camión.
+
+    Mantiene la estructura base (status_code, status_name, message, meta) y redefine
+    `data` con un modelo que contiene `cargoPit`.
+    """
+    data: Optional[CamionIngresoData] = None
+
+    class Config:
+        json_schema_extra = {
+            "example": {
+                "status_code": "200",
+                "status_name": "OK",
+                "timestamp": "2025-09-12T10:40:00Z",
+                "message": "Modificación de cita de camión realizada exitosamente",
+                "data": {"cargoPit": 3}
+            }
+        }
+
+
+# Nuevos esquemas para el endpoint /camion-registro
+class CamionRegistroData(BaseSchema):
+    cargoPit: Optional[int] = Field(None, description="Valor del pit asignado al camión (registro)")
+
+
+class CamionRegistroResponse(BaseResponse):
+    """
+    Response model específico para la creación (registro) de cita de camión.
+
+    Usa el mismo wrapper base pero con `data` que contiene `cargoPit`.
+    """
+    data: Optional[CamionRegistroData] = None
+
+    class Config:
+        json_schema_extra = {
+            "example": {
+                "status_code": "201",
+                "status_name": "Created",
+                "timestamp": "2025-09-12T10:40:00Z",
+                "message": "Registró de cita de camión realizada exitosamente",
+                "data": {"cargoPit": 1}
+            }
+        }
+

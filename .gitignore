@@ -48,3 +48,9 @@ build/
 # Windows
 Thumbs.db
 ehthumbs.db
+
+# Pruebas contenerización
+/pgdata
+
+/docker-compose.simulate.yml
+/README.simulate_ecr.md

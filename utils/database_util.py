@@ -1,3 +1,6 @@
+import asyncio
+import os
+
 from sqlalchemy.exc import OperationalError
 from sqlalchemy.ext.asyncio import create_async_engine
 from starlette import status
@@ -45,7 +48,7 @@ class DatabaseUtil:
 
     async def check_connection(self) -> None:
         """
-        Verify the database connection.
+        Verify the database connection with retries.
 
         Attempts to establish a connection with the database using the configured async engine.
         Logs and prints a success message if the connection is successful, or raises an exception
@@ -61,27 +64,36 @@ class DatabaseUtil:
             OperationalError: If the database connection fails due to connectivity issues.
             BasedException: For other unexpected errors during the connection attempt.
         """
-        try:
-            checked_database_type = (
-                DatabaseConfigurationUtil().check_database_type(
-                    self.__database_type
-                )
-            )
+        # Leer parámetros de reintento desde variables de entorno (útil en CI/compose)
+        max_retries = int(os.getenv('DB_CHECK_RETRIES', '12'))
+        delay = float(os.getenv('DB_CHECK_DELAY', '2'))
 
-            async with self.__engine.connect() as connection:
-                log.info(f"Database -> {checked_database_type} connection successful!")
-                print(
-                    f"\033[32m\033[1m\nDatabase -> {checked_database_type} connection successful!\n\033[0m"
-                )
-        except OperationalError as e:
-            log.error(f"Database connection failed: {str(e)}")
-            print(
-                f"\033[31m\033[1m\nDatabase connection failed!\n\033[0m Error: {str(e)}"
-            )
-            raise
-        except Exception as e:
-            log.error(f"Error inesperado al verificar la conexión a la base de datos: {e}")
-            raise BasedException(
-                message="Error inesperado al verificar la conexión a la base de datos.",
-                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR
-            )
+        checked_database_type = (
+            DatabaseConfigurationUtil().check_database_type(self.__database_type)
+        )
+
+        last_exception = None
+        for attempt in range(1, max_retries + 1):
+            try:
+                async with self.__engine.connect() as connection:
+                    log.info(f"Database -> {checked_database_type} connection successful!")
+                    print(
+                        f"\033[32m\033[1m\nDatabase -> {checked_database_type} connection successful!\n\033[0m"
+                    )
+                    return
+            except OperationalError as e:
+                last_exception = e
+                log.warning(f"Attempt {attempt}/{max_retries} - DB not ready: {e}")
+            except Exception as e:
+                last_exception = e
+                log.warning(f"Attempt {attempt}/{max_retries} - unexpected error: {e}")
+
+            if attempt < max_retries:
+                await asyncio.sleep(delay)
+
+        # Si llegamos aquí, agotamos los reintentos
+        log.error(f"Database connection failed after {max_retries} attempts: {last_exception}")
+        raise BasedException(
+            message=f"Error inesperado al verificar la conexión a la base de datos: {last_exception}",
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR
+        )

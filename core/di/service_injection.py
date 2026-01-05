@@ -15,6 +15,7 @@ from repositories.pesadas_repository import PesadasRepository
 from repositories.transacciones_repository import TransaccionesRepository
 from repositories.usuarios_repository import UsuariosRepository
 from repositories.viajes_repository import ViajesRepository
+from repositories.ajustes_repository import AjustesRepository
 from services.almacenamientos_materiales_service import AlmacenamientosMaterialesService
 from services.almacenamientos_service import AlmacenamientosService
 # Services
@@ -29,6 +30,7 @@ from services.pesadas_service import PesadasService
 from services.transacciones_service import TransaccionesService
 from services.usuarios_service import UsuariosService
 from services.viajes_service import ViajesService
+from services.ajustes_service import AjustesService
 # InjectionRepo
 from .repository_injection import (
     get_user_repository,
@@ -42,8 +44,11 @@ from .repository_injection import (
     get_movimientos_repository,
     get_pesadas_repository,
     get_pesadas_corte_repository,
-    get_transacciones_repository
+    get_transacciones_repository,
+    get_ajustes_repository,
+    get_auditor_service,
 )
+from core.contracts.auditor import Auditor
 
 
 async def get_auth_service(
@@ -95,9 +100,10 @@ async def get_mov_service(
 
 async def get_pesadas_service(
     pesadas_repository: PesadasRepository = Depends(get_pesadas_repository),
-    pesadas_corte_repository: PesadasCorteRepository = Depends(get_pesadas_corte_repository)
+    pesadas_corte_repository: PesadasCorteRepository = Depends(get_pesadas_corte_repository),
+    trans_repository: TransaccionesRepository = Depends(get_transacciones_repository),
 ) -> PesadasService:
-    return PesadasService(pesadas_repository, pesadas_corte_repository)
+    return PesadasService(pesadas_repository, pesadas_corte_repository, trans_repository)
 
 async def get_transacciones_service(
     trans_repository: Annotated[TransaccionesRepository, Depends(get_transacciones_repository)],
@@ -134,4 +140,10 @@ async def get_user_service(
 ) -> UsuariosService:
     return UsuariosService(user_repository)
 
-
+async def get_ajustes_service(
+    ajustes_repository: Annotated[AjustesRepository, Depends(get_ajustes_repository)],
+    movimientos_repository: Annotated[MovimientosRepository, Depends(get_movimientos_repository)],
+    alm_mat_repository: Annotated[AlmacenamientosMaterialesRepository, Depends(get_alm_mat_repository)],
+    auditor: Annotated[Auditor, Depends(get_auditor_service)],
+) -> AjustesService:
+    return AjustesService(ajustes_repository, movimientos_repository, alm_mat_repository, auditor)

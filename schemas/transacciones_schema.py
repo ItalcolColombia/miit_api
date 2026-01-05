@@ -39,7 +39,7 @@ class TransaccionCreate(TransaccionResponse):
     ref2: Optional[str] = None
     fecha_inicio: datetime = None
     fecha_fin: Optional[datetime] = None
-    origen_id: int
+    origen_id: Optional[int] = None
     destino_id: Optional[int] = None
     peso_meta: Decimal = Field( max_digits=10, decimal_places=2)
     peso_real: Optional[Decimal] = Field(None, max_digits=10, decimal_places=2)
@@ -71,6 +71,7 @@ class TransaccionCreate(TransaccionResponse):
                 "ref1": "24126",
                 "fecha_inicio": datetime(2025, 5, 10, 13, 25),
                 "origen_id": 102,
+                "destino_id": 301,
                 "peso_meta": 34230
             }
         }

@@ -1,9 +1,10 @@
-from datetime import datetime, timedelta, timezone
+from datetime import timedelta, datetime
 from typing import Optional
 
 import httpx
 
 from core.config.settings import get_settings
+from utils.time_util import now_utc
 
 
 class ExternalAPI:
@@ -54,7 +55,7 @@ async def login_and_get_token() -> str:
 
         expires_in = data.get("expiresIn", 3600)
         auth_state.token = token
-        auth_state.expires_at = datetime.now(timezone.utc) + timedelta(seconds=expires_in)
+        auth_state.expires_at = now_utc() + timedelta(seconds=expires_in)
 
         return token
 
@@ -86,7 +87,7 @@ async def get_token() -> str:
         if (
             not auth_state.token
             or not auth_state.expires_at
-            or datetime.now(timezone.utc) >= auth_state.expires_at - timedelta(minutes=5)
+            or now_utc() >= auth_state.expires_at - timedelta(minutes=5)
         ):
             return await login_and_get_token()
         return auth_state.token
