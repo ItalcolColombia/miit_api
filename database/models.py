@@ -354,3 +354,20 @@ class SaldoSnapshotScada(Base):
     __table_args__ = (
         UniqueConstraint('pesada_id', name='uk_snapshot_pesada'),
     )
+
+class Ajustes(Base):
+    __tablename__ = "ajustes"
+    id = Column(Integer, primary_key=True, index=True)
+    almacenamiento_id = Column(Integer, ForeignKey('almacenamientos.id'), nullable=False)
+    material_id = Column(Integer, ForeignKey('materiales.id'), nullable=False)
+    saldo_anterior = Column(Numeric(14,2), nullable=False)
+    saldo_nuevo = Column(Numeric(14,2), nullable=False)
+    delta = Column(Numeric(14,2), nullable=False)
+    motivo = Column(String(255), nullable=False)
+    usuario_id = Column(Integer, ForeignKey('usuarios.id'), nullable=False)
+    fecha_hora = Column(DateTime(timezone=True), server_default=func.timezone('America/Bogota', func.now()), onupdate=func.timezone('America/Bogota', func.now()))
+    movimiento_id = Column(Integer, ForeignKey('movimientos.id'), nullable=True)
+
+    # Relaciones opcionales
+    movimiento = relationship('Movimientos', backref='ajustes')
+

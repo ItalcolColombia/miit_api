@@ -332,7 +332,7 @@ class TransaccionesService:
                         almacenamiento_id=int(almacen_id),
                         material_id=int(getattr(tran_obj, 'material_id', None)),
                         tipo=mov_tipo,
-                        accion='Automatico',
+                        accion='Automático',
                         observacion=None,
                         peso=peso_acc,
                         saldo_anterior=saldo_anterior,
