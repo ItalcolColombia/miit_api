@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, Double, Numeric, Table, String, DateTime, ForeignKey, Date, Boolean
+from sqlalchemy import Column, Integer, Double, Numeric, Table, Text, String, DateTime, ForeignKey, Date, Boolean, TIMESTAMP
 from sqlalchemy import Identity
 from sqlalchemy.orm import relationship, declarative_base, backref
 from sqlalchemy.schema import UniqueConstraint
@@ -371,3 +371,136 @@ class Ajustes(Base):
     # Relaciones opcionales
     movimiento = relationship('Movimientos', backref='ajustes')
 
+### REPORTERIA
+
+class Reporte(Base):
+    """
+    Modelo para el catálogo de reportes.
+    Almacena la configuración y metadatos de cada reporte disponible.
+    """
+    __tablename__ = "reportes"
+
+    # Identificación
+    id = Column(Integer, primary_key=True, index=True)
+    codigo = Column(String(50), unique=True, nullable=False, index=True)
+    nombre = Column(String(200), nullable=False)
+    descripcion = Column(Text, nullable=True)
+
+    # Configuración de vista
+    vista_nombre = Column(String(100), nullable=False)
+    campo_fecha = Column(String(50), default='fecha')
+
+    # UI/UX
+    icono = Column(String(50), default='assessment')
+    orden = Column(Integer, default=0)
+    color = Column(String(20), default='#1976d2')
+    categoria = Column(String(50), default='operacional')
+
+    # Configuración de exportación
+    permite_exportar_pdf = Column(Boolean, default=True)
+    permite_exportar_excel = Column(Boolean, default=True)
+    permite_exportar_csv = Column(Boolean, default=True)
+
+    # Configuración de filtros
+    requiere_rango_fechas = Column(Boolean, default=True)
+    permite_filtrar_material = Column(Boolean, default=True)
+
+    # Estado
+    activo = Column(Boolean, default=True)
+
+    # Auditoría
+    fecha_creacion = Column(TIMESTAMP, server_default=func.now())
+    fecha_actualizacion = Column(TIMESTAMP, server_default=func.now(), onupdate=func.now())
+    usuario_creacion = Column(Integer, ForeignKey('usuarios.id'), nullable=True)
+    usuario_actualizacion = Column(Integer, ForeignKey('usuarios.id'), nullable=True)
+
+    # Relaciones
+    columnas = relationship("ReporteColumna", back_populates="reporte", cascade="all, delete-orphan")
+    permisos = relationship("PermisoReporte", back_populates="reporte")
+
+    def __repr__(self):
+        return f"<Reporte(codigo='{self.codigo}', nombre='{self.nombre}')>"
+
+class ReporteColumna(Base):
+    """
+    Modelo para las columnas de cada reporte.
+    Define la estructura y configuración de cada columna.
+    """
+    __tablename__ = "reportes_columnas"
+
+    id = Column(Integer, primary_key=True, index=True)
+
+    # Relación
+    reporte_id = Column(Integer, ForeignKey('reportes.id', ondelete='CASCADE'), nullable=False)
+
+    # Configuración de columna
+    campo = Column(String(100), nullable=False)
+    nombre_mostrar = Column(String(200), nullable=False)
+    tipo_dato = Column(String(20), nullable=False)  # string, number, date, datetime, boolean
+
+    # Opciones de visualización
+    visible = Column(Boolean, default=True)
+    orden = Column(Integer, default=0)
+    ancho_minimo = Column(Integer, default=100)
+    alineacion = Column(String(10), default='left')  # left, center, right
+
+    # Opciones de interacción
+    ordenable = Column(Boolean, default=True)
+    filtrable = Column(Boolean, default=False)
+
+    # Formato
+    formato = Column(String(50), nullable=True)
+    prefijo = Column(String(20), nullable=True)
+    sufijo = Column(String(20), nullable=True)
+    decimales = Column(Integer, default=2)
+
+    # Totalizables
+    es_totalizable = Column(Boolean, default=False)
+    tipo_totalizacion = Column(String(20), nullable=True)  # sum, avg, count, min, max
+
+    # Auditoría
+    fecha_creacion = Column(TIMESTAMP, server_default=func.now())
+
+    # Relación
+    reporte = relationship("Reporte", back_populates="columnas")
+
+    # Restricciones
+    __table_args__ = (
+        UniqueConstraint('reporte_id', 'campo', name='uk_reporte_campo'),
+    )
+
+    def __repr__(self):
+        return f"<ReporteColumna(reporte_id={self.reporte_id}, campo='{self.campo}')>"
+
+class PermisoReporte(Base):
+    """
+    Modelo para permisos de reportes por rol.
+    Controla quién puede ver y exportar cada reporte.
+    """
+    __tablename__ = "permisos_reportes"
+
+    id = Column(Integer, primary_key=True, index=True)
+
+    # Relaciones
+    rol_id = Column(Integer, ForeignKey('roles.id', ondelete='CASCADE'), nullable=False)
+    codigo_reporte = Column(String(50), nullable=False)
+    reporte_id = Column(Integer, ForeignKey('reportes.id'), nullable=True)
+
+    # Permisos
+    puede_ver = Column(Boolean, default=True)
+    puede_exportar = Column(Boolean, default=True)
+
+    # Auditoría
+    fecha_hora = Column(TIMESTAMP, server_default=func.now())
+    usuario_id = Column(Integer, ForeignKey('usuarios.id'), nullable=True)
+
+    # Relaciones
+    reporte = relationship("Reporte", back_populates="permisos")
+
+    # Restricciones
+    __table_args__ = (
+        UniqueConstraint('rol_id', 'codigo_reporte', name='uk_rol_reporte'),
+    )
+
+    def __repr__(self):
+        return f"<PermisoReporte(rol_id={self.rol_id}, codigo='{self.codigo_reporte}')>"

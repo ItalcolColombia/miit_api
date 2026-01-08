@@ -31,6 +31,7 @@ from repositories.usuarios_repository import UsuariosRepository
 from repositories.viajes_repository import ViajesRepository
 from repositories.ajustes_repository import AjustesRepository
 from schemas.almacenamientos_materiales_schema import AlmacenamientoMaterialesResponse
+from repositories.reportes.reportes_repository import ReportesRepository
 # Schemas
 from schemas.almacenamientos_schema import AlmacenamientoResponse
 from schemas.bls_schema import BlsResponse
@@ -47,11 +48,11 @@ from schemas.ajustes_schema import AjusteResponse
 from services.logs_auditoria_service import DatabaseAuditor
 from .database_injection import get_db
 
-
 async def get_auditor_service(
         session: AsyncSession = Depends(get_db)
 ) -> Auditor:
     return DatabaseAuditor(session)
+
 
 async def get_user_repository(
         session: AsyncSession = Depends(get_db),
@@ -59,17 +60,20 @@ async def get_user_repository(
 ) -> UsuariosRepository:
     return UsuariosRepository(Usuarios, UsuariosResponse, session, auditor)
 
+
 async def get_viajes_repository(
         session: AsyncSession = Depends(get_db),
         auditor: Auditor = Depends(get_auditor_service)
 ) -> ViajesRepository:
     return ViajesRepository(Viajes, ViajesResponse, session, auditor)
 
+
 async def get_alm_repository(
         session: AsyncSession = Depends(get_db),
         auditor: Auditor = Depends(get_auditor_service)
 ) -> AlmacenamientosRepository:
     return AlmacenamientosRepository(Almacenamientos, AlmacenamientoResponse, session, auditor)
+
 
 async def get_alm_mat_repository(
         session: AsyncSession = Depends(get_db),
@@ -91,11 +95,13 @@ async def get_bls_repository(
 ) -> BlsRepository:
     return BlsRepository(Bls, BlsResponse, session, auditor)
 
+
 async def get_clientes_repository(
         session: AsyncSession = Depends(get_db),
         auditor: Auditor = Depends(get_auditor_service)
 ) -> ClientesRepository:
     return ClientesRepository(Clientes, ClientesResponse, session, auditor)
+
 
 async def get_materiales_repository(
         session: AsyncSession = Depends(get_db),
@@ -103,11 +109,13 @@ async def get_materiales_repository(
 ) -> MaterialesRepository:
     return MaterialesRepository(Materiales, MaterialesResponse, session, auditor)
 
+
 async def get_movimientos_repository(
         session: AsyncSession = Depends(get_db),
         auditor: Auditor = Depends(get_auditor_service)
 ) -> MovimientosRepository:
     return MovimientosRepository(Movimientos, MovimientosResponse, session, auditor)
+
 
 async def get_pesadas_repository(
         session: AsyncSession = Depends(get_db),
@@ -115,11 +123,13 @@ async def get_pesadas_repository(
 ) -> PesadasRepository:
     return PesadasRepository(Pesadas, PesadaResponse, session, auditor)
 
+
 async def get_pesadas_corte_repository(
         session: AsyncSession = Depends(get_db),
         auditor: Auditor = Depends(get_auditor_service)
 ) -> PesadasCorteRepository:
     return PesadasCorteRepository(PesadasCorte, PesadasCorteResponse, session, auditor)
+
 
 async def get_transacciones_repository(
         session: AsyncSession = Depends(get_db),
@@ -127,8 +137,28 @@ async def get_transacciones_repository(
 ) -> TransaccionesRepository:
     return TransaccionesRepository(Transacciones, TransaccionResponse, session, auditor)
 
+
 async def get_ajustes_repository(
         session: AsyncSession = Depends(get_db),
         auditor: Auditor = Depends(get_auditor_service)
 ) -> AjustesRepository:
     return AjustesRepository(Ajustes, AjusteResponse, session, auditor)
+
+
+# ============================================================
+# INYECCIÓN DE DEPENDENCIAS PARA REPORTES
+# ============================================================
+
+async def get_reportes_repository(
+        db: AsyncSession = Depends(get_db)
+) -> ReportesRepository:
+    """
+    Inyección de dependencias para el repositorio de reportes.
+
+    Args:
+        db: Sesión de base de datos inyectada automáticamente
+
+    Returns:
+        Instancia del repositorio de reportes
+    """
+    return ReportesRepository(db)

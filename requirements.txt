@@ -1,18 +1,58 @@
-asyncpg
-fastapi
-fastapi-pagination
-pip
-SQLAlchemy
-starlette
-pydantic-settings
-PyJWT
-colorlog
-pydantic
-python-dotenv
-uvicorn
-bcrypt
-cryptography
-itsdangerous
-httpx
-orjson
-whenever
+# ============================================================
+# MIIT API - Dependencias
+# Puerto Antioquia - Sistema de Reportes e Inventario
+# ============================================================
+
+# --------------------------------------------------
+# Core Framework
+# --------------------------------------------------
+fastapi #>=0.109.0,<0.120.0
+fastapi-pagination #>=0.12.0
+starlette #>=0.49.1
+uvicorn[standard] #>=0.25.0
+pydantic #>=2.5.0
+pydantic-settings #>=2.1.0
+
+# --------------------------------------------------
+# Base de Datos
+# --------------------------------------------------
+asyncpg #>=0.29.0
+SQLAlchemy[asyncio] #>=2.0.23
+
+# --------------------------------------------------
+# Seguridad y Autenticación
+# --------------------------------------------------
+PyJWT #>=2.8.0
+bcrypt #>=4.1.0
+cryptography #>=41.0.0
+itsdangerous #>=2.1.0
+
+# --------------------------------------------------
+# HTTP Client
+# --------------------------------------------------
+httpx #>=0.26.0
+
+# --------------------------------------------------
+# Serialización
+# --------------------------------------------------
+orjson #>=3.9.0
+
+# --------------------------------------------------
+# Exportación de Reportes
+# --------------------------------------------------
+pandas #>=2.1.0
+openpyxl #>=3.1.0
+reportlab #>=4.0.0
+
+# --------------------------------------------------
+# Utilidades
+# --------------------------------------------------
+python-dotenv>=1.0.0
+colorlog>=6.8.0
+
+# --------------------------------------------------
+# Desarrollo (opcional - descomentar si es necesario)
+# --------------------------------------------------
+# pytest>=7.4.0
+# pytest-asyncio>=0.23.0
+# httpx>=0.26.0  # ya incluido arriba
