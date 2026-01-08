@@ -129,3 +129,82 @@ class PesadasRepository(IRepository[Pesadas, PesadaResponse]):
             return
 
         await self.update_bulk(entity_ids=corte_ids, update_data={'enviado': True})
+
+    async def fetch_and_mark_sumatoria_pesadas(self, puerto_ref: str, tran_id: int) -> List[PesadasCalculate] | None:
+        """
+        Atomic operation to fetch the sum/grouping of non-read pesadas for a specific transaction
+        and mark the involved Pesadas rows as read. This reduces race conditions when multiple
+        workers process the same puerto simultaneously.
+
+        Strategy:
+        1. Start a DB transaction.
+        2. Select Pesadas IDs matching puerto_ref and tran_id with FOR UPDATE SKIP LOCKED to avoid
+           competing workers picking the same rows.
+        3. If no IDs found, return empty list.
+        4. Reuse the existing aggregation query (similar to get_sumatoria_pesadas) but filter by the
+           selected IDs to compute the aggregated values per transaction.
+        5. Update Pesadas SET leido = True WHERE id IN (selected_ids).
+        6. Commit and return the aggregated mappings as PesadasCalculate instances.
+        """
+        try:
+            # 1. iniciar transacción
+            async with self.db.begin():
+                # 2. seleccionar ids con FOR UPDATE SKIP LOCKED
+                id_sel = (
+                    select(Pesadas.id)
+                    .join(Transacciones, Pesadas.transaccion_id == Transacciones.id)
+                    .join(Viajes, Transacciones.viaje_id == Viajes.id)
+                    .where(
+                        Pesadas.leido == False,
+                        Transacciones.id == tran_id,
+                        Viajes.puerto_id == puerto_ref
+                    )
+                    .with_for_update(skip_locked=True)
+                )
+                res_ids = await self.db.execute(id_sel)
+                ids = res_ids.scalars().all()
+
+                if not ids:
+                    return []
+
+                # 4. Agregación sobre los ids seleccionados
+                agg_q = (
+                    select(
+                        Viajes.puerto_id,
+                        Flotas.referencia,
+                        Viajes.id.label('consecutivo'),
+                        Transacciones.id.label('transaccion'),
+                        Transacciones.pit,
+                        Materiales.codigo.label('material'),
+                        func.sum(Pesadas.peso_real).label('peso'),
+                        func.max(Pesadas.fecha_hora).label('fecha_hora'),
+                        func.min(Pesadas.id).label('primera'),
+                        func.max(Pesadas.id).label('ultima'),
+                        Pesadas.usuario_id,
+                        func.fn_usuario_nombre(Pesadas.usuario_id).label('usuario')
+                    )
+                    .join(Transacciones, Pesadas.transaccion_id == Transacciones.id)
+                    .join(Materiales, Transacciones.material_id == Materiales.id)
+                    .join(Viajes, Transacciones.viaje_id == Viajes.id)
+                    .join(Flotas, Viajes.flota_id == Flotas.id)
+                    .where(Pesadas.id.in_(ids))
+                    .group_by(
+                        Transacciones.id,
+                        Flotas.referencia,
+                        Viajes.id,
+                        Transacciones.pit,
+                        Materiales.codigo,
+                        Pesadas.usuario_id
+                    )
+                )
+
+                agg_res = await self.db.execute(agg_q)
+                mappings = agg_res.mappings().all()
+
+                # 5. Marcar pesadas como leidas
+                await self.update_bulk(entity_ids=ids, update_data={'leido': True})
+
+                return [PesadasCalculate(**row) for row in mappings]
+        except Exception:
+            # No propagar detalles SQL, dejar que quien llame maneje/loguee
+            raise

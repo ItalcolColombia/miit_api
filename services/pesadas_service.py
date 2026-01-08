@@ -23,6 +23,7 @@ from utils.logger_util import LoggerUtil
 from utils.any_utils import AnyUtils
 from core.config.context import current_user_id
 from schemas.logs_auditoria_schema import LogsAuditoriaCreate
+from utils.time_util import now_local
 
 log = LoggerUtil()
 
@@ -649,31 +650,54 @@ class PesadasService:
         6) Construir y devolver la respuesta, prefiriendo datos de pesadas_corte
         """
         try:
-            # 1. Obtener transaccion a partir del puerto_id consultando Transacciones.ref1 == puerto_id
-            tran_id = None
+            # 1. Obtener transacciones candidate para el puerto_id: preferir estado 'Proceso' ordenadas por fecha, luego el resto por fecha
+            tran_candidates = None
             try:
                 if self._trans_repo is not None:
-                    # find_many devuelve una lista de TransaccionResponse
                     trans_list = await self._trans_repo.find_many(ref1=puerto_id)
                     if trans_list:
-                        # Preferir transacciones en estado 'Proceso'
-                        proceso = [t for t in trans_list if getattr(t, 'estado', None) == 'Proceso']
                         from datetime import datetime
-                        if proceso:
-                            # Si hay varias en 'Proceso', elegir la más reciente por fecha_hora
-                            chosen = max(proceso, key=lambda t: getattr(t, 'fecha_hora') or datetime.min)
-                        else:
-                            # Si no hay en 'Proceso', elegir la más reciente entre todas las encontradas
-                            chosen = max(trans_list, key=lambda t: getattr(t, 'fecha_hora') or datetime.min)
-                        tran_id = getattr(chosen, 'id', None)
+                        proceso = [t for t in trans_list if getattr(t, 'estado', None) == 'Proceso']
+                        # ordenar por fecha_hora desc dentro de cada grupo
+                        proceso_sorted = sorted(proceso, key=lambda t: getattr(t, 'fecha_hora') or datetime.min, reverse=True)
+                        others = [t for t in trans_list if getattr(t, 'estado', None) != 'Proceso']
+                        others_sorted = sorted(others, key=lambda t: getattr(t, 'fecha_hora') or datetime.min, reverse=True)
+                        tran_candidates = proceso_sorted + others_sorted
                 else:
                     log.warning("get_pesadas_acumuladas: no hay repositorio de transacciones disponible para buscar ref1 por puerto.")
             except Exception as e_tran:
                 log.error(f"Error buscando transacciones por ref1={puerto_id}: {e_tran}", exc_info=True)
-                tran_id = None
+                tran_candidates = None
 
-            # 2. Obtener acumulado
-            acumulado = await self._repo.get_sumatoria_pesadas(puerto_id, tran_id)
+            # Si no hay candidatos (no trans_repo o trans_list vacía), se utiliza el comportamiento actual (tran_id=None)
+            # Intentamos primero con la transaccion más reciente (si hay candidates) y si no, con tran_id=None
+            acumulado = None
+            selected_tran_id = None
+
+            if tran_candidates:
+                # Iterar candidatos y usar fetch_and_mark_sumatoria_pesadas para obtener y marcar de forma atómica
+                for t in tran_candidates:
+                    try:
+                        t_id = getattr(t, 'id', None)
+                        if t_id is None:
+                            continue
+                        acumulado_tmp = await self._repo.fetch_and_mark_sumatoria_pesadas(puerto_id, int(t_id))
+                        if acumulado_tmp:
+                            acumulado = acumulado_tmp
+                            selected_tran_id = int(t_id)
+                            break
+                    except Exception as e_iter:
+                        log.error(f"Error obteniendo/ marcando pesadas para transaccion {getattr(t,'id',None)}: {e_iter}", exc_info=True)
+                        continue
+
+            if acumulado is None:
+                # fallback: intentar como antes con tran_id=None (buscar acumulado global)
+                try:
+                    acumulado = await self._repo.get_sumatoria_pesadas(puerto_id, None)
+                except Exception as e_acum:
+                    log.error(f"Error al obtener acumulado fallback para puerto {puerto_id}: {e_acum}", exc_info=True)
+                    acumulado = None
+
             if not acumulado:
                 raise EntityNotFoundException("No hay pesadas nuevas por reportar.")
 
@@ -684,15 +708,15 @@ class PesadasService:
                 if getattr(acum, 'primera', None) is not None and getattr(acum, 'ultima', None) is not None and getattr(acum, 'transaccion', None) is not None
             ]
 
-            # 4. Intentar crear registros en pesadas_corte y usar esos registros para construir la respuesta.
+            # Si usamos fetch_and_mark_sumatoria_pesadas, ya fueron marcadas; solo marcar si vino del fallback get_sumatoria_pesadas
             pesadas_corte_records = None
             try:
                 pesadas_corte_records = await self.create_pesadas_corte_if_not_exists(acumulado)
             except Exception as e_create:
                 log.error(f"No fue posible crear pesadas_corte (no crítico): {e_create}", exc_info=True)
 
-            # 5. Marcar las pesadas como leídas solo si existen rangos
-            if pesada_range:
+            # Si pesada_range no está vacío y no marcamos previamente (fallback), marcar
+            if pesada_range and selected_tran_id is None:
                 ids_marcados = await self._repo.mark_pesadas(pesada_range)
                 log.info(f"{len(ids_marcados)} Pesadas marcadas como leído.")
 
@@ -1035,47 +1059,46 @@ class PesadasService:
         3. Generar una referencia para el envío final y devolver la lista de VPesadasAcumResponse.
         """
         try:
-            # 1. Obtener transaccion a partir del puerto_id consultando Transacciones.ref1 == puerto_id
-            tran_id = None
+            # 1. Obtener lista de transacciones candidatas ordenadas por 'Proceso' y fecha
+            tran_candidates = None
             try:
                 if self._trans_repo is not None:
                     trans_list = await self._trans_repo.find_many(ref1=puerto_id)
                     if trans_list:
-                        proceso = [t for t in trans_list if getattr(t, 'estado', None) == 'Proceso']
                         from datetime import datetime
-                        if proceso:
-                            chosen = max(proceso, key=lambda t: getattr(t, 'fecha_hora') or datetime.min)
-                        else:
-                            chosen = max(trans_list, key=lambda t: getattr(t, 'fecha_hora') or datetime.min)
-                        tran_id = getattr(chosen, 'id', None)
+                        proceso = [t for t in trans_list if getattr(t, 'estado', None) == 'Proceso']
+                        proceso_sorted = sorted(proceso, key=lambda t: getattr(t, 'fecha_hora') or datetime.min, reverse=True)
+                        others = [t for t in trans_list if getattr(t, 'estado', None) != 'Proceso']
+                        others_sorted = sorted(others, key=lambda t: getattr(t, 'fecha_hora') or datetime.min, reverse=True)
+                        tran_candidates = proceso_sorted + others_sorted
                 else:
                     log.warning("get_pending_for_last_transaccion: no hay repositorio de transacciones disponible para buscar ref1 por puerto.")
             except Exception as e_tran:
                 log.error(f"Error buscando transacciones por ref1={puerto_id}: {e_tran}", exc_info=True)
-                tran_id = None
+                tran_candidates = None
 
-            if tran_id is None:
+            if not tran_candidates:
                 raise EntityNotFoundException("No se encontró transacción asociada al puerto especificado.")
 
-            # 2. Obtener acumulado de pesadas no leídas para esa transacción
-            acumulado = await self._repo.get_sumatoria_pesadas(puerto_id, tran_id)
+            # 2. Iterar candidatos hasta encontrar uno con pesadas pendientes
+            acumulado = None
+            selected_tran = None
+            for t in tran_candidates:
+                try:
+                    t_id = getattr(t, 'id', None)
+                    if t_id is None:
+                        continue
+                    acumulado_tmp = await self._repo.fetch_and_mark_sumatoria_pesadas(puerto_id, int(t_id))
+                    if acumulado_tmp:
+                        acumulado = acumulado_tmp
+                        selected_tran = int(t_id)
+                        break
+                except Exception as e_iter:
+                    log.error(f"Error obteniendo/ marcando pesadas para transaccion {getattr(t,'id',None)}: {e_iter}", exc_info=True)
+                    continue
+
             if not acumulado:
                 raise EntityNotFoundException("No hay pesadas pendientes de enviar para la última transacción.")
-
-            # --- NUEVO: construir rangos y marcar las pesadas como leídas ---
-            pesada_range = [
-                PesadasRange(primera=acum.primera, ultima=acum.ultima, transaccion=acum.transaccion)
-                for acum in acumulado
-                if getattr(acum, 'primera', None) is not None and getattr(acum, 'ultima', None) is not None and getattr(acum, 'transaccion', None) is not None
-            ]
-
-            if pesada_range:
-                try:
-                    ids_marcados = await self._repo.mark_pesadas(pesada_range)
-                    log.info(f"{len(ids_marcados)} Pesadas marcadas como leído para la última transacción.")
-                except Exception as e_mark:
-                    # No hacer crítico el fallo de marcado: loguear y continuar devolviendo la respuesta
-                    log.error(f"No fue posible marcar pesadas como leídas en get_pending_for_last_transaccion: {e_mark}", exc_info=True)
 
             # 3. Generar referencia final (usar gen_pesada_identificador para mantener consistencia) y mapear al esquema de respuesta
             response: List[VPesadasAcumResponse] = []
@@ -1084,11 +1107,11 @@ class PesadasService:
 
             # generar referencia base usando gen_pesada_identificador
             try:
-                gen_req = PesadaCorteRetrieve(puerto_id=puerto_id, transaccion=int(tran_id))
+                gen_req = PesadaCorteRetrieve(puerto_id=puerto_id, transaccion=int(selected_tran))
                 ref_gen = await self.gen_pesada_identificador(gen_req)
                 referencia_final = f"{ref_gen}F" if ref_gen else None
             except Exception as e_ref:
-                log.error(f"No fue posible generar referencia para transaccion {tran_id}: {e_ref}", exc_info=True)
+                log.error(f"No fue posible generar referencia para transaccion {selected_tran}: {e_ref}", exc_info=True)
                 referencia_final = None
 
             for acum in acumulado:
