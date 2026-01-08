@@ -319,7 +319,13 @@ async def in_camion(
         service: ViajesService = Depends(get_viajes_service)):
     log.info(f"Payload recibido: Flota {puerto_id} - Ingreso ")
     try:
+        # Debug: mostrar cómo llegó el parámetro desde el cliente (tipo y tzinfo)
+        try:
+            log.info(f"[DEBUG endpoint in_camion] raw fecha_ingreso={fecha_ingreso} (type={type(fecha_ingreso)}, tzinfo={getattr(fecha_ingreso, 'tzinfo', None)})")
+        except Exception:
+            log.warning("[DEBUG endpoint in_camion] no se pudo inspeccionar fecha_ingreso")
         fecha_ingreso_utc = normalize_to_app_tz(fecha_ingreso)
+        log.info(f"[DEBUG endpoint in_camion] fecha_ingreso_normalized={fecha_ingreso_utc} (tzinfo={getattr(fecha_ingreso_utc, 'tzinfo', None)})")
 
         service_data = await service.chg_camion_ingreso(puerto_id, fecha_ingreso_utc)
 
@@ -368,8 +374,14 @@ async def out_camion(
         service: ViajesService = Depends(get_viajes_service)):
     log.info(f"Payload recibido: Camion {puerto_id} - Salida")
     try:
+        # Debug: inspeccionar parámetros recibidos
+        try:
+            log.info(f"[DEBUG endpoint out_camion] raw fecha_salida={fecha_salida} (type={type(fecha_salida)}, tzinfo={getattr(fecha_salida, 'tzinfo', None)}) peso_real={peso_real} (type={type(peso_real)})")
+        except Exception:
+            log.warning("[DEBUG endpoint out_camion] no se pudo inspeccionar parametros de salida")
         # Normalizar fecha_salida a UTC
         fecha_salida_utc = normalize_to_app_tz(fecha_salida)
+        log.info(f"[DEBUG endpoint out_camion] fecha_salida_normalized={fecha_salida_utc} (tzinfo={getattr(fecha_salida_utc, 'tzinfo', None)})")
 
         await service.chg_camion_salida(puerto_id, fecha_salida_utc, peso_real)
         try:

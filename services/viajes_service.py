@@ -616,8 +616,15 @@ class ViajesService:
             if not tran:
                 raise EntityNotFoundException(f"Transacción para la cita: '{viaje.puerto_id}' no existe")
 
+            # Asegurar que la fecha se normalice a la zona de la aplicación antes de guardar.
+            # Esto evita diferencias en producción si el payload viene con tzinfo distinto o si
+            # el cliente envía un datetime naive que deba interpretarse según APP_TIMEZONE.
+            from utils.time_util import normalize_to_app_tz
+            fecha_norm = normalize_to_app_tz(fecha)
+            log.info(f"[DEBUG chg_camion_ingreso] fecha original={fecha} (tzinfo={getattr(fecha, 'tzinfo', None)}), fecha_norm={fecha_norm} (tzinfo={getattr(fecha_norm, 'tzinfo', None)})")
+
             update_fields = {
-                "fecha_llegada": fecha,
+                "fecha_llegada": fecha_norm,
             }
             update_data = ViajeUpdate(**update_fields)
             await self._repo.update(viaje.id, update_data)
@@ -666,9 +673,12 @@ class ViajesService:
                     f"La flota es del tipo '{flota.tipo}' diferente al tipo esperado 'camion'")
 
             from utils.time_util import normalize_to_app_tz
+            # Normalizar y loguear para debugging en producción
+            fecha_norm = normalize_to_app_tz(fecha)
+            log.info(f"[DEBUG chg_camion_salida] fecha original={fecha} (tzinfo={getattr(fecha, 'tzinfo', None)}), fecha_norm={fecha_norm} (tzinfo={getattr(fecha_norm, 'tzinfo', None)}) peso={peso}")
             update_fields = {
                 # Guardar la hora tal como llegó el cliente, asumiendo APP_TIMEZONE
-                "fecha_salida": normalize_to_app_tz(fecha),
+                "fecha_salida": fecha_norm,
                 "peso_real": peso
             }
             update_data = ViajeUpdate(**update_fields)

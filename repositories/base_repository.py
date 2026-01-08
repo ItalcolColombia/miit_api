@@ -26,16 +26,18 @@ def _normalize_datetimes(data: Dict[str, Any]) -> Dict[str, Any]:
     """Recorre el dict y convierte objetos datetime o ISO strings a datetime aware en APP_TIMEZONE."""
     normalized = {}
     # importar una vez fuera del bucle
-    from utils.time_util import normalize_to_app_tz
+    # Guardar en UTC para persistencia consistente; convertir a zona de app solo al presentar
+    from utils.time_util import normalize_to_utc
     for k, v in data.items():
         try:
             # Detectar objetos datetime y strings ISO
             if isinstance(v, datetime):
-                normalized[k] = normalize_to_app_tz(v)
+                # convertir a UTC antes de persistir
+                normalized[k] = normalize_to_utc(v)
             elif isinstance(v, str):
-                # intentar parsear ISO string y normalizar
+                # intentar parsear ISO string y normalizar a UTC
                 try:
-                    normalized[k] = normalize_to_app_tz(v)
+                    normalized[k] = normalize_to_utc(v)
                 except Exception:
                     normalized[k] = v
             else:
