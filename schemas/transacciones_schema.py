@@ -4,6 +4,8 @@ from typing import Optional
 
 from pydantic import BaseModel, Field, field_validator, model_validator
 
+from utils.time_util import now_local
+
 
 class TransaccionResponse(BaseModel):
     id: Optional[int] = None
@@ -37,7 +39,7 @@ class TransaccionCreate(TransaccionResponse):
     pit: Optional[int] = None  # Opcional para tipo Traslado
     ref1: Optional[str] = None
     ref2: Optional[str] = None
-    fecha_inicio: datetime = None
+    fecha_inicio: datetime = Field(default_factory=now_local)
     fecha_fin: Optional[datetime] = None
     origen_id: Optional[int] = None
     destino_id: Optional[int] = None
