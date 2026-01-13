@@ -85,29 +85,8 @@ class ReportesRepository:
         result = await self.db.execute(query, {"rol_id": rol_id})
         rows = result.fetchall()
 
-        reportes = []
-        for row in rows:
-            reportes.append({
-                "id": row.id,
-                "codigo": row.codigo,
-                "nombre": row.nombre,
-                "descripcion": row.descripcion,
-                "vista_nombre": row.vista_nombre,
-                "campo_fecha": row.campo_fecha,
-                "icono": row.icono,
-                "orden": row.orden,
-                "color": row.color,
-                "categoria": row.categoria,
-                "permite_exportar_pdf": row.permite_exportar_pdf,
-                "permite_exportar_excel": row.permite_exportar_excel,
-                "permite_exportar_csv": row.permite_exportar_csv,
-                "requiere_rango_fechas": row.requiere_rango_fechas,
-                "permite_filtrar_material": row.permite_filtrar_material,
-                "puede_ver": row.puede_ver,
-                "puede_exportar": row.puede_exportar
-            })
-
-        return reportes
+        # Conversión automática - evita errores de campos faltantes
+        return [dict(row._mapping) for row in rows]
 
     # ========================================================
     # COLUMNAS DE REPORTES
