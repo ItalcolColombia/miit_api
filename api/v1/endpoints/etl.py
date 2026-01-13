@@ -407,7 +407,9 @@ async def create_transaccion(
     tran: TransaccionCreate,
     service: TransaccionesService = Depends(get_transacciones_service),
 ):
-    log.info(f"Payload recibido: Transacción {tran} - Crear")
+    # Identificador para logs: viaje_id para Despacho/Recibo, origen/destino para Traslado
+    tran_identifier = f"viaje={tran.viaje_id}" if tran.viaje_id else f"origen={tran.origen_id}/destino={tran.destino_id}"
+    log.info(f"Payload recibido: Transacción tipo={tran.tipo} {tran_identifier} - Crear")
     try:
         await service.create_transaccion_if_not_exists(tran)
         return response_json(
@@ -416,14 +418,14 @@ async def create_transaccion(
         )
 
     except HTTPException as http_exc:
-        log.error(f"La transacción con viaje {tran.viaje_id} no fue registrada: {http_exc.detail}")
+        log.error(f"La transacción {tran_identifier} no fue registrada: {http_exc.detail}")
         return response_json(
             status_code=http_exc.status_code,
             message=http_exc.detail
         )
 
     except Exception as e:
-        log.error(f"Error al procesar petición de registro de transacción con viaje {tran.viaje_id}: {e}")
+        log.error(f"Error al procesar petición de registro de transacción {tran_identifier}: {e}")
         return response_json(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             message=str(e)

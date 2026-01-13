@@ -1,4 +1,5 @@
 import uuid
+from decimal import Decimal
 from typing import List, Optional
 
 from fastapi_pagination import Page, Params
@@ -10,7 +11,7 @@ from core.exceptions.base_exception import BasedException
 from core.exceptions.db_exception import DatabaseSQLAlchemyException
 from core.exceptions.entity_exceptions import EntityNotFoundException, EntityAlreadyRegisteredException
 from database.connection import DatabaseConfiguration
-from database.models import Pesadas, Transacciones
+from database.models import Pesadas, Transacciones, SaldoSnapshotScada, VAlmMateriales
 from repositories.pesadas_corte_repository import PesadasCorteRepository
 from repositories.pesadas_repository import PesadasRepository
 from repositories.transacciones_repository import TransaccionesRepository
@@ -18,7 +19,6 @@ from schemas.pesadas_corte_schema import PesadasCalculate, PesadasCorteCreate, P
     PesadaCorteRetrieve
 from schemas.pesadas_schema import PesadaResponse, PesadaCreate, PesadaUpdate, VPesadasAcumResponse
 from schemas.transacciones_schema import TransaccionUpdate
-from schemas.saldo_snapshot_schema import SaldoSnapshotCreate
 from utils.logger_util import LoggerUtil
 from utils.any_utils import AnyUtils
 from core.config.context import current_user_id
@@ -26,6 +26,142 @@ from schemas.logs_auditoria_schema import LogsAuditoriaCreate
 from utils.time_util import now_local
 
 log = LoggerUtil()
+
+
+async def _crear_snapshots_pesada(
+    session: AsyncSession,
+    pesada_id: int,
+    tran_obj,
+    saldo_anterior_origen: Decimal,
+    saldo_nuevo_origen: Decimal,
+    auditor=None
+) -> List[SaldoSnapshotScada]:
+    """
+    Crea snapshots de saldo para una pesada.
+
+    Para transacciones tipo Traslado, crea DOS snapshots:
+    - Uno de SALIDA del origen (con los saldos recibidos de SCADA)
+    - Uno de ENTRADA al destino (calculado internamente)
+
+    Para Recibo y Despacho, crea UN solo snapshot (comportamiento original).
+
+    Args:
+        session: Sesión de base de datos
+        pesada_id: ID de la pesada
+        tran_obj: Objeto transacción ORM
+        saldo_anterior_origen: Saldo anterior del origen (recibido de SCADA)
+        saldo_nuevo_origen: Saldo nuevo del origen (recibido de SCADA)
+        auditor: Auditor para registrar logs (opcional)
+
+    Returns:
+        Lista de objetos SaldoSnapshotScada creados
+    """
+    snapshots_creados = []
+    material_id = getattr(tran_obj, 'material_id', None)
+    tipo_tran = str(getattr(tran_obj, 'tipo', '') or '').strip().lower()
+
+    # Snapshot del origen (siempre se crea)
+    origen_id = getattr(tran_obj, 'origen_id', None)
+    destino_id = getattr(tran_obj, 'destino_id', None)
+
+    # Determinar almacenamiento para snapshot según tipo
+    if tipo_tran == 'traslado':
+        # Para traslado, el snapshot de origen usa origen_id
+        almacenamiento_origen = origen_id
+    elif tipo_tran == 'recibo':
+        # Para recibo, el almacenamiento afectado es destino (o origen si no hay destino)
+        almacenamiento_origen = destino_id or origen_id
+    else:
+        # Para despacho u otros, usar origen_id
+        almacenamiento_origen = origen_id or destino_id
+
+    # Crear snapshot de origen
+    if almacenamiento_origen is not None:
+        s_origen = SaldoSnapshotScada(
+            pesada_id=int(pesada_id),
+            almacenamiento_id=int(almacenamiento_origen),
+            material_id=int(material_id) if material_id is not None else None,
+            saldo_anterior=saldo_anterior_origen,
+            saldo_nuevo=saldo_nuevo_origen,
+            tipo_almacenamiento='ORIGEN'
+        )
+        session.add(s_origen)
+        await session.flush()
+        snapshots_creados.append(s_origen)
+
+        # Auditoría del snapshot de origen
+        if auditor is not None:
+            try:
+                audit_snap = LogsAuditoriaCreate(
+                    entidad='saldo_snapshot_scada',
+                    entidad_id=str(getattr(s_origen, 'id', None)),
+                    accion='CREATE',
+                    valor_anterior=None,
+                    valor_nuevo=AnyUtils.serialize_orm_object(s_origen),
+                    usuario_id=current_user_id.get()
+                )
+                await auditor.log_audit(audit_log_data=audit_snap)
+            except Exception as e_aud:
+                log.error(f"No se pudo registrar auditoría para snapshot origen: {e_aud}")
+
+    # Para Traslado, crear también snapshot de destino (calculado)
+    if tipo_tran == 'traslado' and destino_id is not None and origen_id is not None:
+        try:
+            # Calcular delta (lo que sale del origen)
+            delta = saldo_anterior_origen - saldo_nuevo_origen  # positivo = salida
+
+            # Obtener saldo actual del destino desde VAlmMateriales
+            saldo_anterior_destino = Decimal('0')
+            try:
+                res = await session.execute(
+                    select(VAlmMateriales).where(
+                        VAlmMateriales.almacenamiento_id == int(destino_id),
+                        VAlmMateriales.material_id == int(material_id) if material_id else True
+                    )
+                )
+                vrow = res.scalar_one_or_none()
+                if vrow is not None:
+                    saldo_anterior_destino = Decimal(str(getattr(vrow, 'saldo', 0) or 0))
+            except Exception as e_saldo:
+                log.warning(f"No se pudo obtener saldo anterior del destino {destino_id}: {e_saldo}")
+
+            # Saldo nuevo del destino = saldo anterior + lo que sale del origen
+            saldo_nuevo_destino = saldo_anterior_destino + delta
+
+            # Crear snapshot de destino
+            s_destino = SaldoSnapshotScada(
+                pesada_id=int(pesada_id),
+                almacenamiento_id=int(destino_id),
+                material_id=int(material_id) if material_id is not None else None,
+                saldo_anterior=saldo_anterior_destino,
+                saldo_nuevo=saldo_nuevo_destino,
+                tipo_almacenamiento='DESTINO'
+            )
+            session.add(s_destino)
+            await session.flush()
+            snapshots_creados.append(s_destino)
+
+            log.info(f"Snapshot destino creado para traslado: destino_id={destino_id}, saldo_anterior={saldo_anterior_destino}, saldo_nuevo={saldo_nuevo_destino}")
+
+            # Auditoría del snapshot de destino
+            if auditor is not None:
+                try:
+                    audit_snap_dest = LogsAuditoriaCreate(
+                        entidad='saldo_snapshot_scada',
+                        entidad_id=str(getattr(s_destino, 'id', None)),
+                        accion='CREATE',
+                        valor_anterior=None,
+                        valor_nuevo=AnyUtils.serialize_orm_object(s_destino),
+                        usuario_id=current_user_id.get()
+                    )
+                    await auditor.log_audit(audit_log_data=audit_snap_dest)
+                except Exception as e_aud:
+                    log.error(f"No se pudo registrar auditoría para snapshot destino: {e_aud}")
+
+        except Exception as e_destino:
+            log.error(f"Error creando snapshot de destino para traslado: {e_destino}", exc_info=True)
+
+    return snapshots_creados
 
 class PesadasService:
 
@@ -108,40 +244,21 @@ class PesadasService:
                                 tran_obj.estado = 'Proceso'
                                 await new_s.flush()
 
-                                # Si vienen saldos en la petición, crear snapshot en la misma transacción
+                                # Si vienen saldos en la petición, crear snapshot(s) en la misma transacción
                                 try:
                                     sa = getattr(pesada_data, 'saldo_anterior', None)
                                     sn = getattr(pesada_data, 'saldo_nuevo', None)
                                     if sa is not None and sn is not None:
-                                        # Obtener almacenamiento y material desde la transacción si es posible
-                                        almacenamiento_id = getattr(tran_obj, 'origen_id', None) or getattr(tran_obj, 'destino_id', None) or None
-                                        material_id = getattr(tran_obj, 'material_id', None)
-                                        snapshot_data = SaldoSnapshotCreate(
+                                        # Usar función auxiliar que maneja Traslados (crea 2 snapshots)
+                                        auditor = getattr(self._repo, 'auditor', None)
+                                        await _crear_snapshots_pesada(
+                                            session=new_s,
                                             pesada_id=int(pesada_model.id),
-                                            almacenamiento_id=int(almacenamiento_id) if almacenamiento_id is not None else None,
-                                            material_id=int(material_id) if material_id is not None else None,
-                                            saldo_anterior=sa,
-                                            saldo_nuevo=sn
+                                            tran_obj=tran_obj,
+                                            saldo_anterior_origen=Decimal(str(sa)),
+                                            saldo_nuevo_origen=Decimal(str(sn)),
+                                            auditor=auditor
                                         )
-                                        # crear directamente usando ORM dentro de la sesión
-                                        from database.models import SaldoSnapshotScada
-                                        s_obj = SaldoSnapshotScada(**snapshot_data.model_dump())
-                                        new_s.add(s_obj)
-                                        await new_s.flush()
-                                        # Registrar auditoría del snapshot creado en la sesión independiente
-                                        try:
-                                            audit_snap = LogsAuditoriaCreate(
-                                                entidad='saldo_snapshot_scada',
-                                                entidad_id=str(getattr(s_obj, 'id', None)),
-                                                accion='CREATE',
-                                                valor_anterior=None,
-                                                valor_nuevo=AnyUtils.serialize_orm_object(s_obj),
-                                                usuario_id=current_user_id.get()
-                                            )
-                                            if getattr(self._repo, 'auditor', None) is not None:
-                                                await self._repo.auditor.log_audit(audit_log_data=audit_snap)
-                                        except Exception as e_aud:
-                                            log.error(f"No se pudo registrar auditoría para snapshot (sesión independiente): {e_aud}")
                                 except Exception as e_snap:
                                     log.error(f"No se pudo crear snapshot en transacción independiente: {e_snap}", exc_info=True)
 
@@ -179,37 +296,21 @@ class PesadasService:
                             # flush cambios
                             await session.flush()
 
-                            # Si vienen saldos en la petición, crear snapshot usando la misma sesión
+                            # Si vienen saldos en la petición, crear snapshot(s) usando la misma sesión
                             try:
                                 sa = getattr(pesada_data, 'saldo_anterior', None)
                                 sn = getattr(pesada_data, 'saldo_nuevo', None)
                                 if sa is not None and sn is not None:
-                                    from database.models import SaldoSnapshotScada
-                                    almacenamiento_id = getattr(tran_obj, 'origen_id', None) or getattr(tran_obj, 'destino_id', None) or None
-                                    material_id = getattr(tran_obj, 'material_id', None)
-                                    s_obj = SaldoSnapshotScada(
+                                    # Usar función auxiliar que maneja Traslados (crea 2 snapshots)
+                                    auditor = getattr(self._repo, 'auditor', None)
+                                    await _crear_snapshots_pesada(
+                                        session=session,
                                         pesada_id=int(pesada_model.id),
-                                        almacenamiento_id=int(almacenamiento_id) if almacenamiento_id is not None else None,
-                                        material_id=int(material_id) if material_id is not None else None,
-                                        saldo_anterior=sa,
-                                        saldo_nuevo=sn
+                                        tran_obj=tran_obj,
+                                        saldo_anterior_origen=Decimal(str(sa)),
+                                        saldo_nuevo_origen=Decimal(str(sn)),
+                                        auditor=auditor
                                     )
-                                    session.add(s_obj)
-                                    await session.flush()
-                                    # Registrar auditoría del snapshot creado (sesión principal)
-                                    try:
-                                        audit_snap = LogsAuditoriaCreate(
-                                            entidad='saldo_snapshot_scada',
-                                            entidad_id=str(getattr(s_obj, 'id', None)),
-                                            accion='CREATE',
-                                            valor_anterior=None,
-                                            valor_nuevo=AnyUtils.serialize_orm_object(s_obj),
-                                            usuario_id=current_user_id.get()
-                                        )
-                                        if getattr(self._repo, 'auditor', None) is not None:
-                                            await self._repo.auditor.log_audit(audit_log_data=audit_snap)
-                                    except Exception as e_aud:
-                                        log.error(f"No se pudo registrar auditoría para snapshot (sesión principal): {e_aud}")
                             except Exception as e_snap:
                                 log.error(f"No se pudo crear snapshot en transacción principal: {e_snap}", exc_info=True)
 
@@ -230,7 +331,7 @@ class PesadasService:
             created_pesada = await self._repo.create(pesada_model)
             log.info(f"Pesada creada con referencia: {getattr(created_pesada, 'referencia', None)} (fallback no transaccional)")
 
-            # Intentar crear snapshot en fallback si vienen campos de saldo
+            # Intentar crear snapshot(s) en fallback si vienen campos de saldo
             try:
                 sa = getattr(pesada_data, 'saldo_anterior', None)
                 sn = getattr(pesada_data, 'saldo_nuevo', None)
@@ -238,36 +339,21 @@ class PesadasService:
                     # Intentar crear snapshot en una sesión nueva (no crítico)
                     async with DatabaseConfiguration._async_session() as s:
                         async with s.begin():
-                            from database.models import SaldoSnapshotScada
-                            # intentar obtener transaccion para relacionar almacenamiento/material
-                            from sqlalchemy import select
-                            result = await s.execute(select(Transacciones).filter(Transacciones.id == int(trans_id)))
+                            # Obtener transacción para relacionar almacenamiento/material
+                            from sqlalchemy import select as _sel
+                            result = await s.execute(_sel(Transacciones).filter(Transacciones.id == int(trans_id)))
                             tran_obj = result.scalar_one_or_none()
-                            almacenamiento_id = getattr(tran_obj, 'origen_id', None) or getattr(tran_obj, 'destino_id', None) or None
-                            material_id = getattr(tran_obj, 'material_id', None)
-                            s_obj = SaldoSnapshotScada(
-                                pesada_id=int(created_pesada.id),
-                                almacenamiento_id=int(almacenamiento_id) if almacenamiento_id is not None else None,
-                                material_id=int(material_id) if material_id is not None else None,
-                                saldo_anterior=sa,
-                                saldo_nuevo=sn
-                            )
-                            s.add(s_obj)
-                            await s.flush()
-                            # Registrar auditoría del snapshot creado (fallback, sesión nueva)
-                            try:
-                                audit_snap = LogsAuditoriaCreate(
-                                    entidad='saldo_snapshot_scada',
-                                    entidad_id=str(getattr(s_obj, 'id', None)),
-                                    accion='CREATE',
-                                    valor_anterior=None,
-                                    valor_nuevo=AnyUtils.serialize_orm_object(s_obj),
-                                    usuario_id=current_user_id.get()
+                            if tran_obj is not None:
+                                # Usar función auxiliar que maneja Traslados (crea 2 snapshots)
+                                auditor = getattr(self._repo, 'auditor', None)
+                                await _crear_snapshots_pesada(
+                                    session=s,
+                                    pesada_id=int(created_pesada.id),
+                                    tran_obj=tran_obj,
+                                    saldo_anterior_origen=Decimal(str(sa)),
+                                    saldo_nuevo_origen=Decimal(str(sn)),
+                                    auditor=auditor
                                 )
-                                if getattr(self._repo, 'auditor', None) is not None:
-                                    await self._repo.auditor.log_audit(audit_log_data=audit_snap)
-                            except Exception as e_aud:
-                                log.error(f"No se pudo registrar auditoría para snapshot (fallback): {e_aud}")
             except Exception as e_snap:
                 log.error(f"No fue posible crear snapshot de saldo en fallback: {e_snap}", exc_info=True)
 
@@ -1155,3 +1241,24 @@ class PesadasService:
                 message="Error inesperado al obtener pesadas pendientes.",
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
+
+    async def get_suma_peso_by_transaccion(self, tran_id: int) -> Optional[dict]:
+        """
+        Obtener la suma total de peso_real de pesadas asociadas a una transacción.
+        Este método funciona para cualquier tipo de transacción incluyendo Traslados.
+
+        Args:
+            tran_id: ID de la transacción.
+
+        Returns:
+            dict con 'peso_total' (Decimal) y 'cantidad_pesadas' (int), o None si no hay pesadas.
+        """
+        try:
+            return await self._repo.get_suma_peso_by_transaccion(tran_id)
+        except Exception as e:
+            log.error(f"Error al obtener suma de peso para transaccion {tran_id}: {e}")
+            raise BasedException(
+                message="Error inesperado al obtener la suma de peso de pesadas.",
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
+

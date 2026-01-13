@@ -14,6 +14,8 @@ class SaldoSnapshotBase(BaseSchema):
     saldo_anterior: Decimal = Field(..., max_digits=15, decimal_places=3)
     saldo_nuevo: Decimal = Field(..., max_digits=15, decimal_places=3)
     fecha_registro: Optional[datetime] = None
+    # Tipo de almacenamiento: 'ORIGEN' o 'DESTINO' (para traslados)
+    tipo_almacenamiento: Optional[str] = 'ORIGEN'
 
 
 class SaldoSnapshotCreate(SaldoSnapshotBase):

@@ -351,8 +351,11 @@ class SaldoSnapshotScada(Base):
     saldo_anterior = Column(Numeric(15,3), nullable=False)
     saldo_nuevo = Column(Numeric(15,3), nullable=False)
     fecha_registro = Column(DateTime(timezone=True), server_default=func.timezone('America/Bogota', func.now()), onupdate=func.timezone('America/Bogota', func.now()))
+    # Tipo de snapshot: 'ORIGEN' o 'DESTINO' (para transacciones de traslado)
+    tipo_almacenamiento = Column(String(10), nullable=True, default='ORIGEN')
     __table_args__ = (
-        UniqueConstraint('pesada_id', name='uk_snapshot_pesada'),
+        # Cambiada restricción: permite múltiples snapshots por pesada si son de diferentes almacenamientos
+        UniqueConstraint('pesada_id', 'almacenamiento_id', name='uk_snapshot_pesada_alm'),
     )
 
 class Ajustes(Base):

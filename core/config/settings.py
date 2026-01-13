@@ -17,10 +17,13 @@ class Settings(BaseSettings):
     API_HOST: str = "0.0.0.0"
     API_PORT: int = "8000"
     API_V1_STR: str = "v1"
-    API_VERSION_NUM: str = "0.0.35"
+    API_VERSION_NUM: str = "0.0.36"
     API_LOG_LEVEL: str = "DEBUG"
     APP_LOG_DIR: str = "/var/www/metalteco/log/app_logs"
-    ALLOWED_HOSTS: list[str] = ["*"]
+    ALLOWED_HOSTS: list[str] = [
+        "https://integrador.turbograneles.com",  # ← Dominio del backend
+        "http://localhost:8000",  # Para desarrollo local
+    ]
 
     # API 'SU' Params
     API_USER_ADMINISTRATOR: str = "administrator"

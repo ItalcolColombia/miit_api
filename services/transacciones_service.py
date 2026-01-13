@@ -267,8 +267,10 @@ class TransaccionesService:
                 )
 
             # 2. Se obtiene sumatoria de pesadas para setear peso real
-            pesada = await self.pesadas_service.get_pesada_acumulada(tran_id=tran.id)
-            peso_acc = Decimal(getattr(pesada, 'peso', 0) or 0)
+            # Usamos get_suma_peso_by_transaccion que funciona para cualquier tipo de transacción
+            # incluyendo Traslados (no depende de JOINs con Viajes/Flotas)
+            suma_pesadas = await self.pesadas_service.get_suma_peso_by_transaccion(tran_id=tran.id)
+            peso_acc = Decimal(suma_pesadas.get('peso_total', 0) or 0) if suma_pesadas else Decimal('0')
 
             # 3. Ejecutar operaciones en una única transacción DB
             async with DatabaseConfiguration._async_session() as session:
@@ -280,22 +282,37 @@ class TransaccionesService:
                     if tran_obj is None:
                         raise EntityNotFoundException(f"Transacción con ID {tran_id} no encontrada (dentro de sesión).")
 
-                    # Validar tipo exacto: 'Despacho' o 'Recibo'
+                    # Validar tipo exacto: 'Despacho', 'Recibo' o 'Traslado'
                     tipo_tran_raw = getattr(tran_obj, 'tipo', None)
                     if tipo_tran_raw is None:
                         raise BasedException(message="Transacción sin campo 'tipo'.", status_code=status.HTTP_400_BAD_REQUEST)
                     tipo_lower = str(tipo_tran_raw).strip().lower()
+
+                    # Determinar configuración de movimientos según el tipo
                     if tipo_lower == 'despacho':
-                        mov_tipo = 'Salida'
-                        almacen_id = getattr(tran_obj, 'origen_id', None)
+                        mov_config = [{'tipo': 'Salida', 'almacen_id': getattr(tran_obj, 'origen_id', None)}]
                     elif tipo_lower == 'recibo':
-                        mov_tipo = 'Entrada'
-                        almacen_id = getattr(tran_obj, 'destino_id', None) or getattr(tran_obj, 'origen_id', None)
+                        mov_config = [{'tipo': 'Entrada', 'almacen_id': getattr(tran_obj, 'destino_id', None) or getattr(tran_obj, 'origen_id', None)}]
+                    elif tipo_lower == 'traslado':
+                        origen_id = getattr(tran_obj, 'origen_id', None)
+                        destino_id = getattr(tran_obj, 'destino_id', None)
+                        if origen_id is None or destino_id is None:
+                            raise BasedException(
+                                message="Para transacciones de tipo Traslado se requiere origen_id y destino_id.",
+                                status_code=status.HTTP_400_BAD_REQUEST
+                            )
+                        # Primero Salida del origen, luego Entrada al destino
+                        mov_config = [
+                            {'tipo': 'Salida', 'almacen_id': origen_id},
+                            {'tipo': 'Entrada', 'almacen_id': destino_id}
+                        ]
                     else:
                         raise BasedException(message=f"Tipo de transacción '{tipo_tran_raw}' no soportado para finalización automática.", status_code=status.HTTP_400_BAD_REQUEST)
 
-                    if almacen_id is None:
-                        raise BasedException(message="No se encontró almacenamiento asociado (origen/destino) para crear movimiento.", status_code=status.HTTP_400_BAD_REQUEST)
+                    # Validar que todos los almacenamientos estén definidos
+                    for cfg in mov_config:
+                        if cfg['almacen_id'] is None:
+                            raise BasedException(message="No se encontró almacenamiento asociado (origen/destino) para crear movimiento.", status_code=status.HTTP_400_BAD_REQUEST)
 
                     # Capturar valores previos para auditoría de la transacción
                     valor_prev = {
@@ -309,63 +326,72 @@ class TransaccionesService:
                     tran_obj.fecha_fin = now_local()
                     tran_obj.peso_real = peso_acc
 
-                    # --- Obtener saldo anterior desde la vista VAlmMateriales ---
                     from database.models import VAlmMateriales, Movimientos, AlmacenamientosMateriales
-                    saldo_anterior = Decimal('0')
-                    try:
-                        res = await session.execute(_select(VAlmMateriales).where(VAlmMateriales.almacenamiento_id == int(almacen_id), VAlmMateriales.material_id == int(getattr(tran_obj, 'material_id', 0))))
-                        vrow = res.scalar_one_or_none()
-                        if vrow is not None:
-                            saldo_anterior = Decimal(getattr(vrow, 'saldo', 0) or 0)
-                    except Exception as e_saldo:
-                        log.error(f"Error consultando saldo anterior en VAlmMateriales: {e_saldo}")
 
-                    # Calcular saldo nuevo
-                    if mov_tipo == 'Salida':
-                        saldo_nuevo = saldo_anterior - peso_acc
-                    else:
-                        saldo_nuevo = saldo_anterior + peso_acc
+                    movimientos_creados = []
 
-                    # Crear objeto Movimientos ORM
-                    mov_obj = Movimientos(
-                        transaccion_id=int(tran_id),
-                        almacenamiento_id=int(almacen_id),
-                        material_id=int(getattr(tran_obj, 'material_id', None)),
-                        tipo=mov_tipo,
-                        accion='Automático',
-                        observacion=None,
-                        peso=peso_acc,
-                        saldo_anterior=saldo_anterior,
-                        saldo_nuevo=saldo_nuevo,
-                        usuario_id=current_user_id.get()
-                    )
-                    session.add(mov_obj)
-                    await session.flush()
-                    await session.refresh(mov_obj)
+                    # Crear movimientos según la configuración
+                    for cfg in mov_config:
+                        almacen_id = cfg['almacen_id']
+                        mov_tipo = cfg['tipo']
 
-                    # Actualizar tabla almacenamientos_materiales (registro existente) con nuevo saldo
-                    try:
-                        # Intentar actualizar el registro existente
-                        update_stmt = (
-                            sqlalchemy_update(AlmacenamientosMateriales)
-                            .where(AlmacenamientosMateriales.c.almacenamiento_id == int(almacen_id))
-                            .where(AlmacenamientosMateriales.c.material_id == int(getattr(tran_obj, 'material_id', 0)))
-                            .values(saldo=saldo_nuevo, fecha_hora=now_local(), usuario_id=current_user_id.get())
+                        # --- Obtener saldo anterior desde la vista VAlmMateriales ---
+                        saldo_anterior = Decimal('0')
+                        try:
+                            res = await session.execute(_select(VAlmMateriales).where(VAlmMateriales.almacenamiento_id == int(almacen_id), VAlmMateriales.material_id == int(getattr(tran_obj, 'material_id', 0))))
+                            vrow = res.scalar_one_or_none()
+                            if vrow is not None:
+                                saldo_anterior = Decimal(getattr(vrow, 'saldo', 0) or 0)
+                        except Exception as e_saldo:
+                            log.error(f"Error consultando saldo anterior en VAlmMateriales para almacen {almacen_id}: {e_saldo}")
+
+                        # Calcular saldo nuevo
+                        if mov_tipo == 'Salida':
+                            saldo_nuevo = saldo_anterior - peso_acc
+                        else:
+                            saldo_nuevo = saldo_anterior + peso_acc
+
+                        # Crear objeto Movimientos ORM
+                        mov_obj = Movimientos(
+                            transaccion_id=int(tran_id),
+                            almacenamiento_id=int(almacen_id),
+                            material_id=int(getattr(tran_obj, 'material_id', None)),
+                            tipo=mov_tipo,
+                            accion='Automático',
+                            observacion=None,
+                            peso=peso_acc,
+                            saldo_anterior=saldo_anterior,
+                            saldo_nuevo=saldo_nuevo,
+                            usuario_id=current_user_id.get()
                         )
-                        res_update = await session.execute(update_stmt)
-                        # Si no se actualizó ninguna fila, insertar el registro
-                        rowcount = getattr(res_update, 'rowcount', None)
-                        if not rowcount:
-                            insert_stmt = AlmacenamientosMateriales.insert().values(
-                                almacenamiento_id=int(almacen_id),
-                                material_id=int(getattr(tran_obj, 'material_id', 0)),
-                                saldo=saldo_nuevo,
-                                fecha_hora=now_local(),
-                                usuario_id=current_user_id.get()
+                        session.add(mov_obj)
+                        await session.flush()
+                        await session.refresh(mov_obj)
+                        movimientos_creados.append(mov_obj)
+
+                        # Actualizar tabla almacenamientos_materiales (registro existente) con nuevo saldo
+                        try:
+                            # Intentar actualizar el registro existente
+                            update_stmt = (
+                                sqlalchemy_update(AlmacenamientosMateriales)
+                                .where(AlmacenamientosMateriales.c.almacenamiento_id == int(almacen_id))
+                                .where(AlmacenamientosMateriales.c.material_id == int(getattr(tran_obj, 'material_id', 0)))
+                                .values(saldo=saldo_nuevo, fecha_hora=now_local(), usuario_id=current_user_id.get())
                             )
-                            await session.execute(insert_stmt)
-                    except Exception as e_update_alm:
-                        log.error(f"Error actualizando almacenamientos_materiales para almacen {almacen_id}: {e_update_alm}")
+                            res_update = await session.execute(update_stmt)
+                            # Si no se actualizó ninguna fila, insertar el registro
+                            rowcount = getattr(res_update, 'rowcount', None)
+                            if not rowcount:
+                                insert_stmt = AlmacenamientosMateriales.insert().values(
+                                    almacenamiento_id=int(almacen_id),
+                                    material_id=int(getattr(tran_obj, 'material_id', 0)),
+                                    saldo=saldo_nuevo,
+                                    fecha_hora=now_local(),
+                                    usuario_id=current_user_id.get()
+                                )
+                                await session.execute(insert_stmt)
+                        except Exception as e_update_alm:
+                            log.error(f"Error actualizando almacenamientos_materiales para almacen {almacen_id}: {e_update_alm}")
 
                     # Flush/commit handled by context manager
 
@@ -392,20 +418,21 @@ class TransaccionesService:
                     except Exception as e_aud_tr:
                         log.error(f"No se pudo registrar auditoría para transacción {tran_id}: {e_aud_tr}")
 
-                    # Registrar auditoría para movimiento creado
-                    try:
-                        await self.mov_service._repo.auditor.log_audit(
-                            audit_log_data=__import__('schemas.logs_auditoria_schema', fromlist=['LogsAuditoriaCreate']).LogsAuditoriaCreate(
-                                entidad='movimientos',
-                                entidad_id=str(getattr(mov_obj, 'id', None)),
-                                accion='CREATE',
-                                valor_anterior=None,
-                                valor_nuevo=AnyUtils.serialize_orm_object(mov_obj),
-                                usuario_id=current_user_id.get()
+                    # Registrar auditoría para movimientos creados
+                    for mov_obj in movimientos_creados:
+                        try:
+                            await self.mov_service._repo.auditor.log_audit(
+                                audit_log_data=__import__('schemas.logs_auditoria_schema', fromlist=['LogsAuditoriaCreate']).LogsAuditoriaCreate(
+                                    entidad='movimientos',
+                                    entidad_id=str(getattr(mov_obj, 'id', None)),
+                                    accion='CREATE',
+                                    valor_anterior=None,
+                                    valor_nuevo=AnyUtils.serialize_orm_object(mov_obj),
+                                    usuario_id=current_user_id.get()
+                                )
                             )
-                        )
-                    except Exception as e_aud_mov:
-                        log.error(f"No se pudo registrar auditoría para movimiento asociado a transacción {tran_id}: {e_aud_mov}")
+                        except Exception as e_aud_mov:
+                            log.error(f"No se pudo registrar auditoría para movimiento asociado a transacción {tran_id}: {e_aud_mov}")
 
                     # Refrescar transaccion
                     await session.refresh(tran_obj)

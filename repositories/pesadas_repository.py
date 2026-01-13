@@ -208,3 +208,32 @@ class PesadasRepository(IRepository[Pesadas, PesadaResponse]):
         except Exception:
             # No propagar detalles SQL, dejar que quien llame maneje/loguee
             raise
+
+    async def get_suma_peso_by_transaccion(self, tran_id: int) -> Optional[dict]:
+        """
+        Obtener la suma total de peso_real de pesadas asociadas a una transacción.
+        Este método no depende de JOINs con Viajes/Flotas, por lo que funciona
+        para cualquier tipo de transacción incluyendo Traslados.
+
+        Args:
+            tran_id: ID de la transacción.
+
+        Returns:
+            dict con 'peso_total' (Decimal) y 'cantidad_pesadas' (int), o None si no hay pesadas.
+        """
+        query = (
+            select(
+                func.sum(Pesadas.peso_real).label('peso_total'),
+                func.count(Pesadas.id).label('cantidad_pesadas')
+            )
+            .where(Pesadas.transaccion_id == tran_id)
+        )
+        result = await self.db.execute(query)
+        row = result.mappings().first()
+        if row and row['peso_total'] is not None:
+            return {
+                'peso_total': row['peso_total'],
+                'cantidad_pesadas': row['cantidad_pesadas']
+            }
+        return None
+

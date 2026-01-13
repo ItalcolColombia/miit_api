@@ -2,7 +2,7 @@ from datetime import datetime
 from decimal import Decimal
 from typing import Optional
 
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
 
 
 class TransaccionResponse(BaseModel):
@@ -33,8 +33,8 @@ class TransaccionResponse(BaseModel):
 class TransaccionCreate(TransaccionResponse):
     material_id: int
     tipo: str
-    viaje_id: int
-    pit: int
+    viaje_id: Optional[int] = None  # Opcional para tipo Traslado
+    pit: Optional[int] = None  # Opcional para tipo Traslado
     ref1: Optional[str] = None
     ref2: Optional[str] = None
     fecha_inicio: datetime = None
@@ -51,8 +51,8 @@ class TransaccionCreate(TransaccionResponse):
 
     @field_validator('tipo')
     def tipo_valido(cls, value):
-        if len(value) > 9:
-            raise ValueError("Tipo debe tener máximo 8 carácteres")
+        if len(value) > 10:
+            raise ValueError("Tipo debe tener máximo 10 carácteres")
         return value
 
     @field_validator('peso_meta')
@@ -61,19 +61,54 @@ class TransaccionCreate(TransaccionResponse):
             raise ValueError("Peso debe ser positivo")
         return value
 
+    @model_validator(mode='after')
+    def validar_campos_por_tipo(self):
+        tipo_lower = (self.tipo or '').strip().lower()
+
+        if tipo_lower == 'traslado':
+            # Para Traslado: origen_id y destino_id son obligatorios
+            if self.origen_id is None:
+                raise ValueError("origen_id es obligatorio para transacciones de tipo Traslado")
+            if self.destino_id is None:
+                raise ValueError("destino_id es obligatorio para transacciones de tipo Traslado")
+        else:
+            # Para Despacho/Recibo: viaje_id y pit son obligatorios
+            if self.viaje_id is None:
+                raise ValueError("viaje_id es obligatorio para transacciones de tipo Despacho/Recibo")
+            if self.pit is None:
+                raise ValueError("pit es obligatorio para transacciones de tipo Despacho/Recibo")
+
+        return self
+
     class Config:
         json_schema_extra = {
-            "example": {
-                "material_id": 2,
-                "tipo": "Despacho",
-                "viaje_id": 11182,
-                "pit": 4,
-                "ref1": "24126",
-                "fecha_inicio": datetime(2025, 5, 10, 13, 25),
-                "origen_id": 102,
-                "destino_id": 301,
-                "peso_meta": 34230
-            }
+            "examples": [
+                {
+                    "summary": "Ejemplo Despacho",
+                    "value": {
+                        "material_id": 2,
+                        "tipo": "Despacho",
+                        "viaje_id": 11182,
+                        "pit": 4,
+                        "ref1": "24126",
+                        "fecha_inicio": "2025-05-10T13:25:00",
+                        "origen_id": 102,
+                        "destino_id": 301,
+                        "peso_meta": 34230
+                    }
+                },
+                {
+                    "summary": "Ejemplo Traslado",
+                    "value": {
+                        "material_id": 24,
+                        "tipo": "Traslado",
+                        "origen_id": 102,
+                        "destino_id": 103,
+                        "peso_meta": 30000,
+                        "estado": "Registrada"
+                    }
+                }
+            ]
         }
 
 class TransaccionUpdate(BaseModel):
