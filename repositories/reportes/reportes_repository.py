@@ -197,15 +197,33 @@ class ReportesRepository:
                 where_clauses.append("codigo_material = :codigo_material")
                 params['codigo_material'] = codigo_material
 
-        # Filtro por fecha inicio
+        # Filtro por fecha inicio - usar CAST para compatibilidad con asyncpg
         if filtros.get('fecha_inicio'):
-            where_clauses.append(f"{campo_fecha} >= :fecha_inicio")
+            where_clauses.append(f"{campo_fecha} >= CAST(:fecha_inicio AS timestamp)")
             params['fecha_inicio'] = filtros['fecha_inicio']
 
-        # Filtro por fecha fin
+        # Filtro por fecha fin - usar CAST para compatibilidad con asyncpg
         if filtros.get('fecha_fin'):
-            where_clauses.append(f"{campo_fecha} <= :fecha_fin")
+            where_clauses.append(f"{campo_fecha} <= CAST(:fecha_fin AS timestamp)")
             params['fecha_fin'] = filtros['fecha_fin']
+
+        # Filtros dinámicos de columna
+        filtros_columna = filtros.get('filtros_columna', {})
+        for campo, valor in filtros_columna.items():
+            if valor:
+                # Determinar tipo de filtro basado en configuración
+                from core.config.filtros_reportes_config import get_filtros_reporte
+                filtros_config = get_filtros_reporte(filtros.get('codigo_reporte', ''))
+                filtro_info = next((f for f in filtros_config if f.campo == campo), None)
+
+                if filtro_info and filtro_info.tipo_filtro == "search":
+                    # Búsqueda parcial case-insensitive (ILIKE)
+                    where_clauses.append(f"{campo} ILIKE :filtro_{campo}")
+                    params[f'filtro_{campo}'] = f"%{valor}%"
+                else:
+                    # Coincidencia exacta para filtros tipo select
+                    where_clauses.append(f"{campo} = :filtro_{campo}")
+                    params[f'filtro_{campo}'] = valor
 
         # Construir WHERE
         where_sql = ""
@@ -222,14 +240,42 @@ class ReportesRepository:
         else:
             orden_sql = f"ORDER BY {campo_fecha} DESC"
 
-        # Contar total
-        count_query = text(f"""
-            SELECT COUNT(*) as total 
-            FROM {vista_nombre} 
-            {where_sql}
-        """)
-        count_result = await self.db.execute(count_query, params)
-        total_registros = count_result.scalar() or 0
+        # Contar total - optimización para tablas grandes
+        # Si no hay filtros, usar estimación rápida de PostgreSQL
+        if not where_clauses:
+            # Usar estimación de pg_class para conteos rápidos en tablas grandes
+            estimate_query = text("""
+                SELECT reltuples::bigint AS estimate
+                FROM pg_class
+                WHERE relname = :vista_nombre
+            """)
+            try:
+                estimate_result = await self.db.execute(
+                    estimate_query,
+                    {"vista_nombre": vista_nombre}
+                )
+                row = estimate_result.fetchone()
+                if row and row.estimate > 0:
+                    total_registros = int(row.estimate)
+                else:
+                    # Fallback a count real si la estimación falla
+                    count_query = text(f"SELECT COUNT(*) as total FROM {vista_nombre}")
+                    count_result = await self.db.execute(count_query, params)
+                    total_registros = count_result.scalar() or 0
+            except Exception:
+                # Fallback a count real
+                count_query = text(f"SELECT COUNT(*) as total FROM {vista_nombre}")
+                count_result = await self.db.execute(count_query, params)
+                total_registros = count_result.scalar() or 0
+        else:
+            # Con filtros, necesitamos count exacto
+            count_query = text(f"""
+                SELECT COUNT(*) as total 
+                FROM {vista_nombre} 
+                {where_sql}
+            """)
+            count_result = await self.db.execute(count_query, params)
+            total_registros = count_result.scalar() or 0
 
         # Consulta con paginación
         offset = (page - 1) * page_size
@@ -303,12 +349,27 @@ class ReportesRepository:
                 params['codigo_material'] = codigo_material
 
         if filtros.get('fecha_inicio'):
-            where_clauses.append(f"{campo_fecha} >= :fecha_inicio")
+            where_clauses.append(f"{campo_fecha} >= CAST(:fecha_inicio AS timestamp)")
             params['fecha_inicio'] = filtros['fecha_inicio']
 
         if filtros.get('fecha_fin'):
-            where_clauses.append(f"{campo_fecha} <= :fecha_fin")
+            where_clauses.append(f"{campo_fecha} <= CAST(:fecha_fin AS timestamp)")
             params['fecha_fin'] = filtros['fecha_fin']
+
+        # Filtros dinámicos de columna
+        filtros_columna = filtros.get('filtros_columna', {})
+        for campo, valor in filtros_columna.items():
+            if valor:
+                from core.config.filtros_reportes_config import get_filtros_reporte
+                filtros_config = get_filtros_reporte(filtros.get('codigo_reporte', ''))
+                filtro_info = next((f for f in filtros_config if f.campo == campo), None)
+
+                if filtro_info and filtro_info.tipo_filtro == "search":
+                    where_clauses.append(f"{campo} ILIKE :filtro_{campo}")
+                    params[f'filtro_{campo}'] = f"%{valor}%"
+                else:
+                    where_clauses.append(f"{campo} = :filtro_{campo}")
+                    params[f'filtro_{campo}'] = valor
 
         where_sql = ""
         if where_clauses:
@@ -485,10 +546,11 @@ class ReportesRepository:
         Returns:
             Lista de materiales con id, nombre y codigo
         """
+        # Nota: Se eliminó el filtro WHERE estado = true porque la columna no existe
+        # Si en el futuro se agrega una columna de estado, se puede volver a filtrar
         query = text("""
                      SELECT id, nombre, codigo
                      FROM materiales
-                     WHERE estado = true
                      ORDER BY nombre
                      """)
         result = await self.db.execute(query)
@@ -546,3 +608,41 @@ class ReportesRepository:
         query = text("SELECT refresh_all_report_views()")
         await self.db.execute(query)
         await self.db.commit()
+
+    # ========================================================
+    # FILTROS DINÁMICOS
+    # ========================================================
+
+    async def get_valores_unicos_columna(
+            self,
+            vista_nombre: str,
+            campo: str,
+            limite: int = 1000
+    ) -> List[Dict[str, str]]:
+        """
+        Obtiene los valores únicos de una columna para usar como opciones de filtro.
+
+        Args:
+            vista_nombre: Nombre de la vista materializada
+            campo: Nombre del campo/columna
+            limite: Límite máximo de valores a retornar
+
+        Returns:
+            Lista de diccionarios con {valor, etiqueta}
+        """
+        # Usar SQL parametrizado seguro (campo viene de configuración, no del usuario)
+        query = text(f"""
+            SELECT DISTINCT {campo} as valor
+            FROM {vista_nombre}
+            WHERE {campo} IS NOT NULL
+            ORDER BY {campo}
+            LIMIT :limite
+        """)
+
+        result = await self.db.execute(query, {"limite": limite})
+        rows = result.fetchall()
+
+        return [
+            {"valor": str(row.valor), "etiqueta": str(row.valor)}
+            for row in rows
+        ]

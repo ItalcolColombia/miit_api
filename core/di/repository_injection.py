@@ -32,6 +32,7 @@ from repositories.viajes_repository import ViajesRepository
 from repositories.ajustes_repository import AjustesRepository
 from schemas.almacenamientos_materiales_schema import AlmacenamientoMaterialesResponse
 from repositories.reportes.reportes_repository import ReportesRepository
+from repositories.roles_repository import RolesRepository
 # Schemas
 from schemas.almacenamientos_schema import AlmacenamientoResponse
 from schemas.bls_schema import BlsResponse
@@ -162,3 +163,18 @@ async def get_reportes_repository(
         Instancia del repositorio de reportes
     """
     return ReportesRepository(db)
+
+
+async def get_roles_repository(
+        db: AsyncSession = Depends(get_db)
+) -> RolesRepository:
+    """
+    Inyección de dependencias para el repositorio de roles.
+
+    Args:
+        db: Sesión de base de datos inyectada automáticamente
+
+    Returns:
+        Instancia del repositorio de roles
+    """
+    return RolesRepository(db)

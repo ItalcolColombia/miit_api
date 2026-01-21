@@ -45,6 +45,12 @@ class CategoriaReporte(str, Enum):
     INVENTARIO = "inventario"
 
 
+class TipoFiltro(str, Enum):
+    """Tipos de filtro para columnas"""
+    SELECT = "select"
+    SEARCH = "search"
+
+
 # ============================================================
 # SCHEMAS BASE
 # ============================================================
@@ -61,6 +67,31 @@ class ReporteColumnaBase(BaseModel):
     campo: str = Field(..., max_length=100)
     nombre_mostrar: str = Field(..., max_length=200)
     tipo_dato: TipoDato
+
+
+# ============================================================
+# SCHEMAS DE FILTROS DINÁMICOS
+# ============================================================
+
+class OpcionFiltro(BaseModel):
+    """Opción individual para filtros tipo select"""
+    valor: str = Field(..., description="Valor de la opción")
+    etiqueta: str = Field(..., description="Texto a mostrar")
+
+
+class FiltroColumna(BaseModel):
+    """Definición de un filtro de columna"""
+    campo: str = Field(..., description="Nombre del campo en la vista")
+    nombre_mostrar: str = Field(..., description="Etiqueta a mostrar en el UI")
+    tipo_filtro: TipoFiltro = Field(..., description="Tipo de filtro: select o search")
+    opciones: Optional[List[OpcionFiltro]] = Field(
+        None,
+        description="Opciones para filtros tipo select"
+    )
+    placeholder: Optional[str] = Field(
+        None,
+        description="Placeholder para filtros tipo search"
+    )
 
 
 # ============================================================
@@ -186,7 +217,10 @@ class ReporteMetadataResponse(BaseModel):
     columnas: List[ReporteColumnaResponse]
     filtros_disponibles: FiltrosDisponiblesResponse
     totalizables: List[str]
-
+    filtros_columnas: List[FiltroColumna] = Field(
+        default=[],
+        description="Filtros dinámicos disponibles para las columnas del reporte"
+    )
 
 # ============================================================
 # SCHEMAS DE REQUEST (Query Parameters)

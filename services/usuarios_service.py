@@ -7,7 +7,6 @@ from starlette import status
 from core.exceptions.base_exception import BasedException
 from core.exceptions.entity_exceptions import (
     EntityAlreadyRegisteredException,
-    EntityNotFoundException,
 )
 from repositories.usuarios_repository import UsuariosRepository
 from schemas.usuarios_schema import UsuariosResponse, UsuarioCreate, UsuarioUpdate
@@ -52,19 +51,15 @@ class UsuariosService:
             username (str): The username to search for.
 
         Returns:
-            Optional[UsuariosResponse]: The user object if found, None otherwise.
+            Optional[UsuariosResponse]: The user object if found, or None if not found.
 
         Raises:
-            EntityNotFoundException: If the user is not found.
             BasedException: If retrieval fails due to unexpected errors.
         """
         try:
             user = await self._repo.get_by_username(username)
-            if not user:
-                raise EntityNotFoundException(f"Usuario '{username}' no encontrado")
+            # repo returns None when not found; propagate None so callers can handle absence
             return user
-        except EntityNotFoundException as e:
-            raise e
         except Exception as e:
             log.error(f"Error obteniendo usuario con nombre {username}: {e}")
             raise BasedException(
@@ -151,6 +146,13 @@ class UsuariosService:
             BasedException: If creation fails due to database or other errors.
         """
         try:
+            # Validar longitud de nick_name para evitar errores de truncamiento en BD
+            if user.nick_name and len(user.nick_name) > 10:
+                raise BasedException(
+                    message=f"El campo 'nick_name' excede la longitud máxima permitida de 10 caracteres",
+                    status_code=status.HTTP_400_BAD_REQUEST
+                )
+
             # Validar si el usuario existe
             await self.validate_username(user.nick_name)
 
@@ -163,6 +165,9 @@ class UsuariosService:
             # Crear el usuario
             return await self._repo.create(user)
         except EntityAlreadyRegisteredException as e:
+            raise e
+        except BasedException as e:
+            # Re-raise BasedException para que el manejador global lo procese con el status_code correcto
             raise e
         except Exception as e:
             log.error(f"Error creando usuario con nombre {user.nick_name}: {e}")

@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, Query, Response, status
+from fastapi import APIRouter, Depends, Query, Response, status, Request
 from typing import Optional
 from datetime import datetime
 
@@ -71,10 +71,17 @@ async def listar_reportes(
     - `material_id`: Filtrar por un material específico
     - `fecha_inicio` / `fecha_fin`: Rango de fechas
     - `orden_campo` / `orden_direccion`: Ordenamiento
+    - **Filtros dinámicos**: Cualquier campo filtrable del reporte (ver metadata)
 
     **Paginación:**
     - `page`: Número de página (default: 1)
     - `page_size`: Registros por página (default: 50, máx: 500)
+
+    **Filtros dinámicos de columna:**
+    Se pueden agregar filtros adicionales basados en las columnas del reporte.
+    Consulte `/reportes/{codigo}/metadata` para ver los filtros disponibles.
+    
+    Ejemplo: `?codigo_material=MAT001&nombre_almacenamiento=Bodega%20A`
 
     **Respuesta incluye:**
     - Información del reporte
@@ -85,6 +92,7 @@ async def listar_reportes(
     """
 )
 async def consultar_reporte(
+        request: Request,
         codigo_reporte: str,
         material_id: Optional[int] = Query(
             None,
@@ -122,7 +130,21 @@ async def consultar_reporte(
 ):
     """
     Consulta datos de un reporte específico con filtros y paginación.
+    Soporta filtros dinámicos de columna basados en la metadata del reporte.
     """
+    # Parámetros conocidos que no son filtros de columna
+    known_params = {
+        'page', 'page_size', 'material_id', 'fecha_inicio', 'fecha_fin',
+        'orden_campo', 'orden_direccion'
+    }
+
+    # Extraer filtros dinámicos de columna
+    all_params = dict(request.query_params)
+    filtros_columna = {
+        k: v for k, v in all_params.items()
+        if k not in known_params
+    }
+
     filtros = {
         'material_id': material_id,
         'fecha_inicio': fecha_inicio,
@@ -133,6 +155,10 @@ async def consultar_reporte(
 
     # Limpiar filtros None
     filtros = {k: v for k, v in filtros.items() if v is not None}
+
+    # Agregar filtros dinámicos de columna
+    if filtros_columna:
+        filtros['filtros_columna'] = filtros_columna
 
     return await reportes_service.obtener_reporte(
         codigo_reporte=codigo_reporte,
@@ -206,6 +232,7 @@ async def obtener_metadata_reporte(
     }
 )
 async def exportar_reporte(
+        request: Request,
         codigo_reporte: str,
         formato: FormatoExportacion = Query(
             ...,
@@ -220,7 +247,15 @@ async def exportar_reporte(
 ):
     """
     Exporta un reporte en el formato especificado (PDF, Excel, CSV).
+    Soporta filtros dinámicos de columna igual que el endpoint de consulta.
     """
+    # Deshabilitar temporalmente exportación Excel
+    if formato == FormatoExportacion.EXCEL:
+        raise BasedException(
+            message="Exportación Excel temporalmente deshabilitada. Use CSV o PDF.",
+            status_code=status.HTTP_400_BAD_REQUEST
+        )
+
     # Verificar que el formato está permitido para este reporte
     formato_permitido = await reportes_service.verificar_formato_exportacion(
         codigo_reporte=codigo_reporte,
@@ -233,6 +268,18 @@ async def exportar_reporte(
             status_code=status.HTTP_400_BAD_REQUEST
         )
 
+    # Parámetros conocidos que no son filtros de columna
+    known_params = {
+        'formato', 'material_id', 'fecha_inicio', 'fecha_fin'
+    }
+
+    # Extraer filtros dinámicos de columna
+    all_params = dict(request.query_params)
+    filtros_columna = {
+        k: v for k, v in all_params.items()
+        if k not in known_params
+    }
+
     # Construir filtros
     filtros = {
         'material_id': material_id,
@@ -240,6 +287,10 @@ async def exportar_reporte(
         'fecha_fin': fecha_fin
     }
     filtros = {k: v for k, v in filtros.items() if v is not None}
+
+    # Agregar filtros dinámicos de columna
+    if filtros_columna:
+        filtros['filtros_columna'] = filtros_columna
 
     # Obtener datos para exportar
     datos_exportar = await reportes_service.obtener_datos_para_exportar(

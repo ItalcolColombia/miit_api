@@ -28,6 +28,28 @@ class ExportacionService:
     ALTERNATE_ROW_COLOR = 'F2F2F2'
     TOTALS_COLOR = 'D9E1F2'
 
+    # Campos que deben formatearse como enteros en exportación (sin decimales)
+    # Estos campos se formatearán como enteros independientemente del tipo_dato definido
+    CAMPOS_ENTEROS = {
+        # Nombres reales de campos (según BD)
+        'transaccion_id',
+        'almacen_id',
+        'bascula_id',
+        'consecutivo_pesada',
+        # Variantes alternativas
+        'id_transaccion',
+        'id_almacen',
+        'bascula',
+        'id transaccion',
+        'id transacción',
+        'id almacen',
+        'id almacén',
+        'báscula',
+        'idtransaccion',
+        'idalmacen',
+        'consecutivo',
+    }
+
     # ========================================================
     # EXPORTACIÓN A EXCEL
     # ========================================================
@@ -120,7 +142,8 @@ class ExportacionService:
                 valor_formateado = self._formatear_valor_excel(
                     valor,
                     columna.get('tipo_dato', 'string'),
-                    columna.get('decimales', 2)
+                    columna.get('decimales', 2),
+                    columna.get('campo', '')
                 )
 
                 cell = ws.cell(row=row_idx, column=col_idx, value=valor_formateado)
@@ -151,7 +174,8 @@ class ExportacionService:
                     valor_formateado = self._formatear_valor_excel(
                         valor,
                         columna.get('tipo_dato', 'number'),
-                        columna.get('decimales', 2)
+                        columna.get('decimales', 2),
+                        campo
                     )
                     cell = ws.cell(row=total_row, column=col_idx, value=valor_formateado)
                 else:
@@ -192,13 +216,30 @@ class ExportacionService:
             self,
             valor: Any,
             tipo_dato: str,
-            decimales: int = 2
+            decimales: int = 2,
+            campo: str = ''
     ) -> Any:
         """
         Formatea un valor para Excel según su tipo.
+
+        Args:
+            valor: Valor a formatear
+            tipo_dato: Tipo de dato de la columna
+            decimales: Número de decimales para números
+            campo: Nombre del campo (para detectar campos enteros)
         """
         if valor is None:
             return ""
+
+        # Verificar si es un campo que debe ser entero
+        campo_lower = campo.lower() if campo else ''
+        es_campo_entero = campo_lower in self.CAMPOS_ENTEROS or tipo_dato == 'integer'
+
+        if es_campo_entero:
+            try:
+                return int(float(valor))
+            except (ValueError, TypeError):
+                return valor
 
         if tipo_dato == 'number':
             try:
@@ -227,22 +268,31 @@ class ExportacionService:
             nombre_reporte: str,
             columnas: List[Dict[str, Any]],
             totales: Optional[Dict[str, Any]] = None,
-            orientacion: str = 'landscape'
+            orientacion: str = 'auto'
     ) -> bytes:
         """
-        Exporta datos a formato PDF.
+        Exporta datos a formato PDF optimizado para reportes con muchas columnas.
 
         Args:
             datos: Lista de registros a exportar
             nombre_reporte: Nombre del reporte
             columnas: Definición de columnas
             totales: Diccionario con totales (opcional)
-            orientacion: 'portrait' o 'landscape'
+            orientacion: 'portrait', 'landscape' o 'auto' (detecta automáticamente)
 
         Returns:
             Contenido del archivo PDF en bytes
         """
         buffer = io.BytesIO()
+
+        num_columnas = len(columnas)
+
+        # Determinar orientación según número de columnas si es 'auto'
+        if orientacion == 'auto':
+            if num_columnas > 6:
+                orientacion = 'landscape'
+            else:
+                orientacion = 'portrait'
 
         # Configurar página
         if orientacion == 'landscape':
@@ -250,13 +300,21 @@ class ExportacionService:
         else:
             pagesize = A4
 
+        # Ajustar márgenes según número de columnas
+        if num_columnas > 10:
+            margins = 0.3 * cm
+        elif num_columnas > 7:
+            margins = 0.5 * cm
+        else:
+            margins = 1 * cm
+
         doc = SimpleDocTemplate(
             buffer,
             pagesize=pagesize,
-            rightMargin=1 * cm,
-            leftMargin=1 * cm,
-            topMargin=1.5 * cm,
-            bottomMargin=1.5 * cm
+            rightMargin=margins,
+            leftMargin=margins,
+            topMargin=1 * cm,
+            bottomMargin=1 * cm
         )
 
         elements = []
@@ -266,38 +324,64 @@ class ExportacionService:
         title_style = ParagraphStyle(
             'CustomTitle',
             parent=styles['Heading1'],
-            fontSize=16,
+            fontSize=14 if num_columnas <= 8 else 12,
             alignment=TA_CENTER,
-            spaceAfter=12
+            spaceAfter=8
         )
 
         date_style = ParagraphStyle(
             'DateStyle',
             parent=styles['Normal'],
-            fontSize=10,
+            fontSize=9,
             alignment=TA_CENTER,
             textColor=colors.gray,
-            spaceAfter=20
+            spaceAfter=12
         )
 
         # Título
-        elements.append(Paragraph(nombre_reporte, title_style))
+        elements.append(Paragraph(f"Informe de {nombre_reporte}", title_style))
 
         # Fecha de generación
         fecha_generacion = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
         elements.append(Paragraph(f"Generado: {fecha_generacion}", date_style))
 
-        # Preparar datos de la tabla
-        # Seleccionar columnas que caben en la página (máximo 8-10 para landscape)
-        columnas_visibles = columnas[:10]  # Limitar columnas
+        # Todas las columnas visibles
+        columnas_visibles = columnas
+
+        # Determinar tamaño de fuente según número de columnas
+        if num_columnas > 12:
+            font_size_header = 6
+            font_size_body = 5
+            max_chars = 15
+        elif num_columnas > 10:
+            font_size_header = 7
+            font_size_body = 6
+            max_chars = 20
+        elif num_columnas > 8:
+            font_size_header = 8
+            font_size_body = 7
+            max_chars = 25
+        elif num_columnas > 6:
+            font_size_header = 9
+            font_size_body = 8
+            max_chars = 30
+        else:
+            font_size_header = 10
+            font_size_body = 9
+            max_chars = 40
 
         table_data = []
 
-        # Encabezados
-        headers = [col['nombre_mostrar'] for col in columnas_visibles]
+        # Encabezados - truncar si son muy largos
+        headers = []
+        for col in columnas_visibles:
+            header_text = col['nombre_mostrar']
+            if len(header_text) > max_chars:
+                header_text = header_text[:max_chars-2] + '..'
+            headers.append(header_text)
         table_data.append(headers)
 
-        # Datos
+        # Datos - truncar texto largo
         for fila in datos:
             row = []
             for col in columnas_visibles:
@@ -306,8 +390,12 @@ class ExportacionService:
                     valor,
                     col.get('tipo_dato', 'string'),
                     col.get('decimales', 2),
-                    col.get('sufijo', '')
+                    col.get('sufijo', ''),
+                    col.get('campo', '')
                 )
+                # Truncar si es muy largo
+                if isinstance(valor_formateado, str) and len(valor_formateado) > max_chars:
+                    valor_formateado = valor_formateado[:max_chars-3] + '...'
                 row.append(valor_formateado)
             table_data.append(row)
 
@@ -322,16 +410,22 @@ class ExportacionService:
                         valor,
                         col.get('tipo_dato', 'number'),
                         col.get('decimales', 2),
-                        col.get('sufijo', '')
+                        col.get('sufijo', ''),
+                        campo
                     )
                     total_row.append(valor_formateado)
                 else:
                     total_row.append('')
             table_data.append(total_row)
 
-        # Calcular anchos de columna proporcionales
-        available_width = pagesize[0] - 2 * cm
-        col_widths = [available_width / len(columnas_visibles)] * len(columnas_visibles)
+        # Calcular anchos de columna dinámicamente
+        available_width = pagesize[0] - (2 * margins)
+        col_widths = self._calcular_anchos_columnas(
+            columnas_visibles,
+            datos,
+            available_width,
+            max_chars
+        )
 
         # Crear tabla
         table = Table(table_data, colWidths=col_widths, repeatRows=1)
@@ -342,24 +436,24 @@ class ExportacionService:
             ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor(f'#{self.HEADER_COLOR}')),
             ('TEXTCOLOR', (0, 0), (-1, 0), colors.white),
             ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
-            ('FONTSIZE', (0, 0), (-1, 0), 9),
+            ('FONTSIZE', (0, 0), (-1, 0), font_size_header),
             ('ALIGN', (0, 0), (-1, 0), 'CENTER'),
             ('VALIGN', (0, 0), (-1, 0), 'MIDDLE'),
-            ('BOTTOMPADDING', (0, 0), (-1, 0), 8),
-            ('TOPPADDING', (0, 0), (-1, 0), 8),
+            ('BOTTOMPADDING', (0, 0), (-1, 0), 4 if num_columnas > 8 else 6),
+            ('TOPPADDING', (0, 0), (-1, 0), 4 if num_columnas > 8 else 6),
 
             # Cuerpo
             ('FONTNAME', (0, 1), (-1, -1), 'Helvetica'),
-            ('FONTSIZE', (0, 1), (-1, -1), 8),
+            ('FONTSIZE', (0, 1), (-1, -1), font_size_body),
             ('VALIGN', (0, 1), (-1, -1), 'MIDDLE'),
-            ('BOTTOMPADDING', (0, 1), (-1, -1), 4),
-            ('TOPPADDING', (0, 1), (-1, -1), 4),
+            ('BOTTOMPADDING', (0, 1), (-1, -1), 2 if num_columnas > 8 else 4),
+            ('TOPPADDING', (0, 1), (-1, -1), 2 if num_columnas > 8 else 4),
 
             # Bordes
             ('GRID', (0, 0), (-1, -1), 0.5, colors.gray),
 
             # Línea gruesa debajo del encabezado
-            ('LINEBELOW', (0, 0), (-1, 0), 2, colors.HexColor(f'#{self.HEADER_COLOR}')),
+            ('LINEBELOW', (0, 0), (-1, 0), 1.5, colors.HexColor(f'#{self.HEADER_COLOR}')),
         ])
 
         # Filas alternadas
@@ -387,11 +481,11 @@ class ExportacionService:
         elements.append(table)
 
         # Pie de página con total de registros
-        elements.append(Spacer(1, 20))
+        elements.append(Spacer(1, 12))
         footer_style = ParagraphStyle(
             'FooterStyle',
             parent=styles['Normal'],
-            fontSize=9,
+            fontSize=8,
             textColor=colors.gray
         )
         elements.append(Paragraph(f"Total de registros: {len(datos)}", footer_style))
@@ -402,18 +496,104 @@ class ExportacionService:
         buffer.seek(0)
         return buffer.getvalue()
 
+    def _calcular_anchos_columnas(
+            self,
+            columnas: List[Dict[str, Any]],
+            datos: List[Dict[str, Any]],
+            page_width: float,
+            max_chars: int
+    ) -> List[float]:
+        """
+        Calcula anchos de columna basados en el contenido.
+
+        Args:
+            columnas: Definición de columnas
+            datos: Datos del reporte
+            page_width: Ancho disponible de la página
+            max_chars: Máximo de caracteres permitidos
+
+        Returns:
+            Lista de anchos de columna
+        """
+        num_cols = len(columnas)
+
+        # Ancho mínimo y máximo por columna
+        min_width = 1.2 * cm
+        max_width = 5 * cm
+
+        # Calcular ancho basado en el header y algunos datos
+        widths = []
+        sample_size = min(50, len(datos))  # Muestra para calcular anchos
+
+        for col in columnas:
+            campo = col.get('campo', '')
+            header = col.get('nombre_mostrar', campo)
+
+            # Ancho del header (truncado)
+            header_len = min(len(str(header)), max_chars)
+            max_len = header_len
+
+            # Revisar datos de muestra
+            for row in datos[:sample_size]:
+                valor = row.get(campo, '')
+                if valor:
+                    valor_len = min(len(str(valor)), max_chars)
+                    max_len = max(max_len, valor_len)
+
+            # Convertir caracteres a puntos (aproximado)
+            estimated_width = max_len * 0.22 * cm
+
+            # Aplicar límites
+            width = max(min_width, min(max_width, estimated_width))
+            widths.append(width)
+
+        # Ajustar para que quepan en la página
+        total_width = sum(widths)
+        if total_width > page_width:
+            scale = page_width / total_width
+            widths = [w * scale for w in widths]
+        elif total_width < page_width * 0.9:
+            # Si sobra mucho espacio, distribuir proporcionalmente
+            scale = (page_width * 0.95) / total_width
+            widths = [w * scale for w in widths]
+
+        return widths
+
     def _formatear_valor_pdf(
             self,
             valor: Any,
             tipo_dato: str,
             decimales: int = 2,
-            sufijo: str = ''
+            sufijo: str = '',
+            campo: str = ''
     ) -> str:
         """
         Formatea un valor para PDF.
+
+        Args:
+            valor: Valor a formatear
+            tipo_dato: Tipo de dato de la columna
+            decimales: Número de decimales para números
+            sufijo: Sufijo a agregar al valor (ej: unidad de medida)
+            campo: Nombre del campo (para detectar campos enteros)
         """
         if valor is None:
             return '-'
+
+        # Verificar si es un campo que debe ser entero
+        campo_lower = campo.lower() if campo else ''
+        es_campo_entero = campo_lower in self.CAMPOS_ENTEROS or tipo_dato == 'integer'
+
+
+        if es_campo_entero:
+            try:
+                numero = int(float(valor))
+                formateado = f"{numero:,}"
+                if sufijo:
+                    formateado = f"{formateado} {sufijo}"
+                return formateado
+            except (ValueError, TypeError):
+                return str(valor)
 
         if tipo_dato == 'number':
             try:
@@ -491,7 +671,16 @@ class ExportacionService:
             tipo = col.get('tipo_dato', 'string')
 
             if nombre in df.columns:
-                if tipo == 'datetime':
+                # Verificar si es un campo que debe ser entero
+                campo_lower = campo.lower()
+                es_campo_entero = campo_lower in self.CAMPOS_ENTEROS or tipo == 'integer'
+
+
+                if es_campo_entero:
+                    df[nombre] = df[nombre].apply(
+                        lambda x: self._formatear_entero_csv(x)
+                    )
+                elif tipo == 'datetime':
                     df[nombre] = df[nombre].apply(
                         lambda x: self._formatear_datetime_csv(x)
                     )
@@ -530,3 +719,20 @@ class ExportacionService:
             except:
                 return valor
         return str(valor) if valor else ''
+
+    def _formatear_entero_csv(self, valor: Any) -> str:
+        """
+        Formatea un valor como entero para CSV (sin decimales).
+
+        Args:
+            valor: Valor a formatear
+
+        Returns:
+            Valor formateado como entero (string)
+        """
+        if valor is None:
+            return ''
+        try:
+            return str(int(float(valor)))
+        except (ValueError, TypeError):
+            return str(valor) if valor else ''

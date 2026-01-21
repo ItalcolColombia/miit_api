@@ -25,7 +25,7 @@ class UsuariosResponse(BaseSchema):
 
 class UsuarioCreate(BaseSchema):
     nick_name: str = Field(..., min_length=5, max_length=10)
-    full_name: str = Field(..., min_length=20, max_length=100)
+    full_name: str = Field(..., min_length=5, max_length=100)
     cedula: int  # Required field
     email: str = Field(..., min_length=5, max_length=100)
     clave: str
@@ -50,7 +50,7 @@ class UsuarioCreate(BaseSchema):
 
 class UsuarioUpdate(BaseSchema):
     nick_name: str = Field(..., min_length=5, max_length=10)
-    full_name: str = Field(..., min_length=20, max_length=100)
+    full_name: str = Field(..., min_length=5, max_length=100)
     cedula: int  # Required field
     email: str = Field(..., min_length=5, max_length=100)
     clave: str
@@ -99,5 +99,7 @@ class VRolesPermResponse(BaseModel):
 
     class Config:
         from_attributes = True
+
+
 
 
