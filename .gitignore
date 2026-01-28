@@ -54,3 +54,5 @@ ehthumbs.db
 
 /docker-compose.simulate.yml
 /README.simulate_ecr.md
+
+/docs

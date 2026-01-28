@@ -272,6 +272,7 @@ class ExportacionService:
     ) -> bytes:
         """
         Exporta datos a formato PDF optimizado para reportes con muchas columnas.
+        Usa Paragraph en las celdas para permitir word wrap automático.
 
         Args:
             datos: Lista de registros a exportar
@@ -288,8 +289,9 @@ class ExportacionService:
         num_columnas = len(columnas)
 
         # Determinar orientación según número de columnas si es 'auto'
+        # Portrait para <= 5 columnas, Landscape para > 5 columnas
         if orientacion == 'auto':
-            if num_columnas > 6:
+            if num_columnas > 5:
                 orientacion = 'landscape'
             else:
                 orientacion = 'portrait'
@@ -302,9 +304,9 @@ class ExportacionService:
 
         # Ajustar márgenes según número de columnas
         if num_columnas > 10:
-            margins = 0.3 * cm
-        elif num_columnas > 7:
             margins = 0.5 * cm
+        elif num_columnas > 7:
+            margins = 0.75 * cm
         else:
             margins = 1 * cm
 
@@ -338,6 +340,69 @@ class ExportacionService:
             spaceAfter=12
         )
 
+        # Determinar tamaño de fuente según número de columnas
+        if num_columnas > 12:
+            font_size_header = 6
+            font_size_body = 5
+        elif num_columnas > 10:
+            font_size_header = 7
+            font_size_body = 6
+        elif num_columnas > 8:
+            font_size_header = 8
+            font_size_body = 7
+        elif num_columnas > 5:
+            font_size_header = 9
+            font_size_body = 8
+        else:
+            font_size_header = 10
+            font_size_body = 9
+
+        # Estilos para celdas con word wrap
+        header_cell_style = ParagraphStyle(
+            'HeaderCell',
+            parent=styles['Normal'],
+            fontSize=font_size_header,
+            fontName='Helvetica-Bold',
+            textColor=colors.white,
+            alignment=TA_CENTER,
+            wordWrap='CJK',
+            leading=font_size_header + 2
+        )
+
+        body_cell_style = ParagraphStyle(
+            'BodyCell',
+            parent=styles['Normal'],
+            fontSize=font_size_body,
+            fontName='Helvetica',
+            alignment=TA_LEFT,
+            wordWrap='CJK',
+            leading=font_size_body + 2
+        )
+
+        body_cell_right_style = ParagraphStyle(
+            'BodyCellRight',
+            parent=body_cell_style,
+            alignment=TA_RIGHT
+        )
+
+        body_cell_center_style = ParagraphStyle(
+            'BodyCellCenter',
+            parent=body_cell_style,
+            alignment=TA_CENTER
+        )
+
+        totals_cell_style = ParagraphStyle(
+            'TotalsCell',
+            parent=body_cell_style,
+            fontName='Helvetica-Bold'
+        )
+
+        totals_cell_right_style = ParagraphStyle(
+            'TotalsCellRight',
+            parent=totals_cell_style,
+            alignment=TA_RIGHT
+        )
+
         # Título
         elements.append(Paragraph(f"Informe de {nombre_reporte}", title_style))
 
@@ -348,40 +413,16 @@ class ExportacionService:
         # Todas las columnas visibles
         columnas_visibles = columnas
 
-        # Determinar tamaño de fuente según número de columnas
-        if num_columnas > 12:
-            font_size_header = 6
-            font_size_body = 5
-            max_chars = 15
-        elif num_columnas > 10:
-            font_size_header = 7
-            font_size_body = 6
-            max_chars = 20
-        elif num_columnas > 8:
-            font_size_header = 8
-            font_size_body = 7
-            max_chars = 25
-        elif num_columnas > 6:
-            font_size_header = 9
-            font_size_body = 8
-            max_chars = 30
-        else:
-            font_size_header = 10
-            font_size_body = 9
-            max_chars = 40
-
         table_data = []
 
-        # Encabezados - truncar si son muy largos
+        # Encabezados - usar Paragraph para permitir wrap
         headers = []
         for col in columnas_visibles:
             header_text = col['nombre_mostrar']
-            if len(header_text) > max_chars:
-                header_text = header_text[:max_chars-2] + '..'
-            headers.append(header_text)
+            headers.append(Paragraph(header_text, header_cell_style))
         table_data.append(headers)
 
-        # Datos - truncar texto largo
+        # Datos - usar Paragraph para permitir wrap
         for fila in datos:
             row = []
             for col in columnas_visibles:
@@ -393,15 +434,22 @@ class ExportacionService:
                     col.get('sufijo', ''),
                     col.get('campo', '')
                 )
-                # Truncar si es muy largo
-                if isinstance(valor_formateado, str) and len(valor_formateado) > max_chars:
-                    valor_formateado = valor_formateado[:max_chars-3] + '...'
-                row.append(valor_formateado)
+
+                # Seleccionar estilo según alineación de la columna
+                alineacion = col.get('alineacion', 'left')
+                if alineacion == 'right':
+                    cell_style = body_cell_right_style
+                elif alineacion == 'center':
+                    cell_style = body_cell_center_style
+                else:
+                    cell_style = body_cell_style
+
+                row.append(Paragraph(str(valor_formateado), cell_style))
             table_data.append(row)
 
         # Fila de totales
         if totales:
-            total_row = ['TOTALES']
+            total_row = [Paragraph('TOTALES', totals_cell_style)]
             for col in columnas_visibles[1:]:
                 campo = col['campo']
                 if campo in totales:
@@ -413,41 +461,41 @@ class ExportacionService:
                         col.get('sufijo', ''),
                         campo
                     )
-                    total_row.append(valor_formateado)
+                    # Totales numéricos alineados a la derecha
+                    alineacion = col.get('alineacion', 'right')
+                    if alineacion == 'right':
+                        total_row.append(Paragraph(str(valor_formateado), totals_cell_right_style))
+                    else:
+                        total_row.append(Paragraph(str(valor_formateado), totals_cell_style))
                 else:
-                    total_row.append('')
+                    total_row.append(Paragraph('', totals_cell_style))
             table_data.append(total_row)
 
         # Calcular anchos de columna dinámicamente
         available_width = pagesize[0] - (2 * margins)
-        col_widths = self._calcular_anchos_columnas(
+        col_widths = self._calcular_anchos_columnas_pdf(
             columnas_visibles,
             datos,
-            available_width,
-            max_chars
+            available_width
         )
 
-        # Crear tabla
+        # Crear tabla con repeatRows para repetir encabezado en cada página
         table = Table(table_data, colWidths=col_widths, repeatRows=1)
 
         # Estilos de tabla
         style = TableStyle([
             # Encabezado
             ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor(f'#{self.HEADER_COLOR}')),
-            ('TEXTCOLOR', (0, 0), (-1, 0), colors.white),
-            ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
-            ('FONTSIZE', (0, 0), (-1, 0), font_size_header),
-            ('ALIGN', (0, 0), (-1, 0), 'CENTER'),
             ('VALIGN', (0, 0), (-1, 0), 'MIDDLE'),
-            ('BOTTOMPADDING', (0, 0), (-1, 0), 4 if num_columnas > 8 else 6),
-            ('TOPPADDING', (0, 0), (-1, 0), 4 if num_columnas > 8 else 6),
+            ('BOTTOMPADDING', (0, 0), (-1, 0), 6),
+            ('TOPPADDING', (0, 0), (-1, 0), 6),
+            ('LEFTPADDING', (0, 0), (-1, -1), 4),
+            ('RIGHTPADDING', (0, 0), (-1, -1), 4),
 
-            # Cuerpo
-            ('FONTNAME', (0, 1), (-1, -1), 'Helvetica'),
-            ('FONTSIZE', (0, 1), (-1, -1), font_size_body),
-            ('VALIGN', (0, 1), (-1, -1), 'MIDDLE'),
-            ('BOTTOMPADDING', (0, 1), (-1, -1), 2 if num_columnas > 8 else 4),
-            ('TOPPADDING', (0, 1), (-1, -1), 2 if num_columnas > 8 else 4),
+            # Cuerpo - alinear arriba para celdas con wrap
+            ('VALIGN', (0, 1), (-1, -1), 'TOP'),
+            ('BOTTOMPADDING', (0, 1), (-1, -1), 4),
+            ('TOPPADDING', (0, 1), (-1, -1), 4),
 
             # Bordes
             ('GRID', (0, 0), (-1, -1), 0.5, colors.gray),
@@ -465,17 +513,6 @@ class ExportacionService:
         if totales:
             last_row = len(table_data) - 1
             style.add('BACKGROUND', (0, last_row), (-1, last_row), colors.HexColor(f'#{self.TOTALS_COLOR}'))
-            style.add('FONTNAME', (0, last_row), (-1, last_row), 'Helvetica-Bold')
-
-        # Alineación por tipo de columna
-        for col_idx, col in enumerate(columnas_visibles):
-            alineacion = col.get('alineacion', 'left')
-            if alineacion == 'right':
-                style.add('ALIGN', (col_idx, 1), (col_idx, -1), 'RIGHT')
-            elif alineacion == 'center':
-                style.add('ALIGN', (col_idx, 1), (col_idx, -1), 'CENTER')
-            else:
-                style.add('ALIGN', (col_idx, 1), (col_idx, -1), 'LEFT')
 
         table.setStyle(style)
         elements.append(table)
@@ -496,68 +533,64 @@ class ExportacionService:
         buffer.seek(0)
         return buffer.getvalue()
 
-    def _calcular_anchos_columnas(
+    def _calcular_anchos_columnas_pdf(
             self,
             columnas: List[Dict[str, Any]],
             datos: List[Dict[str, Any]],
-            page_width: float,
-            max_chars: int
+            page_width: float
     ) -> List[float]:
         """
-        Calcula anchos de columna basados en el contenido.
+        Calcula anchos de columna basados en el tipo de contenido.
+        Asigna más espacio a columnas de texto largo (material, descripción, nombre).
 
         Args:
             columnas: Definición de columnas
             datos: Datos del reporte
             page_width: Ancho disponible de la página
-            max_chars: Máximo de caracteres permitidos
 
         Returns:
             Lista de anchos de columna
         """
-        num_cols = len(columnas)
-
-        # Ancho mínimo y máximo por columna
-        min_width = 1.2 * cm
-        max_width = 5 * cm
-
-        # Calcular ancho basado en el header y algunos datos
-        widths = []
-        sample_size = min(50, len(datos))  # Muestra para calcular anchos
-
+        # Calcular pesos según tipo de columna
+        pesos = []
         for col in columnas:
-            campo = col.get('campo', '')
-            header = col.get('nombre_mostrar', campo)
+            nombre = col.get('nombre_mostrar', col.get('campo', '')).lower()
+            tipo_dato = col.get('tipo_dato', 'string')
 
-            # Ancho del header (truncado)
-            header_len = min(len(str(header)), max_chars)
-            max_len = header_len
+            # Columnas de texto largo: más peso
+            if any(x in nombre for x in ['material', 'descripcion', 'descripción', 'nombre', 'observacion', 'observación', 'almacenamiento', 'detalle']):
+                pesos.append(3.0)
+            # Columnas de fecha
+            elif tipo_dato in ('date', 'datetime') or 'fecha' in nombre:
+                pesos.append(1.5)
+            # Columnas numéricas
+            elif tipo_dato == 'number' or any(x in nombre for x in ['cantidad', 'saldo', 'total', 'peso', 'valor', 'precio']):
+                pesos.append(2.0)
+            # ID y campos cortos
+            elif any(x in nombre for x in ['id', 'código', 'codigo', 'consecutivo']):
+                pesos.append(1.0)
+            else:
+                pesos.append(1.5)
 
-            # Revisar datos de muestra
-            for row in datos[:sample_size]:
-                valor = row.get(campo, '')
-                if valor:
-                    valor_len = min(len(str(valor)), max_chars)
-                    max_len = max(max_len, valor_len)
+        # Calcular anchos proporcionales
+        total_pesos = sum(pesos)
+        anchos = [(p / total_pesos) * page_width for p in pesos]
 
-            # Convertir caracteres a puntos (aproximado)
-            estimated_width = max_len * 0.22 * cm
+        # Aplicar límites mínimos y máximos
+        min_width = 1.5 * cm
+        max_width = page_width * 0.4  # Máximo 40% del ancho para una columna
 
-            # Aplicar límites
-            width = max(min_width, min(max_width, estimated_width))
-            widths.append(width)
+        anchos_ajustados = []
+        for ancho in anchos:
+            anchos_ajustados.append(max(min_width, min(max_width, ancho)))
 
         # Ajustar para que quepan en la página
-        total_width = sum(widths)
-        if total_width > page_width:
+        total_width = sum(anchos_ajustados)
+        if total_width != page_width:
             scale = page_width / total_width
-            widths = [w * scale for w in widths]
-        elif total_width < page_width * 0.9:
-            # Si sobra mucho espacio, distribuir proporcionalmente
-            scale = (page_width * 0.95) / total_width
-            widths = [w * scale for w in widths]
+            anchos_ajustados = [a * scale for a in anchos_ajustados]
 
-        return widths
+        return anchos_ajustados
 
     def _formatear_valor_pdf(
             self,
