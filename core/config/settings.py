@@ -26,7 +26,7 @@ class Settings(BaseSettings):
         "localhost:8000",  # Para desarrollo local backend
         "localhost:5173",  # Para desarrollo local frontend
     ]
-    CORS_ORIGINS = [
+    CORS_ORIGINS: list[str] = [
         "https://informes.turbograneles.com",  # Frontend producción
         "http://localhost:5173",  # Frontend desarrollo (Vite)
         "http://localhost:3000",
