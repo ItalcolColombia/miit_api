@@ -17,16 +17,20 @@ class Settings(BaseSettings):
     API_HOST: str = "0.0.0.0"
     API_PORT: int = "8000"
     API_V1_STR: str = "v1"
-    API_VERSION_NUM: str = "0.0.37"
+    API_VERSION_NUM: str = "0.0.38"
     API_LOG_LEVEL: str = "DEBUG"
     APP_LOG_DIR: str = "/var/www/metalteco/log/app_logs"
     ALLOWED_HOSTS: list[str] = [
-        "https://integrador.turbograneles.com",  # Dominio del backend
-        "https://informes.turbograneles.com", # Dominio del frontend
-        "http://localhost:8000",  # Para desarrollo local backend
-        "http://localhost:5173",  # Para desarrollo local frontend
+        "integrador.turbograneles.com",  # Dominio del backend
+        "informes.turbograneles.com", # Dominio del frontend
+        "localhost:8000",  # Para desarrollo local backend
+        "localhost:5173",  # Para desarrollo local frontend
     ]
-
+    CORS_ORIGINS = [
+        "https://informes.turbograneles.com",  # Frontend producción
+        "http://localhost:5173",  # Frontend desarrollo (Vite)
+        "http://localhost:3000",
+    ]
     # API 'SU' Params
     API_USER_ADMINISTRATOR: str = "administrator"
     API_PASSWORD_ADMINISTRATOR: str = "$2b$12$XZpenPj7tndIasZhG5FS9OP.fmKJlUs2pOPw3oH/SmYQ9q07A7o7C"

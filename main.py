@@ -30,6 +30,7 @@ API_VERSION_STR = get_settings().API_V1_STR
 API_VERSION = get_settings().API_VERSION_NUM
 API_STAGE = get_settings().API_LOG_LEVEL
 ALLOWED_HOSTS = get_settings().ALLOWED_HOSTS
+CORS_ORIGINS = get_settings().CORS_ORIGINS
 
 SECRET_KEY = get_settings().JWT_SECRET_KEY
 
@@ -62,6 +63,10 @@ app = FastAPI(
         {"name": "Autenticación", "description": "Operaciones relacionadas con la autenticación"},
         {"name": "Automatizador", "description": "Operaciones de interés para la automatización."},
         {"name": "Integrador", "description": "Operaciones de interés para el operador portuario."},
+        {"name": "Reportes", "description": "Operaciones relacionadas con la generación de reportes."},
+        {"name": "Admin - Reportes", "description": "Operaciones de administración relacionadas con los reportes."},
+        {"name": "Admin - Roles", "description": "Operaciones de administración relacionadas con los roles."},
+        {"name": "Administrador", "description": "Operaciones de administración del sistema."},
     ],
     docs_url="/docs",
     redoc_url="/redoc",
@@ -85,10 +90,11 @@ app.add_exception_handler(RequestValidationError, ExceptionHandler.json_decode_e
 # Middlewares
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[str(origin) for origin in ALLOWED_HOSTS] or ["*"],
+    allow_origins=CORS_ORIGINS,
     allow_credentials=True,
-    allow_methods=["*"],
+    allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"],
     allow_headers=["*"],
+    expose_headers=["*"],
 )
 
 
