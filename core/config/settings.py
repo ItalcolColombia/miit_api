@@ -22,7 +22,7 @@ class Settings(BaseSettings):
     APP_LOG_DIR: str = "/var/www/metalteco/log/app_logs"
     ALLOWED_HOSTS: list[str] = [
         "https://integrador.turbograneles.com",  # Dominio del backend
-        # "https://reporteria.turbograneles.com", # Dominio del frontend
+        "https://informes.turbograneles.com", # Dominio del frontend
         "http://localhost:8000",  # Para desarrollo local backend
         "http://localhost:5173",  # Para desarrollo local frontend
     ]
