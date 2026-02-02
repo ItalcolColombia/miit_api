@@ -115,7 +115,7 @@ async def set_load(
             status_code=status.HTTP_200_OK,
             summary="Modificar viaje del buque para actualizar estado por arribo",
             description="Evento realizado por el operador post confirmación del arribo de la motonave a través de la interfaz de PBCU. "
-                        "Actualiza del estado_puerto de la flota a True. "
+                        "Actualiza el estado_puerto y estado_operador de la flota a True. "
                         "Corresponde a BuqueArrivo en el diagrama de flujo de proceso.",
             response_model=UpdateResponse,
             responses={
@@ -127,7 +127,7 @@ async def buque_in(
         service: ViajesService = Depends(get_viajes_service)):
     log.info(f"Payload recibido: Flota {puerto_id} - Arribo")
     try:
-        await service.chg_estado_flota(puerto_id, estado_puerto=True)
+        await service.chg_estado_flota(puerto_id, estado_puerto=True, estado_operador=True)
         log.info(f"Arribo de buque {puerto_id} marcado exitosamente.")
         return response_json(
             status_code=status.HTTP_200_OK,
@@ -330,7 +330,7 @@ async def in_camion(
         service_data = await service.chg_camion_ingreso(puerto_id, fecha_ingreso_utc)
 
         try:
-            await service.chg_estado_flota_simple(puerto_id, estado_puerto=True, estado_operador=True)
+            await service.chg_estado_flota(puerto_id, estado_puerto=True, estado_operador=True)
             log.info(f"Flags estado_puerto y estado_operador para {puerto_id} puestos en True tras ingreso de camión.")
         except Exception as e_flags:
             # No bloquear la respuesta por un fallo actualizando flags, pero loguear

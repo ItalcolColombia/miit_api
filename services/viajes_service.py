@@ -483,7 +483,7 @@ class ViajesService:
             updated_flota = await self.flotas_service.update_status(flota, estado_puerto, estado_operador)
 
             # Solo notificar si el cambio de estado es para finalizado
-            if estado_operador is not None:
+            if estado_operador is False:
                 tran = None
                 bl = None
                 if flota.tipo == "camion":
@@ -510,33 +510,6 @@ class ViajesService:
             raise e
         except Exception as e:
             log.error(f"Error al cambiar estado de flota con puerto_id {puerto_id}: {str(e)}")
-            raise BasedException(
-                message=f"Error al cambiar el estado de flota con puerto_id {puerto_id} : {str(e)}",
-                status_code=status.HTTP_424_FAILED_DEPENDENCY
-            )
-
-    async def chg_estado_flota_simple(self, puerto_id: str, estado_puerto: Optional[bool] = None, estado_operador: Optional[bool] = None) -> FlotasResponse:
-        """
-        Cambia únicamente los flags de la flota asociados al viaje (estado_puerto, estado_operador)
-        sin ejecutar la lógica adicional que existe en `chg_estado_flota` (no intenta finalizar
-        transacciones ni preparar notificaciones externas).
-        """
-        try:
-            viaje = await self.get_viaje_by_puerto_id(puerto_id)
-            if not viaje:
-                raise EntityNotFoundException(f"Viaje con puerto_id: '{puerto_id}' no existe")
-
-            flota = await self.flotas_service.get_flota(viaje.flota_id)
-            if not flota:
-                raise EntityNotFoundException(f"Flota con id '{viaje.flota_id}' no existe")
-
-            # Llamamos directamente al servicio de flotas para actualizar los flags
-            updated_flota = await self.flotas_service.update_status(flota, estado_puerto, estado_operador)
-            return updated_flota
-        except EntityNotFoundException:
-            raise
-        except Exception as e:
-            log.error(f"Error al cambiar estado simple de flota con puerto_id {puerto_id}: {str(e)}")
             raise BasedException(
                 message=f"Error al cambiar el estado de flota con puerto_id {puerto_id} : {str(e)}",
                 status_code=status.HTTP_424_FAILED_DEPENDENCY
@@ -612,9 +585,8 @@ class ViajesService:
                 raise EntityNotFoundException(
                     f"La flota es del tipo '{flota.tipo}' diferente al tipo esperado 'camion'")
 
-            tran = await self.transacciones_service.get_tran_by_viaje(viaje.id)
-            if not tran:
-                raise EntityNotFoundException(f"Transacción para la cita: '{viaje.puerto_id}' no existe")
+            # Pit por defecto establecido en 1
+            pit = 1
 
             # Asegurar que la fecha se normalice a la zona de la aplicación antes de guardar.
             # Esto evita diferencias en producción si el payload viene con tzinfo distinto o si
@@ -630,7 +602,7 @@ class ViajesService:
             await self._repo.update(viaje.id, update_data)
 
             notification = NotificationPitCargue(
-                cargoPit=tran.pit,
+                cargoPit=pit,
             ).model_dump()
             log.info(f"Ingreso actualizado para viaje: {viaje.puerto_id} a {fecha}")
 
