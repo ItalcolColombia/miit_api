@@ -88,6 +88,16 @@ app.add_exception_handler(RequestValidationError, ExceptionHandler.json_decode_e
 
 
 # Middlewares
+# IMPORTANTE: Los middlewares se ejecutan en orden INVERSO al que se agregan
+# El último agregado se ejecuta primero en la solicitud entrante
+# Por eso CORSMiddleware debe ser el ÚLTIMO en agregarse para procesar primero las solicitudes preflight
+
+app.add_middleware(SessionMiddleware, secret_key=SECRET_KEY)
+app.add_middleware(GZipMiddleware, minimum_size=1000)
+app.add_middleware(AuthMiddleware)
+app.add_middleware(ErrorMiddleware)
+app.add_middleware(LoggerMiddleware)
+app.add_middleware(TimeMiddleware)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=CORS_ORIGINS,
@@ -97,13 +107,6 @@ app.add_middleware(
     expose_headers=["*"],
 )
 
-
-app.add_middleware(SessionMiddleware, secret_key=SECRET_KEY)
-app.add_middleware(GZipMiddleware, minimum_size=1000)
-app.add_middleware(AuthMiddleware)
-app.add_middleware(ErrorMiddleware)
-app.add_middleware(LoggerMiddleware)
-app.add_middleware(TimeMiddleware)
 
 # Rutas
 app.include_router(v1_routers, prefix="/api/" + API_VERSION_STR)
