@@ -21,8 +21,8 @@ from schemas.ext_api_schema import NotificationCargue, NotificationBuque, Notifi
 from schemas.flotas_schema import FlotasResponse, FlotaCreate
 from schemas.transacciones_schema import TransaccionResponse
 from schemas.viajes_schema import (
-    ViajesResponse, ViajeCreate, ViajeBuqueExtCreate, ViajeUpdate, ViajesActResponse, ViajeCamionExtCreate,
-    VViajesResponse
+    ViajesResponse, ViajeCreate, ViajeBuqueExtCreate, ViajeUpdate, ViajeCamionExtCreate,
+    VViajesResponse, ViajesActivosPorMaterialResponse
 )
 from services.bls_service import BlsService
 from services.clientes_service import ClientesService
@@ -49,114 +49,6 @@ class ViajesService:
         self.feedback_service = feedback_service
         self.transacciones_service= transacciones_service
 
-    async def create(self, viaje: ViajeCreate) -> ViajesResponse:
-        """
-        Create a new viaje in the database.
-
-        Args:
-            viaje (ViajeCreate): The viaje data to create.
-
-        Returns:
-            ViajesResponse: The created viaje object.
-
-        Raises:
-            BasedException: If creation fails due to database or other errors.
-        """
-        try:
-            return await self._repo.create(viaje)
-        except Exception as e:
-            log.error(f"Error al crear viaje: {e}")
-            raise BasedException(
-                message="Error al crear el viaje",
-                status_code=409
-            )
-
-    async def update(self, viaje_id: int, viaje: ViajeUpdate) -> Optional[ViajesResponse]:
-        """
-        Update an existing viaje by ID.
-
-        Args:
-            viaje_id (int): The ID of the viaje to update.
-            viaje (ViajeUpdate): The updated viaje data.
-
-        Returns:
-            Optional[ViajesResponse]: The updated viaje object, or None if not found.
-
-        Raises:
-            BasedException: If update fails due to database or other errors.
-        """
-        try:
-            return await self._repo.update(viaje_id, viaje)
-        except Exception as e:
-            log.error(f"Error al actualizar viaje con ID {viaje_id}: {e}")
-            raise BasedException(
-                message=f"Error al actualizar el viaje con ID {viaje_id}",
-                status_code=status.HTTP_409_CONFLICT
-            )
-
-    async def delete(self, viaje_id: int) -> bool:
-        """
-        Delete a viaje by ID.
-
-        Args:
-            viaje_id (int): The ID of the viaje to delete.
-
-        Returns:
-            bool: True if deletion was successful, False otherwise.
-
-        Raises:
-            BasedException: If deletion fails due to database or other errors.
-        """
-        try:
-            return await self._repo.delete(viaje_id)
-        except Exception as e:
-            log.error(f"Error al eliminar viaje con ID {viaje_id}: {e}")
-            raise BasedException(
-                message=f"Error al eliminar el viaje con ID {viaje_id}",
-                status_code=status.HTTP_409_CONFLICT
-            )
-
-    async def get(self, viaje_id: int) -> Optional[ViajesResponse]:
-        """
-        Retrieve a viaje by ID.
-
-        Args:
-            viaje_id (int): The ID of the viaje to retrieve.
-
-        Returns:
-            Optional[ViajesResponse]: The viaje object if found, None otherwise.
-
-        Raises:
-            BasedException: If retrieval fails due to database or other errors.
-        """
-        try:
-            return await self._repo.get_by_id(viaje_id)
-        except Exception as e:
-            log.error(f"Error al obtener el viaje con ID {viaje_id}: {e}")
-            raise BasedException(
-                message=f"Error al obtener el viaje con ID {viaje_id}",
-                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR
-            )
-
-    async def get_all(self) -> List[ViajesResponse]:
-        """
-        Retrieve all viajes from the database.
-
-        Returns:
-            List[ViajesResponse]: A list of all viaje objects.
-
-        Raises:
-            BasedException: If retrieval fails due to database or other errors.
-        """
-        try:
-            return await self._repo.get_all()
-        except Exception as e:
-            log.error(f"Error al obtener listado de viajes: {e}")
-            raise BasedException(
-                message="Error al obtener listado de viajes",
-                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR
-            )
-
     async def get_viaje_by_puerto_id(self, puerto_id: str) -> Optional[ViajesResponse]:
         """
         Find a viaje by its puerto_id.
@@ -179,53 +71,32 @@ class ViajesService:
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
 
-    async def get_buques_activos(self) -> List[ViajesActResponse]:
+    async def get_viajes_activos_por_material(self, tipo_flota: str) -> List[ViajesActivosPorMaterialResponse]:
         """
-        Retrieve all active buques from the database.
+        Retrieve active viajes grouped by material.
 
-        Returns:
-            List[ViajesActResponse]: A list of active buque objects.
-
-        Raises:
-            BasedException: If retrieval fails due to database or other errors.
-        """
-        try:
-            return await self._repo.get_buques_disponibles()
-        except Exception as e:
-            log.error(f"Error al obtener buques activos: {e}")
-            raise BasedException(
-                message="Error al obtener buques activos",
-                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR
-            )
-
-    async def get_pag_camiones_activos(self, truck_plate: Optional[str] = None, params: Params = Params()) -> Page[
-        VViajesResponse]:
-        """
-        Retrieve a paginated list of active camiones, optionally filtered by truck_plate.
+        For 'buque': groups by BLs materials
+        For 'camion': uses the viaje's material_id
 
         Args:
-            truck_plate (Optional[str]): The truck plate to filter camiones (optional).
-            params (Params): Pagination parameters.
+            tipo_flota (str): Type of fleet ('buque' or 'camion')
 
         Returns:
-            Page[VViajesResponse]: A paginated list of active camiones.
+            List[ViajesActivosPorMaterialResponse]: List of active viajes grouped by material
 
         Raises:
             BasedException: If retrieval fails due to database or other errors.
         """
         try:
-            query = (
-                select(VViajes)
-                .where(VViajes.tipo == 'camion')
-                .where(VViajes.fecha_salida.is_(None))
-            )
-            if truck_plate is not None:
-                query = query.where(VViajes.referencia == truck_plate)
-            return await self._repo.get_all_paginated(query=query, params=params)
+            viajes = await self._repo.get_viajes_activos_por_material(tipo_flota)
+            if not viajes:
+                return []
+
+            return [ViajesActivosPorMaterialResponse(**viaje) for viaje in viajes]
         except Exception as e:
-            log.error(f"Error al obtener camiones activos con placa (opcional) {truck_plate}: {e}")
+            log.error(f"Error al obtener viajes activos por material: {e}")
             raise BasedException(
-                message="Error al obtener camiones activos",
+                message="Error al obtener viajes activos por material",
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
 

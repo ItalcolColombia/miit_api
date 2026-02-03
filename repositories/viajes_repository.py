@@ -5,7 +5,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm.exc import NoResultFound
 
 from core.contracts.auditor import Auditor
-from database.models import Viajes, VViajes
+from database.models import Viajes, VViajes, Flotas, Bls, Materiales
 from repositories.base_repository import IRepository
 from schemas.viajes_schema import ViajesResponse, ViajesActResponse
 from utils.logger_util import LoggerUtil
@@ -65,4 +65,73 @@ class ViajesRepository(IRepository[Viajes, ViajesResponse]):
             return None
         except Exception as e:
             log.error(f"Error al intentar checar Viaje con puerto_id '{puerto_id}': {e}")
+            raise
+
+    async def get_viajes_activos_por_material(self, tipo_flota: str) -> List[dict] | None:
+        """
+        Obtener viajes activos agrupados por material.
+
+        Para buques: agrupa los BLs por material
+        Para camiones: usa el material_id del viaje
+
+        Args:
+            tipo_flota: 'buque' o 'camion'
+
+        Returns:
+            Lista de diccionarios con consecutivo, nombre, material y puntos_cargue ordenados por fecha_hora descendente
+        """
+        try:
+            if tipo_flota.lower() == 'buque':
+                # Para buques, agrupamos por los materiales de los BLs
+                query = (
+                    select(
+                        Viajes.id.label('consecutivo'),
+                        Flotas.referencia.label('nombre'),
+                        Materiales.nombre.label('material'),
+                        Flotas.puntos.label('puntos_cargue'),
+                    )
+                    .join(Flotas, Viajes.flota_id == Flotas.id)
+                    .join(Bls, Bls.viaje_id == Viajes.id)
+                    .join(Materiales, Bls.material_id == Materiales.id)
+                    .where(Flotas.tipo == 'buque')
+                    .where(Flotas.estado_operador == True)
+                    .order_by(Viajes.id.desc())
+                    .distinct()
+                )
+            else:  # camion
+                # Para camiones, usamos el material_id del viaje
+                query = (
+                    select(
+                        Viajes.id.label('consecutivo'),
+                        Flotas.referencia.label('nombre'),
+                        Materiales.nombre.label('material'),
+                        Flotas.puntos.label('puntos_cargue'),
+                    )
+                    .join(Flotas, Viajes.flota_id == Flotas.id)
+                    .join(Materiales, Viajes.material_id == Materiales.id)
+                    .where(Flotas.tipo == 'camion')
+                    .where(Flotas.estado_operador == True)
+                    .where(Viajes.material_id.isnot(None))
+                    .order_by(Viajes.id.desc())
+                )
+
+            result = await self.db.execute(query)
+            viajes = result.fetchall()
+
+            if not viajes:
+                return None
+
+            # Convertir a lista de diccionarios
+            return [
+                {
+                    'consecutivo': viaje.consecutivo,
+                    'nombre': viaje.nombre,
+                    'material': viaje.material,
+                    'puntos_cargue': viaje.puntos_cargue
+                }
+                for viaje in viajes
+            ]
+
+        except Exception as e:
+            log.error(f"Error al obtener viajes activos por material: {e}")
             raise

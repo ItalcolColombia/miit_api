@@ -12,7 +12,7 @@ from schemas.movimientos_schema import MovimientosResponse
 from schemas.pesadas_schema import PesadaResponse, PesadaCreate
 from schemas.response_models import CreateResponse, ErrorResponse, ValidationErrorResponse, UpdateResponse
 from schemas.transacciones_schema import TransaccionResponse, TransaccionCreate
-from schemas.viajes_schema import VViajesResponse
+from schemas.viajes_schema import VViajesResponse, ViajesActivosPorMaterialResponse
 from services.almacenamientos_materiales_service import AlmacenamientosMaterialesService
 from services.auth_service import AuthService
 from services.flotas_service import FlotasService
@@ -63,29 +63,48 @@ async def get_almacenamientos_paginado(
             message=str(e)
         )
 
-@router.get("/buques-listado",
-            summary="Obtener listado de buques habilitados para recibo",
-            description="Este listado se actualiza cuando PBCU confirma el atraco del buque al puerto.",
+@router.get("/viajes-activos",
+            summary="Obtener viajes activos agrupados por material",
+            description="Retorna los viajes activos (estado_operador=true en flota) agrupados por material. "
+                        "Para buques agrupa por materiales de BLs, para camiones usa el material del viaje.",
+            response_model=List[ViajesActivosPorMaterialResponse],
             responses={
                 status.HTTP_404_NOT_FOUND: {"model": ErrorResponse},
                 status.HTTP_500_INTERNAL_SERVER_ERROR: {"model": ErrorResponse},
             },
 )
-async def get_buques_listado(
+async def get_viajes_activos_por_material(
+    tipo_flota: str = Query(..., description="Tipo de flota: 'buque' o 'camion'"),
     viajes_service: ViajesService = Depends(get_viajes_service)
 ):
+    log.info(f"Solicitud de viajes activos por material para tipo: {tipo_flota}")
     try:
-        return await viajes_service.get_buques_activos()
+        # Validar tipo de flota
+        if tipo_flota.lower() not in ['buque', 'camion']:
+            return response_json(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                message="El parámetro tipo_flota debe ser 'buque' o 'camion'"
+            )
+
+        viajes = await viajes_service.get_viajes_activos_por_material(tipo_flota)
+
+        if not viajes:
+            return response_json(
+                status_code=status.HTTP_404_NOT_FOUND,
+                message=f"No se encontraron viajes activos para tipo {tipo_flota}"
+            )
+
+        return viajes
 
     except HTTPException as http_exc:
-        log.warning(f"No se encontraron buques disponibles: {http_exc.detail}")
+        log.warning(f"Error al obtener viajes activos por material: {http_exc.detail}")
         return response_json(
             status_code=http_exc.status_code,
             message=http_exc.detail
         )
 
     except Exception as e:
-        log.error(f"Error inesperado al obtener listado de buques")
+        log.error(f"Error inesperado al obtener viajes activos por material: {e}")
         return response_json(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             message=str(e)
@@ -124,38 +143,6 @@ async def end_buque(
 
     except Exception as e:
         log.error(f"Error al procesar marcado de partida de buque {puerto_id} desde el puerto: {e}")
-        return response_json(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            message=str(e)
-        )
-
-@router.get("/camiones-listado",
-            summary="Obtener listado paginado de camiones disponibles para despacho con filtro opcional por placa",
-            description="Retorna camiones a despachar en modo páginado, filtradas opcionalmente por placa específica",
-            response_model=Page[VViajesResponse],
-            responses={
-                status.HTTP_404_NOT_FOUND: {"model": ErrorResponse},
-                status.HTTP_500_INTERNAL_SERVER_ERROR: {"model": ErrorResponse},
-            },
-)
-async def get_camiones_paginado(
-    viajes_service: ViajesService = Depends(get_viajes_service),
-    truck_plate: Optional[str] = Query(None, description="Placa específica a buscar")
-):
-    if truck_plate is None:
-        log.info(f"Payload recibido: Obtener camión con id {truck_plate}")
-    try:
-        return await viajes_service.get_pag_camiones_activos(truck_plate)
-
-    except HTTPException as http_exc:
-        log.warning(f"No se encontraron camiones: {http_exc.detail}")
-        return response_json(
-            status_code=http_exc.status_code,
-            message=http_exc.detail
-        )
-
-    except Exception as e:
-        log.error(f"Error inesperado al obtener listado de camiones")
         return response_json(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             message=str(e)

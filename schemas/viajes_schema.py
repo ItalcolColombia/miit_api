@@ -205,3 +205,13 @@ class ViajeUpdate(BaseSchema):
     despacho_directo: Optional[bool] = None
     fecha_hora: Optional[datetime] = None
     usuario_id: Optional[int] = None
+
+
+class ViajesActivosPorMaterialResponse(BaseModel):
+    consecutivo: int
+    nombre: str
+    material: str
+    puntos_cargue: Optional[int] = None
+
+    model_config = ConfigDict(from_attributes=True)
+
