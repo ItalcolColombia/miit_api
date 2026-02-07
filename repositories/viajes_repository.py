@@ -1,6 +1,6 @@
 from typing import List, Optional
 
-from sqlalchemy import select
+from sqlalchemy import select, func
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm.exc import NoResultFound
 
@@ -83,36 +83,41 @@ class ViajesRepository(IRepository[Viajes, ViajesResponse]):
         try:
             if tipo_flota.lower() == 'buque':
                 # Para buques, agrupamos por los materiales de los BLs
+                # Usamos group_by para evitar duplicados por la misma combinación flota+material
                 query = (
                     select(
-                        Viajes.id.label('consecutivo'),
+                        func.max(Viajes.id).label('consecutivo'),
                         Flotas.referencia.label('nombre'),
                         Materiales.nombre.label('material'),
                         Flotas.puntos.label('puntos_cargue'),
+                        func.max(Viajes.fecha_hora).label('fecha_hora_orden')
                     )
                     .join(Flotas, Viajes.flota_id == Flotas.id)
                     .join(Bls, Bls.viaje_id == Viajes.id)
                     .join(Materiales, Bls.material_id == Materiales.id)
                     .where(Flotas.tipo == 'buque')
                     .where(Flotas.estado_operador == True)
-                    .order_by(Viajes.id.desc())
-                    .distinct()
+                    .group_by(Flotas.referencia, Materiales.nombre, Flotas.puntos)
+                    .order_by(func.max(Viajes.fecha_hora).desc())
                 )
             else:  # camion
                 # Para camiones, usamos el material_id del viaje
+                # Usamos group_by para evitar duplicados por la misma combinación flota+material
                 query = (
                     select(
-                        Viajes.id.label('consecutivo'),
+                        func.max(Viajes.id).label('consecutivo'),
                         Flotas.referencia.label('nombre'),
                         Materiales.nombre.label('material'),
                         Flotas.puntos.label('puntos_cargue'),
+                        func.max(Viajes.fecha_hora).label('fecha_hora_orden')
                     )
                     .join(Flotas, Viajes.flota_id == Flotas.id)
                     .join(Materiales, Viajes.material_id == Materiales.id)
                     .where(Flotas.tipo == 'camion')
                     .where(Flotas.estado_operador == True)
                     .where(Viajes.material_id.isnot(None))
-                    .order_by(Viajes.id.desc())
+                    .group_by(Flotas.referencia, Materiales.nombre, Flotas.puntos)
+                    .order_by(func.max(Viajes.fecha_hora).desc())
                 )
 
             result = await self.db.execute(query)

@@ -218,3 +218,27 @@ class CamionRegistroResponse(BaseResponse):
             }
         }
 
+
+# Esquemas para el endpoint /transacciones-registro-ext
+class TransaccionRegistroData(BaseSchema):
+    transaccion_id: int = Field(..., description="ID de la transacción creada")
+
+
+class TransaccionRegistroResponse(BaseResponse):
+    """
+    Response model específico para la creación de transacciones con el schema simplificado.
+    """
+    data: Optional[TransaccionRegistroData] = None
+
+    class Config:
+        json_schema_extra = {
+            "example": {
+                "status_code": "201",
+                "status_name": "Created",
+                "timestamp": "2025-09-12T10:40:00Z",
+                "message": "Registro exitoso.",
+                "data": {"transaccion_id": 12345}
+            }
+        }
+
+

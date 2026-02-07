@@ -131,3 +131,84 @@ class TransaccionUpdate(BaseModel):
     fecha_hora: Optional[datetime] = None
     usuario_id: Optional[int] = None
     bl_id: Optional[int] = None
+
+
+class TransaccionCreateExt(BaseModel):
+    """
+    Schema simplificado para la creación de transacciones desde el endpoint refactorizado.
+    Los IDs se resuelven internamente a partir de los nombres.
+    """
+    tipo: str = Field(..., description="Tipo de transacción: 'Recibo', 'Despacho' o 'Traslado'")
+    viaje_id: Optional[int] = Field(None, description="ID del viaje (buque/camión). Se omite en Traslado")
+    material: str = Field(..., description="Nombre del material")
+    destino: Optional[str] = Field(None, description="Nombre del almacenamiento destino. Se omite en Despacho")
+    origen: Optional[str] = Field(None, description="Nombre del almacenamiento origen. Se omite en Recibo")
+    pit: Optional[int] = Field(default=1, description="Número del pit de cargue. Por defecto es 1. Se omite en Traslado")
+
+    @field_validator('tipo')
+    def tipo_valido(cls, value):
+        tipos_validos = ['recibo', 'despacho', 'traslado']
+        if value.strip().lower() not in tipos_validos:
+            raise ValueError(f"Tipo debe ser uno de: Recibo, Despacho, Traslado")
+        # Capitalizar primera letra
+        return value.strip().capitalize()
+
+    @model_validator(mode='after')
+    def validar_campos_por_tipo(self):
+        tipo_lower = (self.tipo or '').strip().lower()
+
+        if tipo_lower == 'traslado':
+            # Para Traslado: origen y destino son obligatorios, viaje_id y pit no aplican
+            if not self.origen:
+                raise ValueError("origen es obligatorio para transacciones de tipo Traslado")
+            if not self.destino:
+                raise ValueError("destino es obligatorio para transacciones de tipo Traslado")
+        elif tipo_lower == 'recibo':
+            # Para Recibo: viaje_id y destino son obligatorios, pit es opcional (default 1)
+            if self.viaje_id is None:
+                raise ValueError("viaje_id es obligatorio para transacciones de tipo Recibo")
+            if not self.destino:
+                raise ValueError("destino es obligatorio para transacciones de tipo Recibo")
+        elif tipo_lower == 'despacho':
+            # Para Despacho: viaje_id y origen son obligatorios, pit es opcional (default 1)
+            if self.viaje_id is None:
+                raise ValueError("viaje_id es obligatorio para transacciones de tipo Despacho")
+            if not self.origen:
+                raise ValueError("origen es obligatorio para transacciones de tipo Despacho")
+
+        return self
+
+    class Config:
+        json_schema_extra = {
+            "examples": [
+                {
+                    "summary": "Ejemplo Recibo (buque a silo) - pit opcional, default 1",
+                    "value": {
+                        "tipo": "Recibo",
+                        "viaje_id": 25843,
+                        "material": "AMERICAN YELLOW CORN",
+                        "destino": "SILO 1"
+                    }
+                },
+                {
+                    "summary": "Ejemplo Despacho (silo a camión) - con pit explícito",
+                    "value": {
+                        "tipo": "Despacho",
+                        "viaje_id": 11182,
+                        "material": "TORTA DE SOYA USA",
+                        "origen": "SILO 2",
+                        "pit": 4
+                    }
+                },
+                {
+                    "summary": "Ejemplo Traslado (silo a silo)",
+                    "value": {
+                        "tipo": "Traslado",
+                        "material": "MAIZ AMARILLO",
+                        "origen": "SILO 1",
+                        "destino": "SILO 3"
+                    }
+                }
+            ]
+        }
+

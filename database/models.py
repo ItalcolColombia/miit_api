@@ -29,7 +29,6 @@ AlmacenamientosMateriales = Table("almacenamientos_materiales", Base.metadata,
     Column("usuario_id", ForeignKey("usuarios.id"), primary_key=True),
 )
 
-
 class Bls(Base):
     __tablename__ = "bls"
     id = Column(Integer, primary_key=True, index=True)
@@ -66,7 +65,6 @@ class Clientes(Base):
     fecha_hora = Column(DateTime(timezone=True), server_default=func.timezone('America/Bogota', func.now()), onupdate=func.timezone('America/Bogota', func.now()))
     usuario_id = Column(Integer, nullable=True)
 
-
 class Flotas(Base):
     __tablename__ = "flotas"
     id = Column(Integer, primary_key=True, index=True)
@@ -77,8 +75,6 @@ class Flotas(Base):
     usuario_id = Column(Integer, nullable=True)
     estado_puerto = Column(Boolean)
     estado_operador = Column(Boolean)
-
-
 
 class Viajes(Base):
     __tablename__ = "viajes"
@@ -96,8 +92,6 @@ class Viajes(Base):
     usuario_id = Column(Integer, nullable=True)
     transacciones = relationship("Transacciones", backref="Viajes")
 
-
-
 class Materiales(Base):
     __tablename__ = "materiales"
     id = Column(Integer, primary_key=True, index=True)
@@ -112,8 +106,6 @@ class Materiales(Base):
     movimientos = relationship("Movimientos", backref="Materiales")
     # Definición de relaciones M:M
     almacenamientos = relationship('Almacenamientos', secondary='almacenamientos_materiales', back_populates='materiales')
-
-
     
 class Roles(Base):
     __tablename__ = "roles"
@@ -124,8 +116,6 @@ class Roles(Base):
     usuario_id = Column(Integer, nullable=True)
     usuarios = relationship("Usuarios", back_populates ="rol")
     permisos = relationship('Permisos', secondary='roles_permisos', back_populates='roles')
-
-
 RolesPermisos = Table("roles_permisos", Base.metadata,
     Column("rol_id", ForeignKey("roles.id"), primary_key=True),
     Column("permiso_id", ForeignKey("permisos.id"), primary_key=True),
@@ -201,12 +191,9 @@ class Pesadas(Base):
     bascula_id = Column(Integer, nullable=True)
     peso_meta = Column(Numeric(10,2), nullable=True)
     peso_real = Column(Numeric(10,2), nullable=False)
-    peso_vuelo = Column(Numeric(10,2), nullable=True)
-    peso_fino = Column(Numeric(10,2), nullable=True)
     fecha_hora = Column(DateTime(timezone=True), server_default=func.timezone('America/Bogota', func.now()), onupdate=func.timezone('America/Bogota', func.now()))
     usuario_id = Column(Integer, nullable=True)
     leido = Column(Boolean, nullable=False, default=False)
-
 
 class PesadasCorte(Base):
     __tablename__ = "pesadas_corte"
@@ -232,40 +219,6 @@ class LogsAuditoria(Base):
     valor_nuevo = Column(JSON, nullable=True)
     fecha_hora = Column(DateTime(timezone=True), server_default=func.timezone('America/Bogota', func.now()), onupdate=func.timezone('America/Bogota', func.now()))
     usuario_id = Column(Integer, nullable=True)
-
-class VBls(Base):
-    __tablename__ = "v_bls"
-    id = Column(Integer, primary_key=True, index=True)
-    no_bl = Column(String, index=True)
-    viaje_id = Column(Integer())
-    viaje = Column(String)
-    transaccion = Column(Integer(), nullable=True)
-    referencia = Column(String(300), unique=True, nullable=True)
-    material_id = Column(Integer)
-    material = Column(String)
-    cliente_id = Column(Integer)
-    cliente = Column(String)
-    peso_bl = Column(Numeric(10,2), nullable=False)
-    peso_real = Column(Numeric(10,2), nullable=True)
-    cargue_directo = Column(Boolean, nullable=True)
-    estado_puerto = Column(Boolean, nullable=True)
-    estado_operador = Column(Boolean, nullable=True)
-    fecha_hora = Column(DateTime(timezone=True), server_default=func.timezone('America/Bogota', func.now()), onupdate=func.timezone('America/Bogota', func.now()))
-    usuario_id = Column(Integer, nullable=True)
-    usuario = Column(String(200))
-
-class VFlotas(Base):
-    __tablename__ = "v_flotas"
-    id = Column(Integer, primary_key=True, index=True)
-    tipo = Column(String(6))
-    referencia = Column(String(300), unique=True, index=True)
-    puntos = Column(Integer,nullable=True)
-    estado_operador = Column(Boolean, nullable=True)
-    estado_puerto = Column(Boolean, nullable=True)
-    fecha_hora = Column(DateTime(timezone=True), server_default=func.timezone('America/Bogota', func.now()), onupdate=func.timezone('America/Bogota', func.now()))
-    usuario_id = Column(Integer, nullable=True)
-    usuario = Column(String(200))
-
 
 class VViajes(Base):
     __tablename__ = "v_viajes"
@@ -300,7 +253,6 @@ class VPesadasAcumulado(Base):
     usuario_id = Column(Integer, nullable=True)
     usuario = Column(String(200))
 
-
 class VUsuariosRoles(Base):
     __tablename__ = "v_usuarios_roles"
     id = Column(Integer,  primary_key=True, index=True)
@@ -328,7 +280,6 @@ class VRolesPermisos(Base):
     fecha_hora = Column(DateTime(timezone=True))
     usuario_id = Column(Integer, nullable=True)
     usuario = Column(String(200))
-
 
 class VAlmMateriales(Base):
     __tablename__ = "v_almacenamientos_materiales"

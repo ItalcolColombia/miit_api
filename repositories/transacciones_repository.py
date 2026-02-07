@@ -1,5 +1,6 @@
 from typing import Optional
 
+from sqlalchemy import select, func
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from core.contracts.auditor import Auditor
@@ -14,6 +15,32 @@ class TransaccionesRepository(IRepository[Transacciones, TransaccionResponse]):
     def __init__(self, model: type[Transacciones], schema: type[TransaccionResponse], db: AsyncSession, auditor:Auditor) -> None:
         self.db = db
         super().__init__(model, schema, db, auditor)
+
+    async def count_pending_by_viaje(self, viaje_id: int, exclude_tran_id: Optional[int] = None) -> int:
+        """
+        Cuenta las transacciones pendientes (estado='Proceso') para un viaje específico.
+
+        Args:
+            viaje_id: ID del viaje
+            exclude_tran_id: ID de transacción a excluir del conteo (opcional)
+
+        Returns:
+            Número de transacciones pendientes
+        """
+        try:
+            query = (
+                select(func.count(Transacciones.id))
+                .where(Transacciones.viaje_id == viaje_id)
+                .where(Transacciones.estado == 'Proceso')
+            )
+            if exclude_tran_id is not None:
+                query = query.where(Transacciones.id != exclude_tran_id)
+
+            result = await self.db.execute(query)
+            count = result.scalar_one_or_none()
+            return count if count else 0
+        except Exception:
+            return 0
 
     async def find_one_ordered(self, order_by: str = 'fecha_hora', desc: bool = True, **kwargs) -> Optional[TransaccionResponse]:
         """

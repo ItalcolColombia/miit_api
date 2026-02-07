@@ -10,9 +10,9 @@ from schemas.almacenamientos_materiales_schema import VAlmMaterialesResponse
 from schemas.materiales_schema import MaterialesResponse
 from schemas.movimientos_schema import MovimientosResponse
 from schemas.pesadas_schema import PesadaResponse, PesadaCreate
-from schemas.response_models import CreateResponse, ErrorResponse, ValidationErrorResponse, UpdateResponse
-from schemas.transacciones_schema import TransaccionResponse, TransaccionCreate
-from schemas.viajes_schema import VViajesResponse, ViajesActivosPorMaterialResponse
+from schemas.response_models import CreateResponse, ErrorResponse, ValidationErrorResponse, UpdateResponse, TransaccionRegistroResponse
+from schemas.transacciones_schema import TransaccionResponse, TransaccionCreate, TransaccionCreateExt
+from schemas.viajes_schema import ViajesActivosPorMaterialResponse
 from services.almacenamientos_materiales_service import AlmacenamientosMaterialesService
 from services.auth_service import AuthService
 from services.flotas_service import FlotasService
@@ -119,7 +119,7 @@ async def get_viajes_activos_por_material(
             response_model=UpdateResponse,
             responses={
                 status.HTTP_400_BAD_REQUEST: {"model": ErrorResponse},
-                status.HTTP_422_UNPROCESSABLE_ENTITY: {"model": ValidationErrorResponse},
+                status.HTTP_422_UNPROCESSABLE_CONTENT: {"model": ValidationErrorResponse},
             })
 async def end_buque(
         puerto_id: str,
@@ -155,7 +155,7 @@ async def end_buque(
             response_model=UpdateResponse,
             responses={
                 status.HTTP_400_BAD_REQUEST: {"model": ErrorResponse},
-                status.HTTP_422_UNPROCESSABLE_ENTITY: {"model": ValidationErrorResponse},
+                status.HTTP_422_UNPROCESSABLE_CONTENT: {"model": ValidationErrorResponse},
             })
 async def set_points_camion(
         truck_plate: str,
@@ -193,7 +193,7 @@ async def set_points_camion(
             response_model=UpdateResponse,
             responses={
                 status.HTTP_400_BAD_REQUEST: {"model": ErrorResponse},
-                status.HTTP_422_UNPROCESSABLE_ENTITY: {"model": ValidationErrorResponse},
+                status.HTTP_422_UNPROCESSABLE_CONTENT: {"model": ValidationErrorResponse},
             })
 async def end_camion(
         puerto_id: str,
@@ -292,7 +292,7 @@ async def get_movs_listado(
              response_model=CreateResponse,
              responses={
                  status.HTTP_400_BAD_REQUEST: {"model": ErrorResponse},
-                 status.HTTP_422_UNPROCESSABLE_ENTITY: {"model": ValidationErrorResponse},
+                 status.HTTP_422_UNPROCESSABLE_CONTENT: {"model": ValidationErrorResponse},
              })
 async def create_pesada(
     pesada: PesadaCreate,
@@ -388,7 +388,7 @@ async def get_trans_listado(
              response_model=CreateResponse,
              responses={
                  status.HTTP_400_BAD_REQUEST: {"model": ErrorResponse},
-                 status.HTTP_422_UNPROCESSABLE_ENTITY: {"model": ValidationErrorResponse},
+                 status.HTTP_422_UNPROCESSABLE_CONTENT: {"model": ValidationErrorResponse},
              })
 async def create_transaccion(
     tran: TransaccionCreate,
@@ -418,6 +418,49 @@ async def create_transaccion(
             message=str(e)
         )
 
+@router.post("/transacciones-registro-ext",
+             status_code=status.HTTP_201_CREATED,
+             summary="Registrar nueva transacción (schema simplificado)",
+             description="Endpoint para registrar transacciones usando nombres en lugar de IDs. "
+                         "El peso_meta se calcula automáticamente de los BLs del viaje agrupados por material. "
+                         "El ref1 se obtiene del puerto_id del viaje.",
+             response_model=TransaccionRegistroResponse,
+             responses={
+                 status.HTTP_201_CREATED: {"model": TransaccionRegistroResponse},
+                 status.HTTP_400_BAD_REQUEST: {"model": ErrorResponse},
+                 status.HTTP_404_NOT_FOUND: {"model": ErrorResponse},
+                 status.HTTP_409_CONFLICT: {"model": ErrorResponse},
+                 status.HTTP_422_UNPROCESSABLE_CONTENT: {"model": ValidationErrorResponse},
+             })
+async def create_transaccion_ext(
+    tran: TransaccionCreateExt,
+    service: TransaccionesService = Depends(get_transacciones_service),
+):
+    # Identificador para logs
+    tran_identifier = f"viaje={tran.viaje_id}, material={tran.material}" if tran.viaje_id else f"origen={tran.origen}/destino={tran.destino}, material={tran.material}"
+    log.info(f"Payload recibido: Transacción ext tipo={tran.tipo} {tran_identifier} - Crear")
+    try:
+        tran_creada = await service.create_transaccion_ext(tran)
+        return response_json(
+            status_code=status.HTTP_201_CREATED,
+            message="Registro exitoso.",
+            data={"transaccion_id": tran_creada.id}
+        )
+
+    except HTTPException as http_exc:
+        log.error(f"La transacción ext {tran_identifier} no fue registrada: {http_exc.detail}")
+        return response_json(
+            status_code=http_exc.status_code,
+            message=http_exc.detail
+        )
+
+    except Exception as e:
+        log.error(f"Error al procesar petición de registro de transacción ext {tran_identifier}: {e}")
+        return response_json(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            message=str(e)
+        )
+
 @router.put("/transaccion-finalizar/{tran_id}",
             status_code=status.HTTP_200_OK,
             summary="Modifica el estado de una transacción en curso",
@@ -425,7 +468,7 @@ async def create_transaccion(
             response_model=UpdateResponse,
             responses={
                 status.HTTP_400_BAD_REQUEST: {"model": ErrorResponse},
-                status.HTTP_422_UNPROCESSABLE_ENTITY: {"model": ValidationErrorResponse},
+                status.HTTP_422_UNPROCESSABLE_CONTENT: {"model": ValidationErrorResponse},
             })
 async def end_transaction(
         tran_id: int,
@@ -462,7 +505,7 @@ async def end_transaction(
              response_model=CreateResponse,
              responses={
                  status.HTTP_400_BAD_REQUEST: {"model": ErrorResponse},
-                 status.HTTP_422_UNPROCESSABLE_ENTITY: {"model": ValidationErrorResponse},
+                 status.HTTP_422_UNPROCESSABLE_CONTENT: {"model": ValidationErrorResponse},
              })
 async def crear_ajuste(
     data: AjusteCreate,

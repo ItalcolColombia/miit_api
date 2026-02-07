@@ -119,11 +119,19 @@ async def get_transacciones_service(
         trans_repository: Annotated[TransaccionesRepository, Depends(get_transacciones_repository)],
         pesadas_service: Annotated[PesadasService, Depends(get_pesadas_service)],
         mov_service: Annotated[MovimientosService, Depends(get_mov_service)],
+        alm_service: Annotated[AlmacenamientosService, Depends(get_alm_service)],
+        mat_service: Annotated[MaterialesService, Depends(get_mat_service)],
+        viajes_repository: Annotated[ViajesRepository, Depends(get_viajes_repository)],
+        bls_repository: Annotated[BlsRepository, Depends(get_bls_repository)],
 ) -> TransaccionesService:
     return TransaccionesService(
         tran_repository=trans_repository,
         pesadas_service=pesadas_service,
         mov_service=mov_service,
+        alm_service=alm_service,
+        mat_service=mat_service,
+        viajes_repository=viajes_repository,
+        bls_repository=bls_repository,
     )
 
 

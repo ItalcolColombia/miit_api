@@ -4,9 +4,9 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from core.contracts.auditor import Auditor
-from database.models import Bls, VBls
+from database.models import Bls
 from repositories.base_repository import IRepository
-from schemas.bls_schema import BlsResponse, VBlsResponse
+from schemas.bls_schema import BlsResponse
 
 
 class BlsRepository(IRepository[Bls, BlsResponse]):
@@ -18,10 +18,10 @@ class BlsRepository(IRepository[Bls, BlsResponse]):
         super().__init__(model, schema, db, auditor)
 
 
-    async def get_bls_viaje(self, ref: int) -> List[VBlsResponse] | None:
+    async def get_bls_viaje(self, ref: int) -> List[BlsResponse] | None:
         query = (
-            select(VBls)
-            .where(VBls.viaje_id == ref)
+            select(Bls)
+            .where(Bls.viaje_id == ref)
         )
         result = await self.db.execute(query)
         return result.scalars().all()

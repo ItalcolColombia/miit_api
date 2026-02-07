@@ -2,7 +2,7 @@ from typing import List, Optional
 from decimal import Decimal
 
 from fastapi_pagination import Page, Params
-from sqlalchemy import select
+from sqlalchemy import select, func
 from sqlalchemy import update as sqlalchemy_update
 from starlette import status
 
@@ -10,9 +10,13 @@ from core.config.context import current_user_id
 from core.exceptions.base_exception import BasedException
 from core.exceptions.entity_exceptions import EntityNotFoundException, EntityAlreadyRegisteredException
 from database.connection import DatabaseConfiguration
-from database.models import Transacciones
+from database.models import Transacciones, Bls
+from repositories.bls_repository import BlsRepository
 from repositories.transacciones_repository import TransaccionesRepository
-from schemas.transacciones_schema import TransaccionResponse, TransaccionCreate, TransaccionUpdate
+from repositories.viajes_repository import ViajesRepository
+from schemas.transacciones_schema import TransaccionResponse, TransaccionCreate, TransaccionUpdate, TransaccionCreateExt
+from services.almacenamientos_service import AlmacenamientosService
+from services.materiales_service import MaterialesService
 from services.movimientos_service import MovimientosService
 from services.pesadas_service import PesadasService
 from utils.any_utils import AnyUtils
@@ -23,10 +27,23 @@ log = LoggerUtil()
 
 class TransaccionesService:
 
-    def __init__(self, tran_repository: TransaccionesRepository, pesadas_service : PesadasService, mov_service : MovimientosService) -> None:
+    def __init__(
+        self,
+        tran_repository: TransaccionesRepository,
+        pesadas_service: PesadasService,
+        mov_service: MovimientosService,
+        alm_service: AlmacenamientosService = None,
+        mat_service: MaterialesService = None,
+        viajes_repository: ViajesRepository = None,
+        bls_repository: BlsRepository = None,
+    ) -> None:
         self._repo = tran_repository
         self.pesadas_service = pesadas_service
         self.mov_service = mov_service
+        self.alm_service = alm_service
+        self.mat_service = mat_service
+        self.viajes_repo = viajes_repository
+        self.bls_repo = bls_repository
 
     async def create_transaccion(self, tran: TransaccionCreate) -> TransaccionResponse:
         """
@@ -272,6 +289,9 @@ class TransaccionesService:
             suma_pesadas = await self.pesadas_service.get_suma_peso_by_transaccion(tran_id=tran.id)
             peso_acc = Decimal(suma_pesadas.get('peso_total', 0) or 0) if suma_pesadas else Decimal('0')
 
+            # Obtener el tipo de transacción para usar después del bloque de sesión
+            tipo_tran_para_envio = str(tran.tipo).strip().lower() if tran.tipo else ''
+
             # 3. Ejecutar operaciones en una única transacción DB
             async with DatabaseConfiguration._async_session() as session:
                 async with session.begin():
@@ -442,6 +462,11 @@ class TransaccionesService:
                     updated_resp = _TR.model_validate(tran_obj)
 
             # Fin de la sesión/commit
+
+            # Después de finalizar exitosamente, verificar si es la última transacción de tipo Recibo
+            # para el viaje y ejecutar envío final automáticamente
+            await self._verificar_y_ejecutar_envio_final(tran, tipo_tran_para_envio)
+
             return updated_resp
 
         except EntityNotFoundException as e:
@@ -454,3 +479,318 @@ class TransaccionesService:
                 message=f"Error inesperado al finalizar la transacción : {e}",
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
+
+    async def _verificar_y_ejecutar_envio_final(self, tran: TransaccionResponse, tipo_lower: str) -> None:
+        """
+        Verifica si es la última transacción de tipo Recibo para el viaje y ejecuta el envío final.
+
+        Args:
+            tran: La transacción que se acaba de finalizar
+            tipo_lower: El tipo de transacción en minúsculas
+        """
+        # Solo aplica para transacciones de tipo Recibo (buques)
+        if tipo_lower != 'recibo':
+            return
+
+        viaje_id = tran.viaje_id
+        if viaje_id is None:
+            log.warning(f"Transacción {tran.id} de tipo Recibo sin viaje_id, no se puede verificar envío final")
+            return
+
+        try:
+            # Contar transacciones pendientes (estado='Proceso') para este viaje
+            pending_count = await self._repo.count_pending_by_viaje(viaje_id)
+
+            log.info(f"Verificando envío final para viaje {viaje_id}: {pending_count} transacciones pendientes")
+
+            if pending_count > 0:
+                log.info(f"Aún quedan {pending_count} transacciones pendientes para viaje {viaje_id}, no se ejecuta envío final")
+                return
+
+            # No quedan transacciones pendientes, ejecutar envío final
+            log.info(f"Última transacción finalizada para viaje {viaje_id}, ejecutando envío final automático")
+
+            # Obtener el puerto_id del viaje
+            viaje = await self.viajes_repo.get_by_id(viaje_id)
+            if not viaje:
+                log.error(f"No se encontró viaje con ID {viaje_id} para envío final")
+                return
+
+            puerto_id = viaje.puerto_id
+
+            # Obtener las pesadas para el envío final
+            from services.envio_final_service import fetch_preview_for_puerto, notify_envio_final
+
+            pesadas_to_send = await fetch_preview_for_puerto(puerto_id, self.pesadas_service)
+
+            log.info(f"EnvioFinal automático: lista preparada para envío para {puerto_id} con {len(pesadas_to_send)} items")
+
+            # Loguear el contenido completo que se va a enviar
+            try:
+                import json
+                pesadas_log = []
+                for item in pesadas_to_send:
+                    if hasattr(item, 'model_dump'):
+                        pesadas_log.append(item.model_dump())
+                    elif hasattr(item, '__dict__'):
+                        pesadas_log.append(item.__dict__)
+                    else:
+                        pesadas_log.append(item)
+                log.info(f"EnvioFinal automático - contenido a enviar para {puerto_id}: {json.dumps(pesadas_log, default=str, indent=2)}")
+            except Exception as e_log:
+                log.warning(f"No se pudo loguear el contenido del envío final: {e_log}")
+
+            # Para ejecutar notify_envio_final necesitamos viajes_service
+            # Como no lo tenemos directamente, usamos el método send_envio_final_external del viaje
+            # Necesitamos crear una instancia temporal o usar otra estrategia
+
+            # Convertir pesadas a formato requerido
+            pesadas_converted = []
+            for item in pesadas_to_send:
+                try:
+                    if hasattr(item, 'model_dump'):
+                        obj = item.model_dump()
+                    elif hasattr(item, 'dict'):
+                        obj = item.dict()
+                    elif hasattr(item, '__dict__'):
+                        obj = item.__dict__
+                    else:
+                        obj = dict(item)
+                except Exception:
+                    obj = item if isinstance(item, dict) else {}
+                obj['voyage'] = puerto_id
+                pesadas_converted.append(obj)
+
+            # Ejecutar envío final usando el servicio de API externa
+            await self._ejecutar_envio_final_externo(puerto_id, pesadas_converted)
+
+            log.info(f"EnvioFinal automático completado exitosamente para viaje {viaje_id} (puerto_id={puerto_id})")
+
+        except Exception as e:
+            # No lanzar excepción para no interrumpir el flujo de finalización de transacción
+            log.error(f"Error al ejecutar envío final automático para viaje {viaje_id}: {e}", exc_info=True)
+
+    async def _ejecutar_envio_final_externo(self, puerto_id: str, pesadas: list) -> None:
+        """
+        Ejecuta el envío final a la API externa.
+
+        Args:
+            puerto_id: ID del puerto/viaje
+            pesadas: Lista de pesadas a enviar
+        """
+        from core.config.settings import get_settings
+        from services.ext_api_service import ExtApiService
+        from decimal import Decimal
+        from datetime import datetime, timezone
+        from utils.time_util import now_local
+        import uuid
+        import json
+
+        settings = get_settings()
+        ext_service = ExtApiService()
+
+        # Normalizar payloads
+        payloads = []
+        for item in pesadas:
+            it = item if isinstance(item, dict) else {}
+
+            peso_val = it.get('peso', None)
+            try:
+                if peso_val is None:
+                    peso_str = "0"
+                else:
+                    peso_dec = Decimal(peso_val) if not isinstance(peso_val, str) else Decimal(peso_val)
+                    peso_str = format(peso_dec.quantize(Decimal('0.00')), 'f')
+            except Exception:
+                peso_str = "0"
+
+            fecha = it.get('fecha_hora', None)
+            if fecha is None:
+                fecha_iso = now_local().isoformat()
+            else:
+                try:
+                    fecha_iso = fecha if isinstance(fecha, str) else (fecha.isoformat() if hasattr(fecha, 'isoformat') else str(fecha))
+                except Exception:
+                    fecha_iso = str(fecha)
+
+            payloads.append({
+                "voyage": puerto_id,
+                "referencia": it.get('referencia'),
+                "consecutivo": int(it.get('consecutivo') or 0),
+                "transaccion": int(it.get('transaccion') or 0),
+                "pit": int(it.get('pit') or 0),
+                "material": it.get('material') or "",
+                "peso": peso_str,
+                "puerto_id": it.get('puerto_id') or puerto_id,
+                "fecha_hora": fecha_iso,
+                "usuario_id": int(it.get('usuario_id') or 0),
+                "usuario": it.get('usuario') or "",
+            })
+
+        if not payloads:
+            log.warning(f"EnvioFinal automático: no hay payloads para enviar a {puerto_id}")
+            return
+
+        # Enviar solo el último registro (más reciente por fecha_hora)
+        def _parse_date(v):
+            try:
+                if isinstance(v, str):
+                    try:
+                        return datetime.fromisoformat(v)
+                    except Exception:
+                        return datetime.fromisoformat(v.replace('Z', '+00:00'))
+                return v
+            except Exception:
+                return datetime.min.replace(tzinfo=timezone.utc)
+
+        last_item = max(payloads, key=lambda x: _parse_date(x.get('fecha_hora')))
+
+        # Headers
+        idempotency_key = f"{last_item.get('referencia') or ''}-{last_item.get('transaccion') or 0}"
+        correlation_id = str(uuid.uuid4())
+        headers = {"Idempotency-Key": idempotency_key, "X-Correlation-Id": correlation_id}
+
+        endpoint = f"{settings.TG_API_URL}/api/v1/Metalsoft/EnvioFinal"
+
+        # Loguear el payload final
+        log.info(f"EnvioFinal automático - enviando a {endpoint}")
+        log.info(f"EnvioFinal automático - headers: {json.dumps(headers)}")
+        log.info(f"EnvioFinal automático - payload: {json.dumps(last_item, default=str)}")
+
+        # Serializar y enviar
+        serialized = AnyUtils.serialize_data(last_item)
+        await ext_service.post(serialized, endpoint, extra_headers=headers)
+
+        log.info(f"EnvioFinal automático - notificación enviada exitosamente para {puerto_id}")
+
+    async def create_transaccion_ext(self, tran_ext: TransaccionCreateExt) -> TransaccionResponse:
+        """
+        Create a new transaction using the simplified external schema.
+        Resolves names to IDs and calculates peso_meta from BLs.
+
+        Args:
+            tran_ext (TransaccionCreateExt): The simplified transaction data.
+
+        Returns:
+            TransaccionResponse: The created transaction object.
+
+        Raises:
+            EntityNotFoundException: If viaje, material, or almacenamiento is not found.
+            EntityAlreadyRegisteredException: If a similar transaction already exists.
+            BasedException: For unexpected errors during the creation process.
+        """
+        try:
+            tipo_lower = tran_ext.tipo.strip().lower()
+
+            # 1. Resolver material_id por nombre
+            material = await self.mat_service.get_mat_by_name(tran_ext.material)
+            if not material:
+                raise EntityNotFoundException(f"No existe material con nombre '{tran_ext.material}'")
+            material_id = material
+
+            # 2. Variables para almacenar IDs resueltos
+            origen_id = None
+            destino_id = None
+            viaje_id = tran_ext.viaje_id
+            pit = tran_ext.pit
+            ref1 = None
+            peso_meta = Decimal('0')
+
+            # 3. Resolver almacenamientos según tipo
+            if tran_ext.origen:
+                origen_id = await self.alm_service.get_mat_by_name(tran_ext.origen)
+                if not origen_id:
+                    raise EntityNotFoundException(f"No existe almacenamiento con nombre '{tran_ext.origen}'")
+
+            if tran_ext.destino:
+                destino_id = await self.alm_service.get_mat_by_name(tran_ext.destino)
+                if not destino_id:
+                    raise EntityNotFoundException(f"No existe almacenamiento con nombre '{tran_ext.destino}'")
+
+            # 4. Si es Recibo o Despacho, obtener ref1 del viaje y calcular peso_meta
+            if tipo_lower in ['recibo', 'despacho']:
+                if viaje_id is None:
+                    raise EntityNotFoundException("viaje_id es requerido para transacciones de tipo Recibo/Despacho")
+
+                # Obtener viaje para ref1 (puerto_id)
+                viaje = await self.viajes_repo.get_by_id(viaje_id)
+                if not viaje:
+                    raise EntityNotFoundException(f"No existe viaje con ID '{viaje_id}'")
+
+                ref1 = viaje.puerto_id
+
+                if tipo_lower == 'recibo':
+                    # Para Recibo: calcular peso_meta sumando peso_bl de los BLs del viaje con el mismo material
+                    peso_meta = await self._calcular_peso_meta_por_material(viaje_id, material_id)
+                    if peso_meta <= 0:
+                        log.warning(f"No se encontraron BLs para viaje {viaje_id} con material_id {material_id}. peso_meta = 0")
+                else:
+                    # Para Despacho: tomar peso_meta directamente del viaje
+                    peso_meta = Decimal(str(viaje.peso_meta)) if viaje.peso_meta else Decimal('0')
+                    if peso_meta <= 0:
+                        log.warning(f"El viaje {viaje_id} no tiene peso_meta definido. peso_meta = 0")
+
+            # 5. Verificar si ya existe una transacción similar
+            existing = await self._repo.find_one(viaje_id=viaje_id, material_id=material_id, tipo=tran_ext.tipo)
+            if existing:
+                raise EntityAlreadyRegisteredException(
+                    f"Ya existe transacción de tipo '{tran_ext.tipo}' para viaje '{viaje_id}' con material '{tran_ext.material}'"
+                )
+
+            # 6. Crear el objeto TransaccionCreate
+            tran_create = TransaccionCreate(
+                material_id=material_id,
+                tipo=tran_ext.tipo,
+                viaje_id=viaje_id,
+                pit=pit,
+                ref1=ref1,
+                fecha_inicio=now_local(),
+                origen_id=origen_id,
+                destino_id=destino_id,
+                peso_meta=peso_meta,
+                estado="Registrada",
+                leido=False,
+            )
+
+            # 7. Crear la transacción
+            tran_nueva = await self._repo.create(tran_create)
+            log.info(f"Transacción creada: tipo={tran_ext.tipo}, viaje_id={viaje_id}, material={tran_ext.material}")
+
+            return tran_nueva
+
+        except EntityNotFoundException as e:
+            raise e
+        except EntityAlreadyRegisteredException as e:
+            raise e
+        except Exception as e:
+            log.error(f"Error al crear transacción ext: {e}")
+            raise BasedException(
+                message=f"Error inesperado al crear la transacción: {str(e)}",
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
+
+    async def _calcular_peso_meta_por_material(self, viaje_id: int, material_id: int) -> Decimal:
+        """
+        Calcula el peso_meta sumando el peso_bl de todos los BLs del viaje que tengan el material especificado.
+
+        Args:
+            viaje_id: ID del viaje
+            material_id: ID del material
+
+        Returns:
+            Decimal: Suma de peso_bl de los BLs que coinciden
+        """
+        try:
+            # Usar el repositorio de BLs para obtener la suma
+            query = (
+                select(func.coalesce(func.sum(Bls.peso_bl), 0))
+                .where(Bls.viaje_id == viaje_id)
+                .where(Bls.material_id == material_id)
+            )
+            result = await self.bls_repo.db.execute(query)
+            total = result.scalar_one_or_none()
+            return Decimal(str(total)) if total else Decimal('0')
+        except Exception as e:
+            log.error(f"Error calculando peso_meta para viaje {viaje_id}, material {material_id}: {e}")
+            return Decimal('0')
+

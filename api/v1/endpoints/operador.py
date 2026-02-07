@@ -37,7 +37,7 @@ router = APIRouter(prefix="/integrador", tags=["Integrador"],  dependencies=[Dep
              response_model=CreateResponse,
              responses={
                  status.HTTP_400_BAD_REQUEST: {"model": ErrorResponse},
-                 status.HTTP_422_UNPROCESSABLE_ENTITY: {"model": ValidationErrorResponse},
+                 status.HTTP_422_UNPROCESSABLE_CONTENT: {"model": ValidationErrorResponse},
              })
 async def create_buque(
         flota: ViajeBuqueExtCreate,
@@ -83,7 +83,7 @@ async def create_buque(
              response_model=CreateResponse,
              responses={
                  status.HTTP_400_BAD_REQUEST: {"model": ErrorResponse},
-                 status.HTTP_422_UNPROCESSABLE_ENTITY: {"model": ValidationErrorResponse},
+                 status.HTTP_422_UNPROCESSABLE_CONTENT: {"model": ValidationErrorResponse},
              })
 async def set_load(
         bl: BlsExtCreate,
@@ -120,7 +120,7 @@ async def set_load(
             response_model=UpdateResponse,
             responses={
                 status.HTTP_400_BAD_REQUEST: {"model": ErrorResponse},
-                status.HTTP_422_UNPROCESSABLE_ENTITY: {"model": ValidationErrorResponse},
+                status.HTTP_422_UNPROCESSABLE_CONTENT: {"model": ValidationErrorResponse},
             })
 async def buque_in(
         puerto_id: str,
@@ -157,7 +157,7 @@ async def buque_in(
             response_model=UpdateResponse,
             responses={
                 status.HTTP_400_BAD_REQUEST: {"model": ErrorResponse},
-                status.HTTP_422_UNPROCESSABLE_ENTITY: {"model": ValidationErrorResponse},
+                status.HTTP_422_UNPROCESSABLE_CONTENT: {"model": ValidationErrorResponse},
             })
 async def end_buque(
         puerto_id: str,
@@ -193,7 +193,7 @@ async def end_buque(
             response_model=UpdateResponse,
             responses={
                 status.HTTP_400_BAD_REQUEST: {"model": ErrorResponse},
-                status.HTTP_422_UNPROCESSABLE_ENTITY: {"model": ValidationErrorResponse},
+                status.HTTP_422_UNPROCESSABLE_CONTENT: {"model": ValidationErrorResponse},
             })
 async def load_release_puerto(
         no_bl: str,
@@ -229,7 +229,7 @@ async def load_release_puerto(
             response_model=UpdateResponse,
             responses={
                 status.HTTP_400_BAD_REQUEST: {"model": ErrorResponse},
-                status.HTTP_422_UNPROCESSABLE_ENTITY: {"model": ValidationErrorResponse},
+                status.HTTP_422_UNPROCESSABLE_CONTENT: {"model": ValidationErrorResponse},
             })
 async def load_release_operador(
         no_bl: str,
@@ -266,7 +266,7 @@ async def load_release_operador(
              responses={
                  status.HTTP_201_CREATED: {"model": CamionRegistroResponse},
                  status.HTTP_400_BAD_REQUEST: {"model": ErrorResponse},
-                 status.HTTP_422_UNPROCESSABLE_ENTITY: {"model": ValidationErrorResponse},
+                 status.HTTP_422_UNPROCESSABLE_CONTENT: {"model": ValidationErrorResponse},
              })
 async def create_camion(
         flota: ViajeCamionExtCreate,
@@ -311,7 +311,7 @@ async def create_camion(
             responses={
                 status.HTTP_200_OK: {"model": CamionIngresoResponse},
                 status.HTTP_400_BAD_REQUEST: {"model": ErrorResponse},
-                status.HTTP_422_UNPROCESSABLE_ENTITY: {"model": ValidationErrorResponse},
+                status.HTTP_422_UNPROCESSABLE_CONTENT: {"model": ValidationErrorResponse},
             })
 async def in_camion(
         puerto_id: str,
@@ -365,7 +365,7 @@ async def in_camion(
             response_model=UpdateResponse,
             responses={
                 status.HTTP_400_BAD_REQUEST: {"model": ErrorResponse},
-                status.HTTP_422_UNPROCESSABLE_ENTITY: {"model": ValidationErrorResponse},
+                status.HTTP_422_UNPROCESSABLE_CONTENT: {"model": ValidationErrorResponse},
             })
 async def out_camion(
         puerto_id: str,

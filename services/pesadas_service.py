@@ -200,6 +200,10 @@ class PesadasService:
 
             # Excluir campos de snapshot que no forman parte del modelo ORM Pesadas
             pesada_payload = pesada_data.model_dump(exclude={'saldo_anterior', 'saldo_nuevo'})
+
+            # Obtener usuario_id de la sesión actual
+            pesada_payload['usuario_id'] = current_user_id.get()
+
             pesada_model = Pesadas(**pesada_payload)
 
             # Si el repositorio tiene una sesión DB (runtime), realizar ambas operaciones en una transacción

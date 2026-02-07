@@ -13,8 +13,6 @@ class PesadaBase(BaseSchema):
     bascula_id: Optional[int] = None
     peso_meta: Optional[Decimal] = None
     peso_real: Decimal
-    peso_vuelo: Optional[Decimal] = None
-    peso_fino: Optional[Decimal] = None
     fecha_hora: Optional[datetime] = None
     usuario_id: Optional[int] = None
     leido:bool
@@ -26,10 +24,7 @@ class PesadaCreate(BaseSchema):
     bascula_id: Optional[int] = None
     peso_meta: Optional[Decimal] = Field(None, max_digits=10, decimal_places=2)
     peso_real: Decimal = Field(..., max_digits=10, decimal_places=2)
-    peso_vuelo: Optional[Decimal] = Field(None, max_digits=10, decimal_places=2)
-    peso_fino: Optional[Decimal] = Field(None, max_digits=10, decimal_places=2)
     fecha_hora: Optional[datetime] = None
-    usuario_id: Optional[int] = None
     leido: Optional[bool] = False
     # Campos opcionales para snapshot de saldo SCADA
     saldo_anterior: Optional[Decimal] = Field(None, max_digits=15, decimal_places=3)
@@ -44,8 +39,6 @@ class PesadaCreate(BaseSchema):
                 "fecha_hora": datetime(2024, 5, 17),
                 "peso_meta": 0.00,
                 "peso_real": 2150.00,
-                "peso_vuelo": 0.00,
-                "peso_fino": 0.00,
                 "saldo_anterior": 1234.123,
                 "saldo_nuevo": 3456.456
             }
@@ -57,10 +50,7 @@ class PesadaUpdate(PesadaCreate):
     bascula_id: Optional[int] = None
     peso_meta: Optional[Decimal] = Field(None, max_digits=10, decimal_places=2)
     peso_real: Decimal = Field(..., max_digits=10, decimal_places=2)
-    peso_vuelo: Optional[Decimal] = Field(None, max_digits=10, decimal_places=2)
-    peso_fino: Optional[Decimal] = Field(None, max_digits=10, decimal_places=2)
     fecha_hora: Optional[datetime] = None
-    usuario_id: Optional[int] = None
     leido: Optional[bool] = False
     saldo_anterior: Optional[Decimal] = Field(None, max_digits=15, decimal_places=3)
     saldo_nuevo: Optional[Decimal] = Field(None, max_digits=15, decimal_places=3)
