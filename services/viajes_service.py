@@ -326,14 +326,15 @@ class ViajesService:
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
 
-    async def chg_estado_flota(self, puerto_id: str, estado_puerto: Optional[bool] = None, estado_operador: Optional[bool] = None) -> FlotasResponse:
+    async def chg_estado_flota(self, puerto_id: Optional[str] = None, estado_puerto: Optional[bool] = None, estado_operador: Optional[bool] = None, viaje_id: Optional[int] = None) -> FlotasResponse:
         """
         Change the status of a flota associated with a viaje.
 
         Args:
-            puerto_id (str): The puerto_id of the viaje.
+            puerto_id (str): The puerto_id of the viaje (optional if viaje_id is provided).
             estado_puerto (bool): The puerto status value for the flota.
             estado_operador (bool): The operador status value for the flota.
+            viaje_id (int): The id of the viaje (optional if puerto_id is provided).
 
         Returns:
             FlotasResponse: The updated flota object.
@@ -341,11 +342,19 @@ class ViajesService:
         Raises:
             EntityNotFoundException: If viaje or flota is not found.
             BasedException: If update fails due to database or other errors.
+            ValueError: If neither puerto_id nor viaje_id is provided.
         """
         try:
-            viaje = await self.get_viaje_by_puerto_id(puerto_id)
-            if not viaje:
-                raise EntityNotFoundException(f"Viaje con puerto_id: '{puerto_id}' no existe")
+            if viaje_id is not None:
+                viaje = await self._repo.find_one(id=viaje_id)
+                if not viaje:
+                    raise EntityNotFoundException(f"Viaje con id: '{viaje_id}' no existe")
+            elif puerto_id is not None:
+                viaje = await self.get_viaje_by_puerto_id(puerto_id)
+                if not viaje:
+                    raise EntityNotFoundException(f"Viaje con puerto_id: '{puerto_id}' no existe")
+            else:
+                raise ValueError("Debe proporcionar puerto_id o viaje_id")
 
             flota = await self.flotas_service.get_flota(viaje.flota_id)
             if not flota:
@@ -379,10 +388,13 @@ class ViajesService:
             return updated_flota
         except EntityNotFoundException as e:
             raise e
+        except ValueError as e:
+            raise e
         except Exception as e:
-            log.error(f"Error al cambiar estado de flota con puerto_id {puerto_id}: {str(e)}")
+            identifier = f"viaje_id {viaje_id}" if viaje_id else f"puerto_id {puerto_id}"
+            log.error(f"Error al cambiar estado de flota con {identifier}: {str(e)}")
             raise BasedException(
-                message=f"Error al cambiar el estado de flota con puerto_id {puerto_id} : {str(e)}",
+                message=f"Error al cambiar el estado de flota con {identifier} : {str(e)}",
                 status_code=status.HTTP_424_FAILED_DEPENDENCY
             )
 

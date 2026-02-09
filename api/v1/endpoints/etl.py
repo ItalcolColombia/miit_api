@@ -185,7 +185,7 @@ async def set_points_camion(
             message=f"Error interno: {e}"
         )
 
-@router.put("/camion-finalizar/{puerto_id}",
+@router.put("/camion-finalizar/{viaje_id}",
             status_code=status.HTTP_200_OK,
             summary="Modificar estado de un camion por cargue",
             description="Evento realizado por la automatización al dar por finalizado el recibo de buque."
@@ -196,27 +196,27 @@ async def set_points_camion(
                 status.HTTP_422_UNPROCESSABLE_CONTENT: {"model": ValidationErrorResponse},
             })
 async def end_camion(
-        puerto_id: str,
+        viaje_id: int,
         service: ViajesService = Depends(get_viajes_service)):
-    log.info(f"Payload recibido: Flota {puerto_id} - Partida")
+    log.info(f"Payload recibido: Viaje {viaje_id} - Partida")
     try:
 
-        await service.chg_estado_flota(puerto_id, estado_operador=False)
-        log.info(f"Finalización de cargue para cita {puerto_id} registrada exitosamente.")
+        await service.chg_estado_flota(viaje_id=viaje_id, estado_operador=False)
+        log.info(f"Finalización de cargue para viaje {viaje_id} registrada exitosamente.")
         return response_json(
             status_code=status.HTTP_200_OK,
-            message=f"Finalización de cargue para cita {puerto_id} registrada exitosamente.",
+            message=f"Finalización de cargue para viaje {viaje_id} registrada exitosamente.",
         )
 
     except HTTPException as http_exc:
-        log.error(f"Finalización de cargue para cita {puerto_id} falló: {http_exc.detail}")
+        log.error(f"Finalización de cargue para viaje {viaje_id} falló: {http_exc.detail}")
         return response_json(
             status_code=http_exc.status_code,
             message=http_exc.detail
         )
 
     except Exception as e:
-        log.error(f"Error al procesar marcado de partida de buque {puerto_id} desde el puerto: {e}")
+        log.error(f"Error al procesar marcado de partida de viaje {viaje_id}: {e}")
         return response_json(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             message=str(e)

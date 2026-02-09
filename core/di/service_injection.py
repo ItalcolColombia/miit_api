@@ -123,6 +123,7 @@ async def get_transacciones_service(
         mat_service: Annotated[MaterialesService, Depends(get_mat_service)],
         viajes_repository: Annotated[ViajesRepository, Depends(get_viajes_repository)],
         bls_repository: Annotated[BlsRepository, Depends(get_bls_repository)],
+        flotas_repository: Annotated[FlotasRepository, Depends(get_flotas_repository)],
 ) -> TransaccionesService:
     return TransaccionesService(
         tran_repository=trans_repository,
@@ -132,6 +133,7 @@ async def get_transacciones_service(
         mat_service=mat_service,
         viajes_repository=viajes_repository,
         bls_repository=bls_repository,
+        flotas_repository=flotas_repository,
     )
 
 

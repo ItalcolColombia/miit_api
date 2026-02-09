@@ -12,6 +12,7 @@ from core.exceptions.entity_exceptions import EntityNotFoundException, EntityAlr
 from database.connection import DatabaseConfiguration
 from database.models import Transacciones, Bls
 from repositories.bls_repository import BlsRepository
+from repositories.flotas_repository import FlotasRepository
 from repositories.transacciones_repository import TransaccionesRepository
 from repositories.viajes_repository import ViajesRepository
 from schemas.transacciones_schema import TransaccionResponse, TransaccionCreate, TransaccionUpdate, TransaccionCreateExt
@@ -36,6 +37,7 @@ class TransaccionesService:
         mat_service: MaterialesService = None,
         viajes_repository: ViajesRepository = None,
         bls_repository: BlsRepository = None,
+        flotas_repository: FlotasRepository = None,
     ) -> None:
         self._repo = tran_repository
         self.pesadas_service = pesadas_service
@@ -44,6 +46,7 @@ class TransaccionesService:
         self.mat_service = mat_service
         self.viajes_repo = viajes_repository
         self.bls_repo = bls_repository
+        self.flotas_repo = flotas_repository
 
     async def create_transaccion(self, tran: TransaccionCreate) -> TransaccionResponse:
         """
@@ -708,6 +711,7 @@ class TransaccionesService:
                     raise EntityNotFoundException(f"No existe almacenamiento con nombre '{tran_ext.destino}'")
 
             # 4. Si es Recibo o Despacho, obtener ref1 del viaje y calcular peso_meta
+            bl_id = None
             if tipo_lower in ['recibo', 'despacho']:
                 if viaje_id is None:
                     raise EntityNotFoundException("viaje_id es requerido para transacciones de tipo Recibo/Despacho")
@@ -717,18 +721,39 @@ class TransaccionesService:
                 if not viaje:
                     raise EntityNotFoundException(f"No existe viaje con ID '{viaje_id}'")
 
-                ref1 = viaje.puerto_id
-
                 if tipo_lower == 'recibo':
-                    # Para Recibo: calcular peso_meta sumando peso_bl de los BLs del viaje con el mismo material
+                    # Para Recibo (buques): ref1 es el puerto_id del viaje
+                    ref1 = viaje.puerto_id
+                    # Calcular peso_meta sumando peso_bl de los BLs del viaje con el mismo material
                     peso_meta = await self._calcular_peso_meta_por_material(viaje_id, material_id)
                     if peso_meta <= 0:
                         log.warning(f"No se encontraron BLs para viaje {viaje_id} con material_id {material_id}. peso_meta = 0")
                 else:
-                    # Para Despacho: tomar peso_meta directamente del viaje
+                    # Para Despacho (camiones): ref1 es la referencia (placa) de la flota
+                    flota = await self.flotas_repo.get_by_id(viaje.flota_id)
+                    if not flota:
+                        raise EntityNotFoundException(f"No existe flota con ID '{viaje.flota_id}'")
+                    ref1 = flota.referencia
+                    # Tomar peso_meta directamente del viaje
                     peso_meta = Decimal(str(viaje.peso_meta)) if viaje.peso_meta else Decimal('0')
                     if peso_meta <= 0:
                         log.warning(f"El viaje {viaje_id} no tiene peso_meta definido. peso_meta = 0")
+
+                    # Buscar el bl_id correspondiente al viaje de recibo (buque)
+                    # El viaje de despacho tiene viaje_origen que contiene el puerto_id del viaje de recibo
+                    if viaje.viaje_origen:
+                        # Buscar el viaje de recibo por puerto_id
+                        viaje_recibo = await self.viajes_repo.check_puerto_id(viaje.viaje_origen)
+                        if viaje_recibo:
+                            # Buscar el BL activo (estado_puerto=True) para ese viaje y material
+                            bl = await self.bls_repo.get_bl_activo_por_material(viaje_recibo.id, material_id)
+                            if bl:
+                                bl_id = bl.id
+                                log.info(f"BL encontrado para despacho: bl_id={bl_id}, viaje_origen={viaje.viaje_origen}")
+                            else:
+                                log.warning(f"No se encontró BL activo (estado_puerto=True) para viaje {viaje_recibo.id} con material_id {material_id}")
+                        else:
+                            log.warning(f"No se encontró viaje de recibo con puerto_id '{viaje.viaje_origen}'")
 
             # 5. Verificar si ya existe una transacción similar
             existing = await self._repo.find_one(viaje_id=viaje_id, material_id=material_id, tipo=tran_ext.tipo)
@@ -750,6 +775,7 @@ class TransaccionesService:
                 peso_meta=peso_meta,
                 estado="Registrada",
                 leido=False,
+                bl_id=bl_id,
             )
 
             # 7. Crear la transacción
