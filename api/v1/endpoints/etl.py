@@ -288,7 +288,7 @@ async def get_movs_listado(
 @router.post("/pesada-registro",
              status_code=status.HTTP_201_CREATED,
              summary="Registrar pesada",
-             description="Evento para registrar la información de una pesada.",
+             description="Evento para registrar la información de una pesada. El consecutivo se calcula automáticamente por transacción si no se proporciona.",
              response_model=CreateResponse,
              responses={
                  status.HTTP_400_BAD_REQUEST: {"model": ErrorResponse},

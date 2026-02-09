@@ -194,12 +194,22 @@ class PesadasService:
             )
 
         try:
+            # Calcular consecutivo automáticamente si no viene en el request
+            consecutivo = getattr(pesada_data, 'consecutivo', None)
+            if consecutivo is None:
+                existing_count = await self._repo.count_by_transaccion(int(trans_id))
+                consecutivo = float(existing_count + 1)
+                log.info(f"Consecutivo calculado automáticamente para transacción {trans_id}: {consecutivo}")
+
             # Verificar existencia previa: mismo transaccion_id y consecutivo
-            if await self._repo.find_one(transaccion_id=trans_id, consecutivo=pesada_data.consecutivo):
-                raise EntityAlreadyRegisteredException(f"En la transacción {trans_id} ya existe una pesada con ese consecutivo '{pesada_data.consecutivo}'")
+            if await self._repo.find_one(transaccion_id=trans_id, consecutivo=consecutivo):
+                raise EntityAlreadyRegisteredException(f"En la transacción {trans_id} ya existe una pesada con ese consecutivo '{consecutivo}'")
 
             # Excluir campos de snapshot que no forman parte del modelo ORM Pesadas
             pesada_payload = pesada_data.model_dump(exclude={'saldo_anterior', 'saldo_nuevo'})
+
+            # Asignar consecutivo calculado al payload
+            pesada_payload['consecutivo'] = consecutivo
 
             # Obtener usuario_id de la sesión actual
             pesada_payload['usuario_id'] = current_user_id.get()

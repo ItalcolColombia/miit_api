@@ -209,6 +209,23 @@ class PesadasRepository(IRepository[Pesadas, PesadaResponse]):
             # No propagar detalles SQL, dejar que quien llame maneje/loguee
             raise
 
+    async def count_by_transaccion(self, tran_id: int) -> int:
+        """
+        Contar el número de pesadas asociadas a una transacción.
+
+        Args:
+            tran_id: ID de la transacción.
+
+        Returns:
+            int: Cantidad de pesadas asociadas a la transacción.
+        """
+        query = (
+            select(func.count(Pesadas.id))
+            .where(Pesadas.transaccion_id == tran_id)
+        )
+        result = await self.db.execute(query)
+        return result.scalar() or 0
+
     async def get_suma_peso_by_transaccion(self, tran_id: int) -> Optional[dict]:
         """
         Obtener la suma total de peso_real de pesadas asociadas a una transacción.

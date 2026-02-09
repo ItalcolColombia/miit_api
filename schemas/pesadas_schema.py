@@ -20,7 +20,7 @@ class PesadaBase(BaseSchema):
 
 class PesadaCreate(BaseSchema):
     transaccion_id: Optional[int] = None
-    consecutivo: Optional[float] = None
+    consecutivo: Optional[float] = Field(None, description="Consecutivo de la pesada. Si no se proporciona, se calcula automáticamente.")
     bascula_id: Optional[int] = None
     peso_meta: Optional[Decimal] = Field(None, max_digits=10, decimal_places=2)
     peso_real: Decimal = Field(..., max_digits=10, decimal_places=2)
@@ -34,7 +34,6 @@ class PesadaCreate(BaseSchema):
         json_schema_extra = {
             "example": {
                 "transaccion_id": 225123,
-                "consecutivo": 16,
                 "bascula_id": 1,
                 "fecha_hora": datetime(2024, 5, 17),
                 "peso_meta": 0.00,
