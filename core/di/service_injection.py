@@ -2,6 +2,8 @@ from typing import Annotated
 
 from fastapi import Depends
 
+from core.contracts.auditor import Auditor
+from repositories.ajustes_repository import AjustesRepository
 from repositories.almacenamientos_materiales_repository import AlmacenamientosMaterialesRepository
 # Repositories
 from repositories.almacenamientos_repository import AlmacenamientosRepository
@@ -12,11 +14,11 @@ from repositories.materiales_repository import MaterialesRepository
 from repositories.movimientos_repository import MovimientosRepository
 from repositories.pesadas_corte_repository import PesadasCorteRepository
 from repositories.pesadas_repository import PesadasRepository
+from repositories.reportes.reportes_repository import ReportesRepository
 from repositories.transacciones_repository import TransaccionesRepository
 from repositories.usuarios_repository import UsuariosRepository
 from repositories.viajes_repository import ViajesRepository
-from repositories.ajustes_repository import AjustesRepository
-from repositories.reportes.reportes_repository import ReportesRepository
+from services.ajustes_service import AjustesService
 from services.almacenamientos_materiales_service import AlmacenamientosMaterialesService
 from services.almacenamientos_service import AlmacenamientosService
 # Services
@@ -28,12 +30,11 @@ from services.flotas_service import FlotasService
 from services.materiales_service import MaterialesService
 from services.movimientos_service import MovimientosService
 from services.pesadas_service import PesadasService
+from services.reportes.exportacion_service import ExportacionService
+from services.reportes.reportes_service import ReportesService
 from services.transacciones_service import TransaccionesService
 from services.usuarios_service import UsuariosService
 from services.viajes_service import ViajesService
-from services.ajustes_service import AjustesService
-from services.reportes.reportes_service import ReportesService
-from services.reportes.exportacion_service import ExportacionService
 # InjectionRepo
 from .repository_injection import (
     get_user_repository,
@@ -52,7 +53,6 @@ from .repository_injection import (
     get_auditor_service,
     get_reportes_repository,
 )
-from core.contracts.auditor import Auditor
 
 
 async def get_auth_service(

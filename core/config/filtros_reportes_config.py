@@ -4,8 +4,8 @@ Configuración de filtros dinámicos por reporte.
 Este archivo define qué columnas son filtrables para cada reporte
 y el tipo de filtro a usar (select o search).
 """
-from typing import Dict, List
 from dataclasses import dataclass
+from typing import Dict, List
 
 
 @dataclass

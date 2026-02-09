@@ -2,10 +2,10 @@
 
 import logging
 import os
+from datetime import datetime, timezone
 
 from colorlog import ColoredFormatter
 from starlette import status
-from datetime import datetime, timezone
 
 from core.config.settings import get_settings
 from core.exceptions.base_exception import BasedException

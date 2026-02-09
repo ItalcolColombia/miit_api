@@ -1,10 +1,11 @@
-from sqlalchemy import text, select, and_, func, desc, asc
-from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.orm import selectinload
-from typing import List, Dict, Any, Optional, Tuple
 from datetime import datetime
+from typing import List, Dict, Any, Optional, Tuple
+
+from sqlalchemy import text, select, and_
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from database.models import Reporte, ReporteColumna, PermisoReporte
+
 
 class ReportesRepository:
     """

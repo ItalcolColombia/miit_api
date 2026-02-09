@@ -3,8 +3,6 @@ from decimal import Decimal
 from typing import List, Optional
 
 import httpx
-from fastapi_pagination import Page, Params
-from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from starlette import status
 
@@ -14,7 +12,6 @@ from core.exceptions.entity_exceptions import (
     EntityAlreadyRegisteredException,
     EntityNotFoundException,
 )
-from database.models import VViajes
 from repositories.viajes_repository import ViajesRepository
 from schemas.bls_schema import BlsCreate, BlsExtCreate, BlsResponse, BlsUpdate, VBlsResponse
 from schemas.ext_api_schema import NotificationCargue, NotificationBuque, NotificationPitCargue, NotificationBlsPeso
@@ -22,7 +19,7 @@ from schemas.flotas_schema import FlotasResponse, FlotaCreate
 from schemas.transacciones_schema import TransaccionResponse
 from schemas.viajes_schema import (
     ViajesResponse, ViajeCreate, ViajeBuqueExtCreate, ViajeUpdate, ViajeCamionExtCreate,
-    VViajesResponse, ViajesActivosPorMaterialResponse
+    ViajesActivosPorMaterialResponse
 )
 from services.bls_service import BlsService
 from services.clientes_service import ClientesService
@@ -374,7 +371,7 @@ class ViajesService:
                     try:
                         if getattr(tran, 'peso_real', None) in (None, 0):
                             # Intentar finalizar; esto actualizará peso_real desde las pesadas acumuladas
-                            tran = await self.transacciones_service.transaccion_finalizar(tran.id)
+                            tran, _ = await self.transacciones_service.transaccion_finalizar(tran.id)
                     except Exception as e_final:
                         # No bloquear la operación por fallo al finalizar, pero loguear la situación
                         log.warning(f"No se pudo finalizar transacción {getattr(tran, 'id', None)} antes de notificar: {e_final}")

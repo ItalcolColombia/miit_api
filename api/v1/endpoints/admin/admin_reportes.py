@@ -5,10 +5,13 @@ Permite gestionar permisos de reportes por rol.
 Solo accesible para administradores.
 """
 
-from fastapi import APIRouter, Depends, status, Path
 from typing import List
 
-from services.auth_service import AuthService
+from fastapi import APIRouter, Depends, status, Path
+
+from core.di.repository_injection import get_reportes_repository
+from core.enums.user_role_enum import UserRoleEnum
+from core.exceptions.base_exception import BasedException
 from repositories.reportes.reportes_repository import ReportesRepository
 from schemas.reportes.reportes_schema import (
     PermisoReporteResponse,
@@ -17,9 +20,7 @@ from schemas.reportes.reportes_schema import (
     ReporteResponse
 )
 from schemas.usuarios_schema import VUsuariosRolResponse
-from core.di.repository_injection import get_reportes_repository
-from core.exceptions.base_exception import BasedException
-from core.enums.user_role_enum import UserRoleEnum
+from services.auth_service import AuthService
 
 router = APIRouter(
     prefix="/admin/reportes",

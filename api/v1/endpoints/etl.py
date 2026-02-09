@@ -6,13 +6,16 @@ from fastapi_pagination import Page
 from core.di.service_injection import get_viajes_service, get_mat_service, get_mov_service, \
     get_pesadas_service, get_transacciones_service, get_flotas_service, get_alm_mat_service, get_ajustes_service
 from core.enums.user_role_enum import UserRoleEnum
+from schemas.ajustes_schema import AjusteCreate
 from schemas.almacenamientos_materiales_schema import VAlmMaterialesResponse
 from schemas.materiales_schema import MaterialesResponse
 from schemas.movimientos_schema import MovimientosResponse
 from schemas.pesadas_schema import PesadaResponse, PesadaCreate
-from schemas.response_models import CreateResponse, ErrorResponse, ValidationErrorResponse, UpdateResponse, TransaccionRegistroResponse
-from schemas.transacciones_schema import TransaccionResponse, TransaccionCreate, TransaccionCreateExt
+from schemas.response_models import CreateResponse, ErrorResponse, ValidationErrorResponse, UpdateResponse, \
+    TransaccionRegistroResponse
+from schemas.transacciones_schema import TransaccionResponse, TransaccionCreateExt
 from schemas.viajes_schema import ViajesActivosPorMaterialResponse
+from services.ajustes_service import AjustesService
 from services.almacenamientos_materiales_service import AlmacenamientosMaterialesService
 from services.auth_service import AuthService
 from services.flotas_service import FlotasService
@@ -21,10 +24,8 @@ from services.movimientos_service import MovimientosService
 from services.pesadas_service import PesadasService
 from services.transacciones_service import TransaccionesService
 from services.viajes_service import ViajesService
-from services.ajustes_service import AjustesService
 from utils.logger_util import LoggerUtil
 from utils.response_util import ResponseUtil
-from schemas.ajustes_schema import AjusteCreate
 
 log = LoggerUtil()
 
@@ -185,42 +186,6 @@ async def set_points_camion(
             message=f"Error interno: {e}"
         )
 
-@router.put("/camion-finalizar/{viaje_id}",
-            status_code=status.HTTP_200_OK,
-            summary="Modificar estado de un camion por cargue",
-            description="Evento realizado por la automatización al dar por finalizado el recibo de buque."
-                        "Corresponde a CamionCargue (SendTruckFinalizationLoading).",
-            response_model=UpdateResponse,
-            responses={
-                status.HTTP_400_BAD_REQUEST: {"model": ErrorResponse},
-                status.HTTP_422_UNPROCESSABLE_CONTENT: {"model": ValidationErrorResponse},
-            })
-async def end_camion(
-        viaje_id: int,
-        service: ViajesService = Depends(get_viajes_service)):
-    log.info(f"Payload recibido: Viaje {viaje_id} - Partida")
-    try:
-
-        await service.chg_estado_flota(viaje_id=viaje_id, estado_operador=False)
-        log.info(f"Finalización de cargue para viaje {viaje_id} registrada exitosamente.")
-        return response_json(
-            status_code=status.HTTP_200_OK,
-            message=f"Finalización de cargue para viaje {viaje_id} registrada exitosamente.",
-        )
-
-    except HTTPException as http_exc:
-        log.error(f"Finalización de cargue para viaje {viaje_id} falló: {http_exc.detail}")
-        return response_json(
-            status_code=http_exc.status_code,
-            message=http_exc.detail
-        )
-
-    except Exception as e:
-        log.error(f"Error al procesar marcado de partida de viaje {viaje_id}: {e}")
-        return response_json(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            message=str(e)
-        )
 
 @router.get("/materiales-listado",
             summary="Obtener listado de materiales",
@@ -381,27 +346,33 @@ async def get_trans_listado(
             message=str(e)
         )
 
-@router.post("/transacciones-registro",
+@router.post("/transaccion-registro",
              status_code=status.HTTP_201_CREATED,
-             summary="Registrar nueva transacción",
-             description="Evento para registrar la información de una transacción.",
-             response_model=CreateResponse,
+             summary="Registrar nueva transacción (schema simplificado)",
+             description="Endpoint para registrar transacciones usando nombres en lugar de IDs. "
+                         "El peso_meta se calcula automáticamente de los BLs del viaje agrupados por material. "
+                         "El ref1 se obtiene del puerto_id del viaje.",
+             response_model=TransaccionRegistroResponse,
              responses={
+                 status.HTTP_201_CREATED: {"model": TransaccionRegistroResponse},
                  status.HTTP_400_BAD_REQUEST: {"model": ErrorResponse},
+                 status.HTTP_404_NOT_FOUND: {"model": ErrorResponse},
+                 status.HTTP_409_CONFLICT: {"model": ErrorResponse},
                  status.HTTP_422_UNPROCESSABLE_CONTENT: {"model": ValidationErrorResponse},
              })
 async def create_transaccion(
-    tran: TransaccionCreate,
+    tran: TransaccionCreateExt,
     service: TransaccionesService = Depends(get_transacciones_service),
 ):
-    # Identificador para logs: viaje_id para Despacho/Recibo, origen/destino para Traslado
-    tran_identifier = f"viaje={tran.viaje_id}" if tran.viaje_id else f"origen={tran.origen_id}/destino={tran.destino_id}"
+    # Identificador para logs
+    tran_identifier = f"viaje={tran.viaje_id}, material={tran.material}" if tran.viaje_id else f"origen={tran.origen}/destino={tran.destino}, material={tran.material}"
     log.info(f"Payload recibido: Transacción tipo={tran.tipo} {tran_identifier} - Crear")
     try:
-        await service.create_transaccion_if_not_exists(tran)
+        tran_creada = await service.create_transaccion_ext(tran)
         return response_json(
             status_code=status.HTTP_201_CREATED,
-            message="Registro exitoso."
+            message="Registro exitoso.",
+            data={"transaccion_id": tran_creada.id}
         )
 
     except HTTPException as http_exc:
@@ -418,53 +389,14 @@ async def create_transaccion(
             message=str(e)
         )
 
-@router.post("/transacciones-registro-ext",
-             status_code=status.HTTP_201_CREATED,
-             summary="Registrar nueva transacción (schema simplificado)",
-             description="Endpoint para registrar transacciones usando nombres en lugar de IDs. "
-                         "El peso_meta se calcula automáticamente de los BLs del viaje agrupados por material. "
-                         "El ref1 se obtiene del puerto_id del viaje.",
-             response_model=TransaccionRegistroResponse,
-             responses={
-                 status.HTTP_201_CREATED: {"model": TransaccionRegistroResponse},
-                 status.HTTP_400_BAD_REQUEST: {"model": ErrorResponse},
-                 status.HTTP_404_NOT_FOUND: {"model": ErrorResponse},
-                 status.HTTP_409_CONFLICT: {"model": ErrorResponse},
-                 status.HTTP_422_UNPROCESSABLE_CONTENT: {"model": ValidationErrorResponse},
-             })
-async def create_transaccion_ext(
-    tran: TransaccionCreateExt,
-    service: TransaccionesService = Depends(get_transacciones_service),
-):
-    # Identificador para logs
-    tran_identifier = f"viaje={tran.viaje_id}, material={tran.material}" if tran.viaje_id else f"origen={tran.origen}/destino={tran.destino}, material={tran.material}"
-    log.info(f"Payload recibido: Transacción ext tipo={tran.tipo} {tran_identifier} - Crear")
-    try:
-        tran_creada = await service.create_transaccion_ext(tran)
-        return response_json(
-            status_code=status.HTTP_201_CREATED,
-            message="Registro exitoso.",
-            data={"transaccion_id": tran_creada.id}
-        )
-
-    except HTTPException as http_exc:
-        log.error(f"La transacción ext {tran_identifier} no fue registrada: {http_exc.detail}")
-        return response_json(
-            status_code=http_exc.status_code,
-            message=http_exc.detail
-        )
-
-    except Exception as e:
-        log.error(f"Error al procesar petición de registro de transacción ext {tran_identifier}: {e}")
-        return response_json(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            message=str(e)
-        )
-
 @router.put("/transaccion-finalizar/{tran_id}",
             status_code=status.HTTP_200_OK,
             summary="Modifica el estado de una transacción en curso",
-            description="Evento realizado por la automatización cuando se detiene una ruta en proceso.",
+            description="Evento realizado por la automatización cuando se detiene una ruta en proceso. "
+                        "Para transacciones de tipo Despacho (camiones): actualiza el estado de la flota y "
+                        "envía notificación a la API externa CamionCargue. "
+                        "Para transacciones de tipo Recibo (buques): si es la última transacción del viaje, "
+                        "ejecuta el envío final automáticamente.",
             response_model=UpdateResponse,
             responses={
                 status.HTTP_400_BAD_REQUEST: {"model": ErrorResponse},
@@ -477,11 +409,32 @@ async def end_transaction(
 
     try:
 
-        await service.transaccion_finalizar(tran_id)
-        log.info(f"La Transacción {tran_id} finalizada exitosamente.")
+        tran_result, notificacion_resultado = await service.transaccion_finalizar(tran_id)
+
+        # Construir mensaje de respuesta basado en el resultado de la notificación
+        if notificacion_resultado is None:
+            # No aplica notificación (ej: Traslado)
+            mensaje = "Transacción finalizada exitosamente"
+            log.info(f"La Transacción {tran_id} finalizada exitosamente.")
+        elif notificacion_resultado.get('success', False):
+            # Notificación exitosa
+            mensaje = "Transacción finalizada exitosamente. Notificación enviada correctamente."
+            log.info(f"La Transacción {tran_id} finalizada exitosamente con notificación enviada.")
+        else:
+            # Notificación falló
+            error_notificacion = notificacion_resultado.get('message', 'Error desconocido en notificación')
+            flota_actualizada = notificacion_resultado.get('flota_actualizada', False)
+
+            if flota_actualizada:
+                mensaje = f"Transacción finalizada exitosamente. Estado de flota actualizado. Advertencia: {error_notificacion}"
+            else:
+                mensaje = f"Transacción finalizada exitosamente. Advertencia: {error_notificacion}"
+
+            log.warning(f"La Transacción {tran_id} finalizada pero con advertencia en notificación: {error_notificacion}")
+
         return response_json(
             status_code=status.HTTP_200_OK,
-            message=f"Transacción finalizada",
+            message=mensaje,
         )
 
     except HTTPException as http_exc:

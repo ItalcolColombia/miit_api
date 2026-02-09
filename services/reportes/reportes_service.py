@@ -1,8 +1,11 @@
-from typing import List, Dict, Any, Optional
-from datetime import datetime
-from fastapi import status
 import logging
+from datetime import datetime
+from typing import List, Dict, Any
 
+from fastapi import status
+
+from core.config.filtros_reportes_config import get_filtros_reporte
+from core.exceptions.base_exception import BasedException
 from repositories.reportes.reportes_repository import ReportesRepository
 from schemas.reportes.reportes_schema import (
     ReporteConPermisosResponse,
@@ -19,8 +22,6 @@ from schemas.reportes.reportes_schema import (
     OpcionFiltro,
     TipoFiltro
 )
-from core.exceptions.base_exception import BasedException
-from core.config.filtros_reportes_config import get_filtros_reporte, get_campos_filtro_validos
 
 logger = logging.getLogger(__name__)
 

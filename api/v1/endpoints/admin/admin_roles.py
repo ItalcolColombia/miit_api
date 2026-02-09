@@ -7,7 +7,8 @@ Solo accesible para administradores.
 
 from fastapi import APIRouter, Depends, status, Path, HTTPException
 
-from services.auth_service import AuthService
+from core.di.repository_injection import get_roles_repository
+from core.enums.user_role_enum import UserRoleEnum
 from repositories.roles_repository import RolesRepository
 from schemas.roles_admin_schema import (
     RolAdminResponse,
@@ -20,8 +21,7 @@ from schemas.roles_admin_schema import (
     MessageResponse
 )
 from schemas.usuarios_schema import VUsuariosRolResponse
-from core.di.repository_injection import get_roles_repository
-from core.enums.user_role_enum import UserRoleEnum
+from services.auth_service import AuthService
 
 router = APIRouter(
     prefix="/admin/roles",

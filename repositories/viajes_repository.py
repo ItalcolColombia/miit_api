@@ -78,7 +78,7 @@ class ViajesRepository(IRepository[Viajes, ViajesResponse]):
             tipo_flota: 'buque' o 'camion'
 
         Returns:
-            Lista de diccionarios con consecutivo, nombre, material y puntos_cargue ordenados por fecha_hora descendente
+            Lista de diccionarios con consecutivo, nombre, material y puntos_cargue ordenados por consecutivo (id) descendente
         """
         try:
             if tipo_flota.lower() == 'buque':
@@ -98,7 +98,7 @@ class ViajesRepository(IRepository[Viajes, ViajesResponse]):
                     .where(Flotas.tipo == 'buque')
                     .where(Flotas.estado_operador == True)
                     .group_by(Flotas.referencia, Materiales.nombre, Flotas.puntos)
-                    .order_by(func.max(Viajes.fecha_hora).desc())
+                    .order_by(func.max(Viajes.id).desc())
                 )
             else:  # camion
                 # Para camiones, usamos el material_id del viaje
@@ -117,7 +117,7 @@ class ViajesRepository(IRepository[Viajes, ViajesResponse]):
                     .where(Flotas.estado_operador == True)
                     .where(Viajes.material_id.isnot(None))
                     .group_by(Flotas.referencia, Materiales.nombre, Flotas.puntos)
-                    .order_by(func.max(Viajes.fecha_hora).desc())
+                    .order_by(func.max(Viajes.id).desc())
                 )
 
             result = await self.db.execute(query)

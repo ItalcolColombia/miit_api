@@ -1,9 +1,10 @@
 """
 Repositorio para gestión de roles.
 """
+from typing import List, Dict, Any, Optional
+
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
-from typing import List, Dict, Any, Optional
 
 
 class RolesRepository:

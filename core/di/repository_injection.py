@@ -16,6 +16,7 @@ from database.models import (
     Viajes, PesadasCorte,
     Ajustes
 )
+from repositories.ajustes_repository import AjustesRepository
 from repositories.almacenamientos_materiales_repository import AlmacenamientosMaterialesRepository
 # Repositories
 from repositories.almacenamientos_repository import AlmacenamientosRepository
@@ -26,13 +27,13 @@ from repositories.materiales_repository import MaterialesRepository
 from repositories.movimientos_repository import MovimientosRepository
 from repositories.pesadas_corte_repository import PesadasCorteRepository
 from repositories.pesadas_repository import PesadasRepository
+from repositories.reportes.reportes_repository import ReportesRepository
+from repositories.roles_repository import RolesRepository
 from repositories.transacciones_repository import TransaccionesRepository
 from repositories.usuarios_repository import UsuariosRepository
 from repositories.viajes_repository import ViajesRepository
-from repositories.ajustes_repository import AjustesRepository
+from schemas.ajustes_schema import AjusteResponse
 from schemas.almacenamientos_materiales_schema import AlmacenamientoMaterialesResponse
-from repositories.reportes.reportes_repository import ReportesRepository
-from repositories.roles_repository import RolesRepository
 # Schemas
 from schemas.almacenamientos_schema import AlmacenamientoResponse
 from schemas.bls_schema import BlsResponse
@@ -45,9 +46,9 @@ from schemas.pesadas_schema import PesadaResponse
 from schemas.transacciones_schema import TransaccionResponse
 from schemas.usuarios_schema import UsuariosResponse
 from schemas.viajes_schema import ViajesResponse
-from schemas.ajustes_schema import AjusteResponse
 from services.logs_auditoria_service import DatabaseAuditor
 from .database_injection import get_db
+
 
 async def get_auditor_service(
         session: AsyncSession = Depends(get_db)

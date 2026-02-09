@@ -1,15 +1,15 @@
 from datetime import datetime, timezone
-from typing import Any, List, Optional
 from decimal import Decimal
-from sqlalchemy import select as _select
+from typing import Any, List
 
 from fastapi import HTTPException, status
-from core.exceptions.entity_exceptions import EntityNotFoundException
-from core.exceptions.base_exception import BasedException
+from sqlalchemy import select as _select
 
+from core.exceptions.base_exception import BasedException
+from core.exceptions.entity_exceptions import EntityNotFoundException
+from database.models import Materiales
 from schemas.pesadas_corte_schema import PesadaCorteRetrieve
 from utils.logger_util import LoggerUtil
-from database.models import Materiales
 
 log = LoggerUtil()
 
