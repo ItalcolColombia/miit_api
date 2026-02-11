@@ -55,16 +55,18 @@ class ViajesRepository(IRepository[Viajes, ViajesResponse]):
             A viaje object based on their puerto_id value.
         """
         try:
-            result = await self.db.execute(select(self.model).filter(self.model.puerto_id == puerto_id))
-            flota = result.scalar_one()
+            result = await self.db.execute(
+                select(self.model)
+                .filter(self.model.puerto_id == puerto_id)
+                .limit(1)  # Limitar a un solo resultado para evitar error de múltiples filas
+            )
+            flota = result.scalar_one_or_none()
             if flota:
                 log.info(f"Viaje con puerto_id '{puerto_id}' verificado.")
                 return self.schema.model_validate(flota)
             else:
+                log.warning(f"No se encontró Viaje con puerto_id'{puerto_id}'.")
                 return None
-        except NoResultFound:
-            log.warning(f"No se encontró Viaje con puerto_id'{puerto_id}'.")
-            return None
         except Exception as e:
             log.error(f"Error al intentar checar Viaje con puerto_id '{puerto_id}': {e}")
             raise

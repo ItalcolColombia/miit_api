@@ -101,11 +101,12 @@ class IRepository(Generic[ModelType, SchemaType]):
             for attribute_name, attribute_value in kwargs.items():
                 attribute = getattr(self.model, attribute_name)
                 query = query.filter(attribute == attribute_value)
+            query = query.limit(1)  # Limitar a un solo resultado para evitar error de múltiples filas
             result = await self.db.execute(query)
-            item = result.scalar_one()
+            item = result.scalar_one_or_none()
+            if item is None:
+                return None
             return self.schema.model_validate(item)
-        except NoResultFound:
-            return None
         except AttributeError as e:
             raise ValueError(f"Invalid attribute in filter: {e}")
 
