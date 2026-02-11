@@ -1,5 +1,4 @@
 from typing import List, Optional
-from datetime import datetime
 
 from sqlalchemy import select, func, and_, or_
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -10,7 +9,7 @@ from database.models import Viajes, VViajes, Flotas, Bls, Materiales
 from repositories.base_repository import IRepository
 from schemas.viajes_schema import ViajesResponse, ViajesActResponse
 from utils.logger_util import LoggerUtil
-from utils.time_util import normalize_to_app_tz
+from utils.time_util import now_local
 
 log = LoggerUtil()
 
@@ -85,8 +84,9 @@ class ViajesRepository(IRepository[Viajes, ViajesResponse]):
             Lista de diccionarios con consecutivo, nombre, material y puntos_cargue ordenados por consecutivo (id) descendente
         """
         try:
-            # Obtener fecha/hora actual normalizada a la zona horaria de la app
-            fecha_actual = normalize_to_app_tz(datetime.now())
+            # Obtener fecha/hora actual en la zona horaria de la app (tz-aware)
+            fecha_actual = now_local()
+            log.info(f"[DEBUG get_viajes_activos_por_material] tipo_flota={tipo_flota}, fecha_actual={fecha_actual} (tzinfo={getattr(fecha_actual, 'tzinfo', None)})")
 
             if tipo_flota.lower() == 'buque':
                 # Para buques, agrupamos por los materiales de los BLs

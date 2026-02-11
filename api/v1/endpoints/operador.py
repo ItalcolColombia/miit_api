@@ -22,7 +22,7 @@ from services.pesadas_service import PesadasService
 from services.viajes_service import ViajesService
 from utils.logger_util import LoggerUtil
 from utils.response_util import ResponseUtil
-from utils.time_util import normalize_to_app_tz
+from utils.time_util import normalize_to_app_tz, now_local
 
 log = LoggerUtil()
 response_json = ResponseUtil.json_response
@@ -127,7 +127,8 @@ async def buque_in(
         service: ViajesService = Depends(get_viajes_service)):
     log.info(f"Payload recibido: Flota {puerto_id} - Arribo")
     try:
-        fecha_llegada_actual = normalize_to_app_tz(datetime.now())
+        fecha_llegada_actual = now_local()
+        log.info(f"[DEBUG buque_in] fecha_llegada_actual={fecha_llegada_actual} (tzinfo={getattr(fecha_llegada_actual, 'tzinfo', None)})")
         await service.chg_estado_flota(puerto_id, estado_puerto=True, estado_operador=True, fecha_llegada=fecha_llegada_actual)
         log.info(f"Arribo de buque {puerto_id} marcado exitosamente.")
         return response_json(
@@ -165,7 +166,8 @@ async def end_buque(
         service: ViajesService = Depends(get_viajes_service)):
     log.info(f"Payload recibido: Flota {puerto_id} - Partida")
     try:
-        fecha_salida_actual = normalize_to_app_tz(datetime.now())
+        fecha_salida_actual = now_local()
+        log.info(f"[DEBUG end_buque] fecha_salida_actual={fecha_salida_actual} (tzinfo={getattr(fecha_salida_actual, 'tzinfo', None)})")
         await service.chg_estado_flota(puerto_id, estado_puerto=False, fecha_salida=fecha_salida_actual)
         log.info(f"La Partida de buque {puerto_id} desde el operador marcada exitosamente.")
         return response_json(

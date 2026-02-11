@@ -364,9 +364,13 @@ class ViajesService:
                 from utils.time_util import normalize_to_app_tz
                 update_fields = {}
                 if fecha_llegada is not None:
-                    update_fields["fecha_llegada"] = normalize_to_app_tz(fecha_llegada)
+                    fecha_llegada_norm = normalize_to_app_tz(fecha_llegada)
+                    log.info(f"[DEBUG chg_estado_flota] fecha_llegada original={fecha_llegada} (tzinfo={getattr(fecha_llegada, 'tzinfo', None)}), normalizada={fecha_llegada_norm} (tzinfo={getattr(fecha_llegada_norm, 'tzinfo', None)})")
+                    update_fields["fecha_llegada"] = fecha_llegada_norm
                 if fecha_salida is not None:
-                    update_fields["fecha_salida"] = normalize_to_app_tz(fecha_salida)
+                    fecha_salida_norm = normalize_to_app_tz(fecha_salida)
+                    log.info(f"[DEBUG chg_estado_flota] fecha_salida original={fecha_salida} (tzinfo={getattr(fecha_salida, 'tzinfo', None)}), normalizada={fecha_salida_norm} (tzinfo={getattr(fecha_salida_norm, 'tzinfo', None)})")
+                    update_fields["fecha_salida"] = fecha_salida_norm
                 update_data = ViajeUpdate(**update_fields)
                 await self._repo.update(viaje.id, update_data)
                 log.info(f"Fechas actualizadas para viaje {viaje.id}: {update_fields}")
