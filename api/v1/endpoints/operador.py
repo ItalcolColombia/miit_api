@@ -127,7 +127,8 @@ async def buque_in(
         service: ViajesService = Depends(get_viajes_service)):
     log.info(f"Payload recibido: Flota {puerto_id} - Arribo")
     try:
-        await service.chg_estado_flota(puerto_id, estado_puerto=True, estado_operador=True)
+        fecha_llegada_actual = normalize_to_app_tz(datetime.now())
+        await service.chg_estado_flota(puerto_id, estado_puerto=True, estado_operador=True, fecha_llegada=fecha_llegada_actual)
         log.info(f"Arribo de buque {puerto_id} marcado exitosamente.")
         return response_json(
             status_code=status.HTTP_200_OK,
@@ -164,8 +165,8 @@ async def end_buque(
         service: ViajesService = Depends(get_viajes_service)):
     log.info(f"Payload recibido: Flota {puerto_id} - Partida")
     try:
-
-        await service.chg_estado_flota(puerto_id, estado_puerto=False)
+        fecha_salida_actual = normalize_to_app_tz(datetime.now())
+        await service.chg_estado_flota(puerto_id, estado_puerto=False, fecha_salida=fecha_salida_actual)
         log.info(f"La Partida de buque {puerto_id} desde el operador marcada exitosamente.")
         return response_json(
             status_code=status.HTTP_200_OK,

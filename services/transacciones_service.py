@@ -877,7 +877,7 @@ class TransaccionesService:
             existing = await self._repo.find_one(viaje_id=viaje_id, material_id=material_id, tipo=tran_ext.tipo)
             if existing:
                 raise EntityAlreadyRegisteredException(
-                    f"Ya existe transacción de tipo '{tran_ext.tipo}' para viaje '{viaje_id}' con material '{tran_ext.material}'"
+                    f"Ya existe transacción de tipo '{tran_ext.tipo}' para viaje '{viaje_id}' con material '{tran_ext.material}'. ID de transacción existente: {existing.id}"
                 )
 
             # 6. Crear el objeto TransaccionCreate

@@ -323,7 +323,7 @@ class ViajesService:
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
 
-    async def chg_estado_flota(self, puerto_id: Optional[str] = None, estado_puerto: Optional[bool] = None, estado_operador: Optional[bool] = None, viaje_id: Optional[int] = None) -> FlotasResponse:
+    async def chg_estado_flota(self, puerto_id: Optional[str] = None, estado_puerto: Optional[bool] = None, estado_operador: Optional[bool] = None, viaje_id: Optional[int] = None, fecha_llegada: Optional[datetime] = None, fecha_salida: Optional[datetime] = None) -> FlotasResponse:
         """
         Change the status of a flota associated with a viaje.
 
@@ -332,6 +332,8 @@ class ViajesService:
             estado_puerto (bool): The puerto status value for the flota.
             estado_operador (bool): The operador status value for the flota.
             viaje_id (int): The id of the viaje (optional if puerto_id is provided).
+            fecha_llegada (datetime): Optional arrival date to update on the viaje.
+            fecha_salida (datetime): Optional departure date to update on the viaje.
 
         Returns:
             FlotasResponse: The updated flota object.
@@ -356,6 +358,18 @@ class ViajesService:
             flota = await self.flotas_service.get_flota(viaje.flota_id)
             if not flota:
                 raise EntityNotFoundException(f"Flota con id '{viaje.flota_id}' no existe")
+
+            # Actualizar fechas del viaje si se proporcionan
+            if fecha_llegada is not None or fecha_salida is not None:
+                from utils.time_util import normalize_to_app_tz
+                update_fields = {}
+                if fecha_llegada is not None:
+                    update_fields["fecha_llegada"] = normalize_to_app_tz(fecha_llegada)
+                if fecha_salida is not None:
+                    update_fields["fecha_salida"] = normalize_to_app_tz(fecha_salida)
+                update_data = ViajeUpdate(**update_fields)
+                await self._repo.update(viaje.id, update_data)
+                log.info(f"Fechas actualizadas para viaje {viaje.id}: {update_fields}")
 
             updated_flota = await self.flotas_service.update_status(flota, estado_puerto, estado_operador)
 

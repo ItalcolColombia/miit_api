@@ -1,6 +1,7 @@
 from typing import List, Optional
+from datetime import datetime
 
-from sqlalchemy import select, func
+from sqlalchemy import select, func, and_, or_
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm.exc import NoResultFound
 
@@ -9,6 +10,7 @@ from database.models import Viajes, VViajes, Flotas, Bls, Materiales
 from repositories.base_repository import IRepository
 from schemas.viajes_schema import ViajesResponse, ViajesActResponse
 from utils.logger_util import LoggerUtil
+from utils.time_util import normalize_to_app_tz
 
 log = LoggerUtil()
 
@@ -81,9 +83,13 @@ class ViajesRepository(IRepository[Viajes, ViajesResponse]):
             Lista de diccionarios con consecutivo, nombre, material y puntos_cargue ordenados por consecutivo (id) descendente
         """
         try:
+            # Obtener fecha/hora actual normalizada a la zona horaria de la app
+            fecha_actual = normalize_to_app_tz(datetime.now())
+
             if tipo_flota.lower() == 'buque':
                 # Para buques, agrupamos por los materiales de los BLs
                 # Usamos group_by para evitar duplicados por la misma combinación flota+material
+                # Filtramos por viajes cuya fecha_llegada <= ahora Y (fecha_salida es nula O fecha_salida >= ahora)
                 query = (
                     select(
                         func.max(Viajes.id).label('consecutivo'),
@@ -97,12 +103,22 @@ class ViajesRepository(IRepository[Viajes, ViajesResponse]):
                     .join(Materiales, Bls.material_id == Materiales.id)
                     .where(Flotas.tipo == 'buque')
                     .where(Flotas.estado_operador == True)
+                    .where(
+                        and_(
+                            Viajes.fecha_llegada <= fecha_actual,
+                            or_(
+                                Viajes.fecha_salida.is_(None),
+                                Viajes.fecha_salida >= fecha_actual
+                            )
+                        )
+                    )
                     .group_by(Flotas.referencia, Materiales.nombre, Flotas.puntos)
                     .order_by(func.max(Viajes.id).desc())
                 )
             else:  # camion
                 # Para camiones, usamos el material_id del viaje
                 # Usamos group_by para evitar duplicados por la misma combinación flota+material
+                # Filtramos por viajes cuya fecha_llegada <= ahora Y (fecha_salida es nula O fecha_salida >= ahora)
                 query = (
                     select(
                         func.max(Viajes.id).label('consecutivo'),
@@ -116,6 +132,15 @@ class ViajesRepository(IRepository[Viajes, ViajesResponse]):
                     .where(Flotas.tipo == 'camion')
                     .where(Flotas.estado_operador == True)
                     .where(Viajes.material_id.isnot(None))
+                    .where(
+                        and_(
+                            Viajes.fecha_llegada <= fecha_actual,
+                            or_(
+                                Viajes.fecha_salida.is_(None),
+                                Viajes.fecha_salida >= fecha_actual
+                            )
+                        )
+                    )
                     .group_by(Flotas.referencia, Materiales.nombre, Flotas.puntos)
                     .order_by(func.max(Viajes.id).desc())
                 )
