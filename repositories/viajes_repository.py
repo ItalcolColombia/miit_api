@@ -98,6 +98,7 @@ class ViajesRepository(IRepository[Viajes, ViajesResponse]):
                         Flotas.referencia.label('nombre'),
                         Materiales.nombre.label('material'),
                         Flotas.puntos.label('puntos_cargue'),
+                        func.max(Viajes.peso_meta).label('peso'),
                         func.max(Viajes.fecha_hora).label('fecha_hora_orden')
                     )
                     .join(Flotas, Viajes.flota_id == Flotas.id)
@@ -127,6 +128,7 @@ class ViajesRepository(IRepository[Viajes, ViajesResponse]):
                         Flotas.referencia.label('nombre'),
                         Materiales.nombre.label('material'),
                         Flotas.puntos.label('puntos_cargue'),
+                        func.max(Viajes.peso_meta).label('peso'),
                         func.max(Viajes.fecha_hora).label('fecha_hora_orden')
                     )
                     .join(Flotas, Viajes.flota_id == Flotas.id)
@@ -159,7 +161,8 @@ class ViajesRepository(IRepository[Viajes, ViajesResponse]):
                     'consecutivo': viaje.consecutivo,
                     'nombre': viaje.nombre,
                     'material': viaje.material,
-                    'puntos_cargue': viaje.puntos_cargue
+                    'puntos_cargue': viaje.puntos_cargue,
+                    'peso': viaje.peso
                 }
                 for viaje in viajes
             ]
