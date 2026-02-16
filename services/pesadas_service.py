@@ -739,61 +739,92 @@ class PesadasService:
 
     async def get_pesadas_acumuladas(self, puerto_id: str) -> List[VPesadasAcumResponse]:
         """
-        Obtener y procesar pesadas acumuladas para un puerto (y opcionalmente una transacción).
+        Obtener y procesar pesadas acumuladas para un puerto.
 
-        Flujo:
-        1) Obtener la transacción en estado 'Proceso' (o la más reciente) para el puerto dado.
-        2) Consultar el acumulado de pesadas nuevas desde la última transacción.
-        3) Construir rangos de pesadas para marcar como leídas.
+        Flujo (prioriza transacción con más pesadas pendientes):
+        1) Obtener la lista de transacciones en estado 'Proceso' con pesadas pendientes (leido=False)
+           ordenadas por cantidad de pesadas pendientes DESC (la que tenga más pesadas primero).
+        2) Seleccionar la transacción con más pesadas pendientes.
+        3) Obtener el acumulado de pesadas solo de esa transacción y marcarlas como leídas atómicamente.
         4) Intentar crear registros en pesadas_corte (no crítico).
-        5) Marcar las pesadas como leídas.
-        6) Construir y devolver la respuesta, prefiriendo datos de pesadas_corte
+        5) Construir y devolver la respuesta con UN SOLO objeto (lista de un elemento).
+
+        Esto permite que cuando hay hasta 2 transacciones activas simultáneamente,
+        se envíen las pesadas de forma "intercalada" priorizando la transacción con más acumulado.
         """
         try:
-            # 1. Obtener transacciones candidate para el puerto_id: preferir estado 'Proceso' ordenadas por fecha, luego el resto por fecha
-            tran_candidates = None
+            # 1. Obtener transacciones con pesadas pendientes ordenadas por cantidad DESC
+            transacciones_con_pendientes = []
             try:
-                if self._trans_repo is not None:
-                    trans_list = await self._trans_repo.find_many(ref1=puerto_id)
-                    if trans_list:
-                        from datetime import datetime
-                        proceso = [t for t in trans_list if getattr(t, 'estado', None) == 'Proceso']
-                        # ordenar por fecha_hora desc dentro de cada grupo
-                        proceso_sorted = sorted(proceso, key=lambda t: getattr(t, 'fecha_hora') or datetime.min, reverse=True)
-                        others = [t for t in trans_list if getattr(t, 'estado', None) != 'Proceso']
-                        others_sorted = sorted(others, key=lambda t: getattr(t, 'fecha_hora') or datetime.min, reverse=True)
-                        tran_candidates = proceso_sorted + others_sorted
+                transacciones_con_pendientes = await self._repo.count_pesadas_pendientes_by_puerto(puerto_id)
+                if transacciones_con_pendientes:
+                    log.info(f"get_pesadas_acumuladas: Transacciones con pesadas pendientes para puerto {puerto_id}: {transacciones_con_pendientes}")
                 else:
-                    log.warning("get_pesadas_acumuladas: no hay repositorio de transacciones disponible para buscar ref1 por puerto.")
-            except Exception as e_tran:
-                log.error(f"Error buscando transacciones por ref1={puerto_id}: {e_tran}", exc_info=True)
-                tran_candidates = None
+                    log.info(f"get_pesadas_acumuladas: No se encontraron transacciones con pesadas pendientes usando count_pesadas_pendientes_by_puerto para puerto {puerto_id}")
+            except Exception as e_count:
+                log.error(f"Error contando pesadas pendientes por puerto {puerto_id}: {e_count}", exc_info=True)
+                transacciones_con_pendientes = []
 
-            # Si no hay candidatos (no trans_repo o trans_list vacía), se utiliza el comportamiento actual (tran_id=None)
-            # Intentamos primero con la transaccion más reciente (si hay candidates) y si no, con tran_id=None
             acumulado = None
             selected_tran_id = None
 
-            if tran_candidates:
-                # Iterar candidatos y usar fetch_and_mark_sumatoria_pesadas para obtener y marcar de forma atómica
-                for t in tran_candidates:
-                    try:
-                        t_id = getattr(t, 'id', None)
-                        if t_id is None:
-                            continue
-                        acumulado_tmp = await self._repo.fetch_and_mark_sumatoria_pesadas(puerto_id, int(t_id))
-                        if acumulado_tmp:
-                            acumulado = acumulado_tmp
-                            selected_tran_id = int(t_id)
-                            break
-                    except Exception as e_iter:
-                        log.error(f"Error obteniendo/ marcando pesadas para transaccion {getattr(t,'id',None)}: {e_iter}", exc_info=True)
-                        continue
+            # 2. Si hay transacciones con pesadas pendientes, tomar la primera (la que tiene más)
+            if transacciones_con_pendientes:
+                # La primera es la transacción con más pesadas pendientes
+                tran_priorizada = transacciones_con_pendientes[0]
+                selected_tran_id = tran_priorizada['transaccion_id']
+                cantidad = tran_priorizada['cantidad_pendientes']
+                log.info(f"get_pesadas_acumuladas: Priorizando transacción {selected_tran_id} con {cantidad} pesadas pendientes")
 
-            if acumulado is None:
-                # fallback: intentar como antes con tran_id=None (buscar acumulado global)
                 try:
-                    acumulado = await self._repo.get_sumatoria_pesadas(puerto_id, None)
+                    # 3. Obtener y marcar las pesadas de esa transacción de forma atómica
+                    acumulado = await self._repo.fetch_and_mark_sumatoria_pesadas(puerto_id, selected_tran_id)
+                    if acumulado:
+                        log.info(f"get_pesadas_acumuladas: fetch_and_mark exitoso para transacción {selected_tran_id}, {len(acumulado)} registros obtenidos")
+                    else:
+                        log.warning(f"get_pesadas_acumuladas: fetch_and_mark retornó vacío para transacción {selected_tran_id}")
+                except Exception as e_fetch:
+                    log.error(f"Error obteniendo/marcando pesadas para transaccion {selected_tran_id}: {e_fetch}", exc_info=True)
+                    acumulado = None
+                    selected_tran_id = None
+
+            # Fallback: si no se encontraron transacciones con el nuevo método, intentar el flujo anterior
+            if acumulado is None:
+                log.info(f"get_pesadas_acumuladas: No se encontraron transacciones con el método priorizado, intentando fallback para puerto {puerto_id}")
+                try:
+                    if self._trans_repo is not None:
+                        trans_list = await self._trans_repo.find_many(ref1=puerto_id)
+                        if trans_list:
+                            from datetime import datetime
+                            proceso = [t for t in trans_list if getattr(t, 'estado', None) == 'Proceso']
+                            proceso_sorted = sorted(proceso, key=lambda t: getattr(t, 'fecha_hora') or datetime.min, reverse=True)
+
+                            for t in proceso_sorted:
+                                try:
+                                    t_id = getattr(t, 'id', None)
+                                    if t_id is None:
+                                        continue
+                                    acumulado_tmp = await self._repo.fetch_and_mark_sumatoria_pesadas(puerto_id, int(t_id))
+                                    if acumulado_tmp:
+                                        acumulado = acumulado_tmp
+                                        selected_tran_id = int(t_id)
+                                        break
+                                except Exception as e_iter:
+                                    log.error(f"Error obteniendo/marcando pesadas para transaccion {getattr(t,'id',None)}: {e_iter}", exc_info=True)
+                                    continue
+                except Exception as e_tran:
+                    log.error(f"Error en fallback buscando transacciones por ref1={puerto_id}: {e_tran}", exc_info=True)
+
+            # Último fallback: obtener acumulado global (sin transacción específica)
+            if acumulado is None:
+                try:
+                    acumulado_full = await self._repo.get_sumatoria_pesadas(puerto_id, None)
+                    # IMPORTANTE: Solo tomar la PRIMERA transacción del acumulado (la que tiene más pesadas)
+                    # para mantener la lógica de intercalación
+                    if acumulado_full:
+                        # Tomar solo el primer elemento (una transacción)
+                        acumulado = [acumulado_full[0]]
+                        log.info(f"get_pesadas_acumuladas: Último fallback - tomando solo transacción {acumulado[0].transaccion} de {len(acumulado_full)} disponibles")
                 except Exception as e_acum:
                     log.error(f"Error al obtener acumulado fallback para puerto {puerto_id}: {e_acum}", exc_info=True)
                     acumulado = None
@@ -801,26 +832,28 @@ class PesadasService:
             if not acumulado:
                 raise EntityNotFoundException("No hay pesadas nuevas por reportar.")
 
-            # 3. Construir rangos para marcar como leídas (solo donde existan ids válidos)
+            # 4. Construir rangos para marcar como leídas (solo si vino del último fallback)
+            # IMPORTANTE: Solo incluir la transacción que vamos a enviar (la primera/única del acumulado)
             pesada_range = [
                 PesadasRange(primera=acum.primera, ultima=acum.ultima, transaccion=acum.transaccion)
                 for acum in acumulado
                 if getattr(acum, 'primera', None) is not None and getattr(acum, 'ultima', None) is not None and getattr(acum, 'transaccion', None) is not None
             ]
 
-            # Si usamos fetch_and_mark_sumatoria_pesadas, ya fueron marcadas; solo marcar si vino del fallback get_sumatoria_pesadas
+            # Si usamos fetch_and_mark_sumatoria_pesadas, ya fueron marcadas; solo marcar si vino del último fallback
             pesadas_corte_records = None
             try:
                 pesadas_corte_records = await self.create_pesadas_corte_if_not_exists(acumulado)
             except Exception as e_create:
                 log.error(f"No fue posible crear pesadas_corte (no crítico): {e_create}", exc_info=True)
 
-            # Si pesada_range no está vacío y no marcamos previamente (fallback), marcar
+            # Si pesada_range no está vacío y no marcamos previamente (último fallback), marcar
+            # Ahora pesada_range solo contiene UNA transacción, así que solo se marcan esas pesadas
             if pesada_range and selected_tran_id is None:
                 ids_marcados = await self._repo.mark_pesadas(pesada_range)
-                log.info(f"{len(ids_marcados)} Pesadas marcadas como leído.")
+                log.info(f"{len(ids_marcados)} Pesadas marcadas como leído para transacción {pesada_range[0].transaccion}.")
 
-            # 6. Construir la respuesta: preferir registros de pesadas_corte (tienen la ref con el consecutivo por transacción)
+            # 5. Construir la respuesta: UN SOLO OBJETO (el primero del acumulado/pesadas_corte)
             response: List[VPesadasAcumResponse] = []
             from decimal import Decimal
             from datetime import datetime
@@ -829,8 +862,9 @@ class PesadasService:
             acum_map = {int(getattr(a, 'transaccion')): a for a in acumulado}
 
             if pesadas_corte_records:
-                # pesadas_corte_records pueden ser Pydantic models o listas de dicts/schemas
-                for corte in pesadas_corte_records:
+                # Tomar solo el primer registro (un solo objeto en la lista)
+                corte = pesadas_corte_records[0] if pesadas_corte_records else None
+                if corte:
                     try:
                         # obtener atributos del corte
                         ref = getattr(corte, 'ref', None) or (corte.get('ref') if isinstance(corte, dict) else None)
@@ -872,11 +906,12 @@ class PesadasService:
                     except Exception as e_map:
                         log.error(f"Error mapeando pesadas_corte a VPesadasAcumResponse: {e_map} - corte: {corte}", exc_info=True)
 
-                log.info(f"Se han procesado {len(response)} pesadas cortes a partir de registros en pesadas_corte.")
+                log.info(f"Se ha procesado 1 pesada corte (de {len(pesadas_corte_records)} disponibles) para transacción priorizada.")
                 return response
 
-            # Si no se generaron registros en pesadas_corte, construir desde acumulado y generar una ref por transaccion
-            for acum in acumulado:
+            # Si no se generaron registros en pesadas_corte, construir desde acumulado (solo el primero)
+            if acumulado:
+                acum = acumulado[0]  # Tomar solo el primer elemento
                 try:
                     transaccion = int(getattr(acum, 'transaccion', 0) or 0)
                     viaje_consec = int(getattr(acum, 'consecutivo', 0) or 0)
@@ -915,7 +950,7 @@ class PesadasService:
                 except Exception as e_map:
                     log.error(f"Error mapeando acumulado a VPesadasAcumResponse (fallback): {e_map} - acum: {acum}", exc_info=True)
 
-            log.info(f"Se han procesado {len(response)} pesadas cortes de un total de {len(acumulado)} registros acumulados (fallback desde acumulado).")
+            log.info(f"Se ha procesado 1 pesada corte (de {len(acumulado)} registros acumulados) para transacción priorizada (fallback desde acumulado).")
             return response
 
         except EntityNotFoundException:

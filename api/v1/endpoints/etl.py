@@ -396,7 +396,8 @@ async def create_transaccion(
                         "Para transacciones de tipo Despacho (camiones): actualiza el estado de la flota y "
                         "envía notificación a la API externa CamionCargue. "
                         "Para transacciones de tipo Recibo (buques): si es la última transacción del viaje, "
-                        "ejecuta el envío final automáticamente.",
+                        "ejecuta el envío final automáticamente. "
+                        "Opcionalmente se puede actualizar el pit de la transacción.",
             response_model=UpdateResponse,
             responses={
                 status.HTTP_400_BAD_REQUEST: {"model": ErrorResponse},
@@ -404,12 +405,13 @@ async def create_transaccion(
             })
 async def end_transaction(
         tran_id: int,
+        pit: Optional[int] = Query(None, description="Pit a actualizar en la transacción (opcional)"),
         service: TransaccionesService = Depends(get_transacciones_service)):
-    log.info(f"Payload recibido: Transacción {tran_id} - Finalizar")
+    log.info(f"Payload recibido: Transacción {tran_id} - Finalizar" + (f" con pit={pit}" if pit is not None else ""))
 
     try:
 
-        tran_result, notificacion_resultado = await service.transaccion_finalizar(tran_id)
+        tran_result, notificacion_resultado = await service.transaccion_finalizar(tran_id, pit=pit)
 
         # Construir mensaje de respuesta basado en el resultado de la notificación
         if notificacion_resultado is None:

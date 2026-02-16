@@ -260,12 +260,13 @@ class TransaccionesService:
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
 
-    async def transaccion_finalizar(self, tran_id: int) -> Tuple[TransaccionResponse, Optional[dict]]:
+    async def transaccion_finalizar(self, tran_id: int, pit: Optional[int] = None) -> Tuple[TransaccionResponse, Optional[dict]]:
         """
         Updates the 'estado' of an active transaction to 'Finalizada' and creates a corresponding movement.
 
         Args:
             tran_id (int): The ID of the transaction to finalize.
+            pit (Optional[int]): Optional pit value to update in the transaction.
 
         Returns:
             tuple: (TransaccionResponse, Optional[dict]) - La transacción actualizada y el resultado de la notificación (si aplica)
@@ -341,13 +342,18 @@ class TransaccionesService:
                     valor_prev = {
                         'estado': getattr(tran_obj, 'estado', None),
                         'fecha_fin': getattr(tran_obj, 'fecha_fin', None),
-                        'peso_real': getattr(tran_obj, 'peso_real', None)
+                        'peso_real': getattr(tran_obj, 'peso_real', None),
+                        'pit': getattr(tran_obj, 'pit', None)
                     }
 
                     # Aplicar cambios a la transacción
                     tran_obj.estado = 'Finalizada'
                     tran_obj.fecha_fin = now_local()
                     tran_obj.peso_real = peso_acc
+
+                    # Actualizar pit si se proporciona
+                    if pit is not None:
+                        tran_obj.pit = pit
 
                     from database.models import VAlmMateriales, Movimientos, AlmacenamientosMateriales
 
@@ -422,7 +428,8 @@ class TransaccionesService:
                     valor_new = {
                         'estado': getattr(tran_obj, 'estado', None),
                         'fecha_fin': getattr(tran_obj, 'fecha_fin', None),
-                        'peso_real': getattr(tran_obj, 'peso_real', None)
+                        'peso_real': getattr(tran_obj, 'peso_real', None),
+                        'pit': getattr(tran_obj, 'pit', None)
                     }
 
                     # Registrar auditoría para transacción

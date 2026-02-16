@@ -137,7 +137,7 @@ class PesadasRepository(IRepository[Pesadas, PesadaResponse]):
         workers process the same puerto simultaneously.
 
         Strategy:
-        1. Start a DB transaction.
+        1. Check if transaction already active, if not start one.
         2. Select Pesadas IDs matching puerto_ref and tran_id with FOR UPDATE SKIP LOCKED to avoid
            competing workers picking the same rows.
         3. If no IDs found, return empty list.
@@ -146,65 +146,74 @@ class PesadasRepository(IRepository[Pesadas, PesadaResponse]):
         5. Update Pesadas SET leido = True WHERE id IN (selected_ids).
         6. Commit and return the aggregated mappings as PesadasCalculate instances.
         """
+        async def _execute_fetch_and_mark():
+            """Lógica interna para ejecutar la consulta y marcado."""
+            # Seleccionar ids con FOR UPDATE SKIP LOCKED
+            id_sel = (
+                select(Pesadas.id)
+                .join(Transacciones, Pesadas.transaccion_id == Transacciones.id)
+                .join(Viajes, Transacciones.viaje_id == Viajes.id)
+                .where(
+                    Pesadas.leido == False,
+                    Transacciones.id == tran_id,
+                    Viajes.puerto_id == puerto_ref
+                )
+                .with_for_update(skip_locked=True)
+            )
+            res_ids = await self.db.execute(id_sel)
+            ids = res_ids.scalars().all()
+
+            if not ids:
+                return []
+
+            # Agregación sobre los ids seleccionados
+            agg_q = (
+                select(
+                    Viajes.puerto_id,
+                    Flotas.referencia,
+                    Viajes.id.label('consecutivo'),
+                    Transacciones.id.label('transaccion'),
+                    Transacciones.pit,
+                    Materiales.codigo.label('material'),
+                    func.sum(Pesadas.peso_real).label('peso'),
+                    func.max(Pesadas.fecha_hora).label('fecha_hora'),
+                    func.min(Pesadas.id).label('primera'),
+                    func.max(Pesadas.id).label('ultima'),
+                    Pesadas.usuario_id,
+                    func.fn_usuario_nombre(Pesadas.usuario_id).label('usuario')
+                )
+                .join(Transacciones, Pesadas.transaccion_id == Transacciones.id)
+                .join(Materiales, Transacciones.material_id == Materiales.id)
+                .join(Viajes, Transacciones.viaje_id == Viajes.id)
+                .join(Flotas, Viajes.flota_id == Flotas.id)
+                .where(Pesadas.id.in_(ids))
+                .group_by(
+                    Transacciones.id,
+                    Flotas.referencia,
+                    Viajes.id,
+                    Transacciones.pit,
+                    Materiales.codigo,
+                    Pesadas.usuario_id
+                )
+            )
+
+            agg_res = await self.db.execute(agg_q)
+            mappings = agg_res.mappings().all()
+
+            # Marcar pesadas como leidas
+            await self.update_bulk(entity_ids=list(ids), update_data={'leido': True})
+
+            return [PesadasCalculate(**row) for row in mappings]
+
         try:
-            # 1. iniciar transacción
-            async with self.db.begin():
-                # 2. seleccionar ids con FOR UPDATE SKIP LOCKED
-                id_sel = (
-                    select(Pesadas.id)
-                    .join(Transacciones, Pesadas.transaccion_id == Transacciones.id)
-                    .join(Viajes, Transacciones.viaje_id == Viajes.id)
-                    .where(
-                        Pesadas.leido == False,
-                        Transacciones.id == tran_id,
-                        Viajes.puerto_id == puerto_ref
-                    )
-                    .with_for_update(skip_locked=True)
-                )
-                res_ids = await self.db.execute(id_sel)
-                ids = res_ids.scalars().all()
-
-                if not ids:
-                    return []
-
-                # 4. Agregación sobre los ids seleccionados
-                agg_q = (
-                    select(
-                        Viajes.puerto_id,
-                        Flotas.referencia,
-                        Viajes.id.label('consecutivo'),
-                        Transacciones.id.label('transaccion'),
-                        Transacciones.pit,
-                        Materiales.codigo.label('material'),
-                        func.sum(Pesadas.peso_real).label('peso'),
-                        func.max(Pesadas.fecha_hora).label('fecha_hora'),
-                        func.min(Pesadas.id).label('primera'),
-                        func.max(Pesadas.id).label('ultima'),
-                        Pesadas.usuario_id,
-                        func.fn_usuario_nombre(Pesadas.usuario_id).label('usuario')
-                    )
-                    .join(Transacciones, Pesadas.transaccion_id == Transacciones.id)
-                    .join(Materiales, Transacciones.material_id == Materiales.id)
-                    .join(Viajes, Transacciones.viaje_id == Viajes.id)
-                    .join(Flotas, Viajes.flota_id == Flotas.id)
-                    .where(Pesadas.id.in_(ids))
-                    .group_by(
-                        Transacciones.id,
-                        Flotas.referencia,
-                        Viajes.id,
-                        Transacciones.pit,
-                        Materiales.codigo,
-                        Pesadas.usuario_id
-                    )
-                )
-
-                agg_res = await self.db.execute(agg_q)
-                mappings = agg_res.mappings().all()
-
-                # 5. Marcar pesadas como leidas
-                await self.update_bulk(entity_ids=ids, update_data={'leido': True})
-
-                return [PesadasCalculate(**row) for row in mappings]
+            # Verificar si ya hay una transacción activa en la sesión
+            if self.db.in_transaction():
+                # Ya hay transacción activa, ejecutar directamente sin crear nueva
+                return await _execute_fetch_and_mark()
+            else:
+                # No hay transacción activa, crear una nueva
+                async with self.db.begin():
+                    return await _execute_fetch_and_mark()
         except Exception:
             # No propagar detalles SQL, dejar que quien llame maneje/loguee
             raise
@@ -253,4 +262,35 @@ class PesadasRepository(IRepository[Pesadas, PesadaResponse]):
                 'cantidad_pesadas': row['cantidad_pesadas']
             }
         return None
+
+    async def count_pesadas_pendientes_by_puerto(self, puerto_ref: str) -> List[dict]:
+        """
+        Cuenta las pesadas pendientes (leido=False) agrupadas por transacción
+        para un puerto específico. Solo considera transacciones en estado 'Proceso'.
+
+        Args:
+            puerto_ref: ID del puerto (puerto_id en viajes)
+
+        Returns:
+            Lista de dicts con 'transaccion_id' y 'cantidad_pendientes', ordenada
+            por cantidad_pendientes DESC (la transacción con más pesadas primero)
+        """
+        query = (
+            select(
+                Transacciones.id.label('transaccion_id'),
+                func.count(Pesadas.id).label('cantidad_pendientes')
+            )
+            .join(Transacciones, Pesadas.transaccion_id == Transacciones.id)
+            .join(Viajes, Transacciones.viaje_id == Viajes.id)
+            .where(
+                Viajes.puerto_id == puerto_ref,
+                Pesadas.leido == False,
+                Transacciones.estado == 'Proceso'
+            )
+            .group_by(Transacciones.id)
+            .order_by(func.count(Pesadas.id).desc())
+        )
+        result = await self.db.execute(query)
+        return [{'transaccion_id': row['transaccion_id'], 'cantidad_pendientes': row['cantidad_pendientes']}
+                for row in result.mappings().all()]
 
