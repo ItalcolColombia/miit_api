@@ -5,7 +5,7 @@ from core.config.settings import get_settings
 from core.exceptions.base_exception import BasedException
 from utils.logger_util import LoggerUtil
 
-SALT = get_settings().ENCRYPTION_KEY
+SALT = get_settings().ENCRYPTION_KEY.get_secret_value()
 log = LoggerUtil()
 
 

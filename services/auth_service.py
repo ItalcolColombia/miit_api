@@ -303,7 +303,7 @@ class AuthService:
             full_name='SysAdmin',
             cedula=99999999,
             email='admin@metalteco.com',
-            clave=get_settings().API_PASSWORD_ADMINISTRATOR,
+            clave=get_settings().API_PASSWORD_ADMINISTRATOR.get_secret_value(),
             rol_id=99,
             rol=UserRoleEnum.SUPER_ADMINISTRATOR,
             recuperacion=None,

@@ -43,7 +43,7 @@ async def login_and_get_token() -> str:
     try:
         response = await auth_state.http_client.post(
             f"{get_settings().TG_API_URL}/account/login",
-            json={"email": get_settings().TG_API_USER, "password": get_settings().TG_API_PASS},
+            json={"email": get_settings().TG_API_USER, "password": get_settings().TG_API_PASS.get_secret_value() if get_settings().TG_API_PASS else None},
             headers={"Content-Type": "application/json"},
         )
         response.raise_for_status()

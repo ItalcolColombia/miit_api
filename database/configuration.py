@@ -32,7 +32,7 @@ class DatabaseConfigurationUtil:
         self.__db_host = get_settings().DB_HOST
         self.__db_port = get_settings().DB_PORT
         self.__db_user = get_settings().DB_USER
-        self.__db_password = get_settings().DB_PASSWORD
+        self.__db_password = get_settings().DB_PASSWORD.get_secret_value()
         self.__db_type_default = DatabaseTypeEnum.SQLITE.value.upper()
 
     def get_url(self) -> str:

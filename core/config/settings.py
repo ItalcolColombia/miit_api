@@ -1,6 +1,8 @@
 from functools import lru_cache
+from typing import Optional
 
-from pydantic_settings import BaseSettings
+from pydantic import SecretStr
+from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 class Settings(BaseSettings):
@@ -11,72 +13,79 @@ class Settings(BaseSettings):
       JWT authentication, email configuration, and additional variables. Settings are loaded
       from a .env file with case-sensitive keys.
 
+      IMPORTANT: Sensitive values (passwords, secrets, keys) should ONLY be defined
+      in the .env file and NOT have default values here for security reasons.
     """
-    #API Params
+
+    # ==================== API Configuration ====================
     API_NAME: str = "MIIT_API"
     API_HOST: str = "0.0.0.0"
-    API_PORT: int = "8000"
+    API_PORT: int = 8000
     API_V1_STR: str = "v1"
     API_VERSION_NUM: str = "0.0.45"
     API_LOG_LEVEL: str = "DEBUG"
     APP_LOG_DIR: str = "/var/www/metalteco/log/app_logs"
+
     ALLOWED_HOSTS: list[str] = [
-        "integrador.turbograneles.com",  # Dominio del backend
-        "informes.turbograneles.com", # Dominio del frontend
-        "localhost:8000",  # Para desarrollo local backend
-        "localhost:5173",  # Para desarrollo local frontend
+        "integrador.turbograneles.com",
+        "informes.turbograneles.com",
+        "localhost:8000",
+        "localhost:5173",
     ]
     CORS_ORIGINS: list[str] = [
-        "https://informes.turbograneles.com",  # Frontend producción
-        "http://localhost:5173",  # Frontend desarrollo (Vite)
+        "https://informes.turbograneles.com",
+        "http://localhost:5173",
         "http://localhost:3000",
     ]
-    # API 'SU' Params
-    API_USER_ADMINISTRATOR: str = "administrator"
-    API_PASSWORD_ADMINISTRATOR: str = "$2b$12$XZpenPj7tndIasZhG5FS9OP.fmKJlUs2pOPw3oH/SmYQ9q07A7o7C"
 
-    # Database Params
+    # ==================== API Super User (SENSITIVE) ====================
+    # These values MUST be set via .env file
+    API_USER_ADMINISTRATOR: str
+    API_PASSWORD_ADMINISTRATOR: SecretStr
+
+    # ==================== Database Configuration (SENSITIVE) ====================
     DB_TYPE: str = "PostgreSQL"
-    DB_USER: str = "postgres"
-    DB_PASSWORD: str = "M3t4l867s0ft"
+    DB_USER: str  # Required from .env
+    DB_PASSWORD: SecretStr  # Required from .env
     DB_HOST: str = "localhost"
     DB_PORT: str = "5432"
-    DB_NAME: str = "PTOAntioquia_DW"
+    DB_NAME: str  # Required from .env
 
-    #Email Params
+    # ==================== Email Configuration (SENSITIVE) ====================
     SMTP_HOST: str = "smtp.example.com"
     SMTP_PORT: str = "587"
-    SMTP_USER: str = "usuario"
-    SMTP_PASSWORD: str = "clave"
+    SMTP_USER: Optional[str] = None
+    SMTP_PASSWORD: Optional[SecretStr] = None
 
-    # JWT Params
-    JWT_SECRET_KEY: str = "nS3-_u1K93UkTlg_RsGCPGLF8oPhFKN_h8z0G4LWSTk"
+    # ==================== JWT Configuration (SENSITIVE) ====================
+    JWT_SECRET_KEY: SecretStr  # Required from .env
     JWT_ALGORITHM: str = "HS256"
     JWT_ACCESS_TOKEN_EXPIRE_MINUTES: int = 40
     JWT_REFRESH_TOKEN_EXPIRE_DAYS: int = 1
     JWT_ISSUER: str = "MIIT-API-Authentication"
     JWT_AUDIENCE: str = "MIIT-API"
 
-    #Aditional Params
-    ENCRYPTION_KEY:str="5o5POG_5KxOpY3ztmwrKn6Y4kF16B4xoyEKHWoYERZw="
+    # ==================== Encryption (SENSITIVE) ====================
+    ENCRYPTION_KEY: SecretStr  # Required from .env
 
+    # ==================== Feature Configuration ====================
     # Despacho Directo - Almacenamiento Virtual
-    # ID del almacenamiento virtual para transacciones de despacho directo
-    # Este almacenamiento no afecta el inventario real
     ALMACENAMIENTO_DESPACHO_DIRECTO_ID: int = 0
 
-    # TurboGraneles API
-    TG_API_AUTH:str = ""
-    TG_API_URL:str = "http://turbograneles-puertoantioquia-424798204.us-east-1.elb.amazonaws.com"
-    TG_API_USER:str = "daniel.pacheco@metalteco.com"
-    TG_API_PASS:str ="Passw0rd_metalteco"
+    # ==================== External API: TurboGraneles (SENSITIVE) ====================
+    TG_API_AUTH: str = ""
+    TG_API_URL: str = ""
+    TG_API_USER: Optional[str] = None
+    TG_API_PASS: Optional[SecretStr] = None
     TG_API_ACCEPTS_LIST: bool = False
 
-
-    class Config:
-        env_file = ".env"
-        case_sensitive = True
-        extra = 'ignore'
+    model_config = SettingsConfigDict(
+        env_file=".env",
+        case_sensitive=True,
+        extra='ignore',
+        # Fail fast if required env vars are missing
+        validate_default=True,
+    )
 
 
 @lru_cache

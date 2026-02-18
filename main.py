@@ -32,7 +32,7 @@ API_STAGE = get_settings().API_LOG_LEVEL
 ALLOWED_HOSTS = get_settings().ALLOWED_HOSTS
 CORS_ORIGINS = get_settings().CORS_ORIGINS
 
-SECRET_KEY = get_settings().JWT_SECRET_KEY
+SECRET_KEY = get_settings().JWT_SECRET_KEY.get_secret_value()
 
 # Logger Setup
 log = LoggerUtil()
