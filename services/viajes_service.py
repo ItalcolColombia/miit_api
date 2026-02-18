@@ -264,8 +264,32 @@ class ViajesService:
             if material_id is None:
                 raise EntityNotFoundException(f"Material '{viaje_create.material_name}' no existe")
 
-            # 5. Ajustar el schema al requerido
-            viaje_data = viaje_create.model_dump(exclude={"referencia", "puntos"})
+            # 5. Buscar bl_id si se envió no_bl
+            bl_id = None
+            if viaje_create.no_bl:
+                # Primero necesitamos el viaje de recibo (buque) para buscar el BL
+                if viaje_create.viaje_origen:
+                    viaje_recibo = await self.get_viaje_by_puerto_id(viaje_create.viaje_origen)
+                    if viaje_recibo:
+                        bl = await self.bls_service.get_bl_by_no_bl_and_viaje(viaje_create.no_bl, viaje_recibo.id)
+                        if bl:
+                            bl_id = bl.id
+                            log.info(f"BL encontrado para despacho: bl_id={bl_id}, no_bl={viaje_create.no_bl}")
+                        else:
+                            log.warning(f"No se encontró BL con no_bl '{viaje_create.no_bl}' para viaje_origen '{viaje_create.viaje_origen}'")
+                    else:
+                        log.warning(f"No se encontró viaje de recibo con puerto_id '{viaje_create.viaje_origen}'")
+                else:
+                    # Si no hay viaje_origen pero sí no_bl, buscar el BL directamente por no_bl
+                    bl = await self.bls_service.get_bl_by_num(viaje_create.no_bl)
+                    if bl:
+                        bl_id = bl.id
+                        log.info(f"BL encontrado para despacho (sin viaje_origen): bl_id={bl_id}, no_bl={viaje_create.no_bl}")
+                    else:
+                        log.warning(f"No se encontró BL con no_bl '{viaje_create.no_bl}'")
+
+            # 6. Ajustar el schema al requerido
+            viaje_data = viaje_create.model_dump(exclude={"referencia", "puntos", "no_bl"})
             # DEBUG: inspeccionar viaje_data después de model_dump
             try:
                 vll = viaje_data.get('fecha_llegada')
@@ -277,6 +301,7 @@ class ViajesService:
 
             viaje_data["flota_id"] = flota.id
             viaje_data["material_id"] = material_id
+            viaje_data["bl_id"] = bl_id
 
             # Salvaguarda: asegurar que las fechas estén en UTC
             for f in ("fecha_llegada", "fecha_salida", "fecha_hora"):
@@ -289,7 +314,7 @@ class ViajesService:
                     except Exception:
                         pass
 
-            # 6. Crear registro en la base de datos
+            # 7. Crear registro en la base de datos
             db_viaje = ViajeCreate(**viaje_data)
             try:
                 await self._repo.create(db_viaje)
@@ -305,7 +330,7 @@ class ViajesService:
                     user_msg = f"Violación de integridad al crear viaje: {detail}"
                 raise BasedException(message=user_msg, status_code=status.HTTP_409_CONFLICT)
 
-            # 7. Consultar el viaje recién añadido
+            # 8. Consultar el viaje recién añadido
             created_viaje = await self.get_viaje_by_puerto_id(viaje_create.puerto_id)
             if not created_viaje:
                 raise EntityNotFoundException("Error al recuperar la cita recién creada")
@@ -631,6 +656,260 @@ class ViajesService:
             log.error(f"Error inesperado al enviar notificación de cargue para flota {flota.referencia}: {e}", exc_info=True)
             raise BasedException(
                 message=f"Error inesperado al enviar notificación de cargue: {e}",
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
+
+    async def _calcular_y_actualizar_pesos_reales_bls(self, viaje_id: int) -> List[dict]:
+        """
+        Calcula y actualiza los pesos reales de los BLs de un viaje mediante prorrateo.
+
+        La lógica es:
+        1. Obtener todas las transacciones finalizadas del viaje, agrupadas por material
+        2. Para cada material, sumar el peso_real de las transacciones
+        3. Obtener todos los BLs del viaje para ese material
+        4. Calcular el peso_real de cada BL proporcionalmente:
+           peso_real_bl = (peso_bl / suma_peso_bl_material) * peso_real_transacciones
+        5. Actualizar cada BL con su peso_real calculado
+
+        Args:
+            viaje_id: ID del viaje (buque)
+
+        Returns:
+            List[dict]: Lista de BLs actualizados con sus pesos reales
+        """
+        from decimal import Decimal, ROUND_HALF_UP
+        from collections import defaultdict
+        from sqlalchemy import select, func
+        from database.models import Transacciones, Bls
+        from schemas.bls_schema import BlsUpdate
+
+        bls_actualizados = []
+
+        try:
+            # 1. Obtener suma de peso_real por material de las transacciones finalizadas del viaje
+            query_transacciones = (
+                select(
+                    Transacciones.material_id,
+                    func.sum(Transacciones.peso_real).label('peso_real_total')
+                )
+                .where(Transacciones.viaje_id == viaje_id)
+                .where(Transacciones.tipo == 'Recibo')
+                .where(Transacciones.estado == 'Finalizada')
+                .group_by(Transacciones.material_id)
+            )
+            result_trans = await self._repo.db.execute(query_transacciones)
+            pesos_por_material = {row.material_id: Decimal(str(row.peso_real_total or 0)) for row in result_trans.fetchall()}
+
+            log.info(f"Pesos reales por material para viaje {viaje_id}: {pesos_por_material}")
+
+            if not pesos_por_material:
+                log.warning(f"No se encontraron transacciones finalizadas para viaje {viaje_id}")
+                return bls_actualizados
+
+            # 2. Obtener todos los BLs del viaje
+            query_bls = (
+                select(Bls)
+                .where(Bls.viaje_id == viaje_id)
+            )
+            result_bls = await self._repo.db.execute(query_bls)
+            bls = result_bls.scalars().all()
+
+            if not bls:
+                log.warning(f"No se encontraron BLs para viaje {viaje_id}")
+                return bls_actualizados
+
+            # 3. Agrupar BLs por material y calcular suma de peso_bl por material
+            bls_por_material = defaultdict(list)
+            suma_peso_bl_por_material = defaultdict(Decimal)
+
+            for bl in bls:
+                material_id = bl.material_id
+                peso_bl = Decimal(str(bl.peso_bl or 0))
+                bls_por_material[material_id].append(bl)
+                suma_peso_bl_por_material[material_id] += peso_bl
+
+            log.info(f"Suma de peso_bl por material para viaje {viaje_id}: {dict(suma_peso_bl_por_material)}")
+
+            # 4. Calcular y actualizar peso_real para cada BL
+            for material_id, bls_del_material in bls_por_material.items():
+                peso_real_total = pesos_por_material.get(material_id, Decimal('0'))
+                suma_peso_bl = suma_peso_bl_por_material[material_id]
+
+                if suma_peso_bl == 0:
+                    log.warning(f"Suma de peso_bl es 0 para material {material_id} en viaje {viaje_id}")
+                    continue
+
+                for bl in bls_del_material:
+                    peso_bl = Decimal(str(bl.peso_bl or 0))
+
+                    # Calcular proporción: peso_real_bl = (peso_bl / suma_peso_bl) * peso_real_total
+                    if suma_peso_bl > 0:
+                        proporcion = peso_bl / suma_peso_bl
+                        peso_real_calculado = (proporcion * peso_real_total).quantize(Decimal('0.01'), rounding=ROUND_HALF_UP)
+                    else:
+                        peso_real_calculado = Decimal('0')
+
+                    log.info(f"BL {bl.no_bl}: peso_bl={peso_bl}, proporción={proporcion:.4f}, peso_real_calculado={peso_real_calculado}")
+
+                    # Actualizar el BL con el peso_real calculado
+                    try:
+                        update_data = BlsUpdate(peso_real=peso_real_calculado)
+                        await self.bls_service.update(bl.id, update_data)
+
+                        bls_actualizados.append({
+                            'bl_id': bl.id,
+                            'no_bl': bl.no_bl,
+                            'material_id': material_id,
+                            'peso_bl': float(peso_bl),
+                            'peso_real': float(peso_real_calculado)
+                        })
+                    except Exception as e_update:
+                        log.error(f"Error al actualizar peso_real del BL {bl.id}: {e_update}")
+
+            log.info(f"Actualización de pesos reales completada para viaje {viaje_id}. BLs actualizados: {len(bls_actualizados)}")
+            return bls_actualizados
+
+        except Exception as e:
+            log.error(f"Error al calcular pesos reales de BLs para viaje {viaje_id}: {e}", exc_info=True)
+            return bls_actualizados
+
+    async def finalizar_buque(self, puerto_id: str) -> tuple:
+        """
+        Finaliza un buque actualizando el estado_operador a False y enviando
+        la notificación FinalizaBuque a la API externa con retry.
+
+        Args:
+            puerto_id (str): El puerto_id del viaje del buque.
+
+        Returns:
+            tuple: (FlotasResponse, dict) - La flota actualizada y el resultado de la notificación.
+                   El dict contiene: 'success' (bool), 'message' (str), 'flota_actualizada' (bool)
+        """
+        resultado = {
+            'success': False,
+            'message': '',
+            'flota_actualizada': False
+        }
+
+        try:
+            # Obtener el viaje por puerto_id
+            viaje = await self.get_viaje_by_puerto_id(puerto_id)
+            if not viaje:
+                raise EntityNotFoundException(f"Viaje con puerto_id: '{puerto_id}' no existe")
+
+            # Obtener la flota
+            flota = await self.flotas_service.get_flota(viaje.flota_id)
+            if not flota:
+                raise EntityNotFoundException(f"Flota con id '{viaje.flota_id}' no existe")
+
+            # Verificar que sea un buque
+            if flota.tipo != "buque":
+                log.warning(f"Flota {flota.id} no es de tipo buque, es {flota.tipo}.")
+                raise BasedException(
+                    message=f"La flota no es de tipo buque, es {flota.tipo}",
+                    status_code=status.HTTP_400_BAD_REQUEST
+                )
+
+            # Calcular y actualizar los pesos reales de los BLs mediante prorrateo
+            # ANTES de obtener los BLs para la notificación
+            log.info(f"FinalizaBuque - Calculando pesos reales de BLs para viaje {viaje.id} (puerto_id: {puerto_id})")
+            bls_actualizados = await self._calcular_y_actualizar_pesos_reales_bls(viaje.id)
+            log.info(f"FinalizaBuque - BLs actualizados con peso real: {len(bls_actualizados)}")
+
+            # Obtener BLs del viaje DESPUÉS de actualizar los pesos reales
+            # (para evitar problemas de lazy loading fuera de sesión)
+            bl = await self.bls_service.get_bl_by_viaje(viaje.id)
+
+            # Preparar datos de BLs para la notificación
+            # Usamos los datos de bls_actualizados que ya tienen los pesos reales calculados
+            if bls_actualizados:
+                dt_bl = [
+                    NotificationBlsPeso(
+                        noBL=bl_data['no_bl'],
+                        voyage=viaje.puerto_id,
+                        weightBl=bl_data['peso_real']
+                    ).model_dump()
+                    for bl_data in bls_actualizados
+                ]
+            elif bl:
+                # Fallback: usar los BLs directamente si no se actualizaron
+                dt_bl = [
+                    NotificationBlsPeso(
+                        noBL=bl_item.no_bl,
+                        voyage=viaje.puerto_id,
+                        weightBl=bl_item.peso_real if hasattr(bl_item, 'peso_real') and bl_item.peso_real else bl_item.peso_bl
+                    ).model_dump()
+                    for bl_item in bl
+                ]
+            else:
+                dt_bl = None
+
+            # Actualizar estado_operador de la flota a False
+            try:
+                updated_flota = await self.flotas_service.update_status(flota, estado_puerto=None, estado_operador=False)
+                resultado['flota_actualizada'] = True
+                log.info(f"Estado operador de flota {flota.id} (buque {flota.referencia}) actualizado a False para puerto_id {puerto_id}")
+            except Exception as e_flota:
+                log.error(f"Error al actualizar estado de flota {flota.id}: {e_flota}")
+                raise BasedException(
+                    message=f"Error al actualizar estado de flota: {e_flota}",
+                    status_code=status.HTTP_500_INTERNAL_SERVER_ERROR
+                )
+
+            # Preparar notificación
+
+            notification = NotificationBuque(
+                voyage=viaje.puerto_id,
+                status="Finished",
+                data=dt_bl
+            ).model_dump()
+
+            settings = get_settings()
+            endpoint = f"{settings.TG_API_URL}/api/v1/Metalsoft/FinalizaBuque"
+
+            # Loguear el payload que se enviará
+            try:
+                serialized = AnyUtils.serialize_data(notification)
+                log.info(f"FinalizaBuque - Payload a enviar para puerto_id {puerto_id}: {serialized}")
+                log.info(f"FinalizaBuque - Endpoint destino: {endpoint}")
+
+                # Enviar notificación con retry (el método post ya tiene retry implementado)
+                await self.feedback_service.post(serialized, endpoint)
+                log.info(f"FinalizaBuque - Notificación enviada exitosamente para puerto_id {puerto_id}")
+                resultado['success'] = True
+                resultado['message'] = "Notificación FinalizaBuque enviada exitosamente"
+
+            except httpx.HTTPStatusError as e:
+                # Intentar extraer un JSON de la respuesta; si no es JSON usar el texto
+                try:
+                    error_json = e.response.json()
+                except Exception:
+                    error_json = None
+
+                if isinstance(error_json, dict):
+                    msg = error_json.get('message') or error_json.get('error') or e.response.text
+                else:
+                    msg = e.response.text
+
+                log.error(f"FinalizaBuque - Notificación falló. API externa error: {e.response.status_code}: {e.response.text}")
+                log.error(f"FinalizaBuque - Payload que falló: {serialized}")
+                resultado['message'] = f"Notificación FinalizaBuque falló. API externa error: {msg}"
+
+            except Exception as e_notify:
+                log.error(f"FinalizaBuque - Error inesperado al enviar notificación para puerto_id {puerto_id}: {e_notify}", exc_info=True)
+                log.error(f"FinalizaBuque - Payload que falló: {notification}")
+                resultado['message'] = f"Error inesperado al enviar notificación FinalizaBuque: {e_notify}"
+
+            return updated_flota, resultado
+
+        except EntityNotFoundException as e:
+            raise e
+        except BasedException as e:
+            raise e
+        except Exception as e:
+            log.error(f"FinalizaBuque - Error al finalizar buque para puerto_id {puerto_id}: {e}", exc_info=True)
+            raise BasedException(
+                message=f"Error al finalizar buque: {e}",
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
 

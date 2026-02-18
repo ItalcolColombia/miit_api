@@ -14,6 +14,7 @@ class BlsResponse(BaseSchema):
     cliente_id: int
     no_bl: str
     peso_bl: Decimal
+    peso_real: Optional[Decimal] = None
     cargue_directo: Optional[bool] = False
     estado_puerto: Optional[bool] = False
     estado_operador: Optional[bool] = False
@@ -54,6 +55,7 @@ class BlsUpdate(BaseSchema):
     cliente_id: Optional[int] = None
     no_bl: Optional[str] = Field(None, max_length=100)
     peso_bl: Optional[Decimal] = Field(None, max_digits=10, decimal_places=2)
+    peso_real: Optional[Decimal] = Field(None, max_digits=10, decimal_places=2)
     cargue_directo: Optional[bool] = None
     estado_puerto: Optional[bool] = None
     estado_operador: Optional[bool] = None

@@ -17,7 +17,7 @@ class Settings(BaseSettings):
     API_HOST: str = "0.0.0.0"
     API_PORT: int = "8000"
     API_V1_STR: str = "v1"
-    API_VERSION_NUM: str = "0.0.44"
+    API_VERSION_NUM: str = "0.0.45"
     API_LOG_LEVEL: str = "DEBUG"
     APP_LOG_DIR: str = "/var/www/metalteco/log/app_logs"
     ALLOWED_HOSTS: list[str] = [
@@ -59,6 +59,11 @@ class Settings(BaseSettings):
 
     #Aditional Params
     ENCRYPTION_KEY:str="5o5POG_5KxOpY3ztmwrKn6Y4kF16B4xoyEKHWoYERZw="
+
+    # Despacho Directo - Almacenamiento Virtual
+    # ID del almacenamiento virtual para transacciones de despacho directo
+    # Este almacenamiento no afecta el inventario real
+    ALMACENAMIENTO_DESPACHO_DIRECTO_ID: int = 0
 
     # TurboGraneles API
     TG_API_AUTH:str = ""

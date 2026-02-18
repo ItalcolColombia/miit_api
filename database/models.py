@@ -13,6 +13,7 @@ class Almacenamientos(Base):
     nombre = Column(String(50), unique=True, index=True)
     capacidad = Column(Numeric(10, 2), nullable=False)
     poli_material = Column(Boolean, nullable=False)
+    es_virtual = Column(Boolean, nullable=False, default=False)
     fecha_hora = Column(DateTime(timezone=True), server_default=func.timezone('America/Bogota', func.now()), onupdate=func.timezone('America/Bogota', func.now()))
     usuario_id = Column(Integer, nullable=True)
     # Definición de relacion 1:M
@@ -37,6 +38,7 @@ class Bls(Base):
     cliente_id = Column(Integer, ForeignKey("clientes.id"), nullable=False)
     no_bl = Column(String)
     peso_bl = Column(Numeric(10, 2))
+    peso_real = Column(Numeric(10, 2), nullable=True)
     cargue_directo = Column(Boolean, nullable=False, default=0)
     estado_puerto = Column(Boolean, nullable=False, default=0)
     estado_operador = Column(Boolean, nullable=False, default=0)
@@ -90,6 +92,7 @@ class Viajes(Base):
     despacho_directo = Column(Boolean, nullable=True)
     fecha_hora = Column(DateTime(timezone=True), server_default=func.timezone('America/Bogota', func.now()), onupdate=func.timezone('America/Bogota', func.now()))
     usuario_id = Column(Integer, nullable=True)
+    bl_id = Column(Integer, nullable=True)
     transacciones = relationship("Transacciones", backref="Viajes")
 
 class Materiales(Base):

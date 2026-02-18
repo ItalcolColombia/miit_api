@@ -145,6 +145,17 @@ class AlmacenamientosService:
         try:
             # Find an Almacenamiento by their 'name'
             almacenamiento = await self._repo.get_alm_id_by_name(nombre)
+
+            # Si no se encontró y el nombre parece ser para despacho directo, retornar el ID configurado
+            if almacenamiento is None:
+                nombre_lower = nombre.lower().strip()
+                # Verificar si el nombre corresponde a despacho directo
+                if 'despacho' in nombre_lower and 'directo' in nombre_lower:
+                    from core.config.settings import get_settings
+                    settings = get_settings()
+                    log.info(f"Almacenamiento '{nombre}' no encontrado por nombre, usando ID de despacho directo: {settings.ALMACENAMIENTO_DESPACHO_DIRECTO_ID}")
+                    return settings.ALMACENAMIENTO_DESPACHO_DIRECTO_ID
+
             return almacenamiento
         except Exception as e:
             log.error(f"Error al obtener almacenamiento con nombre {nombre}: {e}")

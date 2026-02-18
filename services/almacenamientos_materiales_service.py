@@ -4,6 +4,7 @@ from fastapi_pagination import Page, Params
 from sqlalchemy import select
 from starlette import status
 
+from core.config.settings import get_settings
 from core.exceptions.base_exception import BasedException
 from database.models import VAlmMateriales
 from repositories.almacenamientos_materiales_repository import AlmacenamientosMaterialesRepository
@@ -89,12 +90,13 @@ class AlmacenamientosMaterialesService:
                 status_code=status.HTTP_409_CONFLICT
             )
 
-    async def get_pag_alm_mat(self, alm_id: Optional[int] = None, params: Params = Params()) -> Page[VAlmMaterialesResponse]:
+    async def get_pag_alm_mat(self, alm_id: Optional[int] = None, incluir_virtuales: bool = False, params: Params = Params()) -> Page[VAlmMaterialesResponse]:
         """
         Retrieve a paginated list of alm_materiales, optionally filtered by name.
 
         Args:
             alm_id (Optional[str]): The almacenamiento name to filter (optional).
+            incluir_virtuales (bool): Si True, incluye almacenamientos virtuales. Por defecto False.
             params (Params): Pagination parameters.
 
         Returns:
@@ -109,6 +111,12 @@ class AlmacenamientosMaterialesService:
             )
             if alm_id is not None:
                 query = query.where(VAlmMateriales.almacenamiento_id == alm_id)
+
+            # Excluir almacenamientos virtuales por defecto
+            if not incluir_virtuales:
+                settings = get_settings()
+                query = query.where(VAlmMateriales.almacenamiento_id != settings.ALMACENAMIENTO_DESPACHO_DIRECTO_ID)
+
             return await self._repo.get_all_paginated(query=query, params=params)
 
         except Exception as e:

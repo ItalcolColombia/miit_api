@@ -20,6 +20,7 @@ class ViajesResponse(BaseSchema):
     despacho_directo: Optional[bool] = None
     fecha_hora: Optional[datetime] = None
     usuario_id: Optional[int] = None
+    bl_id: Optional[int] = None
 
     model_config = ConfigDict(from_attributes=True)
 
@@ -43,6 +44,7 @@ class ViajeCreate(BaseSchema):
     despacho_directo: Optional[bool] = None
     fecha_hora: Optional[datetime] = None
     usuario_id: Optional[int] = None
+    bl_id: Optional[int] = None
 
 
     class Config:
@@ -56,6 +58,7 @@ class ViajeCreate(BaseSchema):
                 "material_id": 10,
                 "viaje_origen": 43,
                 "despacho_directo": False,
+                "bl_id": 1
             }
         }
 
@@ -69,6 +72,7 @@ class ViajeBuqueExtCreate(BaseModel):
     fecha_salida: Optional[datetime] = None
     fecha_hora: Optional[datetime] = None
     usuario_id: Optional[int] = None
+    despacho_directo: Optional[bool] = None
 
     @field_validator('tipo')
     def tipo_valido(cls, value):
@@ -105,6 +109,7 @@ class ViajeBuqueExtCreate(BaseModel):
                 "peso_meta": 954000.50,
                 "fecha_llegada": "2023-10-27T10:00:00",
                 "fecha_salida": "2023-10-29T14:30:00",
+                "despacho_directo": False,
             }
         }
 
@@ -122,6 +127,7 @@ class ViajeCamionExtCreate(BaseModel):
     puntos: Optional[int] = 1
     fecha_hora: Optional[datetime] = None
     usuario_id: Optional[int] = None
+    no_bl: Optional[str] = Field(None, max_length=100, description="Número de BL al que corresponde el despacho")
 
     @field_validator('material_name')
     def material_name_not_empty(cls, value):
@@ -166,7 +172,8 @@ class ViajeCamionExtCreate(BaseModel):
                 "fecha_salida": "2025-04-29T14:30:00",
                 "material_name": "MAIZ USA",
                 "viaje_origen": "VOY2024044",
-                "despacho_directo": True
+                "despacho_directo": True,
+                "no_bl": "SSF034576272"
             }
         }
 
@@ -205,6 +212,7 @@ class ViajeUpdate(BaseSchema):
     despacho_directo: Optional[bool] = None
     fecha_hora: Optional[datetime] = None
     usuario_id: Optional[int] = None
+    bl_id: Optional[int] = None
 
 
 class ViajesActivosPorMaterialResponse(BaseModel):

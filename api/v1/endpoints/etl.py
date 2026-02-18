@@ -115,7 +115,7 @@ async def get_viajes_activos_por_material(
             status_code=status.HTTP_200_OK,
             summary="Modificar viaje del buque para actualizar estado por partida",
             description="Evento realizado por la automatización al dar por finalizado el recibo de buque."
-                        "Actualiza el estado_operador a False."
+                        "Actualiza el estado_operador a False y envía notificación FinalizaBuque a la API externa."
                         "Corresponde a FinalizaBuqueMT.",
             response_model=UpdateResponse,
             responses={
@@ -128,11 +128,28 @@ async def end_buque(
     log.info(f"Payload recibido: Flota {puerto_id} - Partida")
     try:
 
-        await service.chg_estado_flota(puerto_id, estado_operador=False)
-        log.info(f"La Partida de buque {puerto_id} desde el puerto marcada exitosamente.")
+        flota_result, notificacion_resultado = await service.finalizar_buque(puerto_id)
+
+        # Construir mensaje de respuesta basado en el resultado de la notificación
+        if notificacion_resultado.get('success', False):
+            # Notificación exitosa
+            mensaje = "Buque finalizado exitosamente. Notificación FinalizaBuque enviada correctamente."
+            log.info(f"La Partida de buque {puerto_id} desde el puerto marcada exitosamente con notificación enviada.")
+        else:
+            # Notificación falló
+            error_notificacion = notificacion_resultado.get('message', 'Error desconocido en notificación')
+            flota_actualizada = notificacion_resultado.get('flota_actualizada', False)
+
+            if flota_actualizada:
+                mensaje = f"Buque finalizado exitosamente. Estado de flota actualizado. Advertencia: {error_notificacion}"
+            else:
+                mensaje = f"Buque finalizado con advertencias: {error_notificacion}"
+
+            log.warning(f"La Partida de buque {puerto_id} procesada pero con advertencia en notificación: {error_notificacion}")
+
         return response_json(
             status_code=status.HTTP_200_OK,
-            message=f"estado actualizado",
+            message=mensaje,
         )
 
     except HTTPException as http_exc:

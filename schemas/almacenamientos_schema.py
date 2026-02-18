@@ -9,6 +9,7 @@ class AlmacenamientoResponse(BaseModel):
     nombre: str
     capacidad: Decimal
     poli_material: Optional[bool] = False
+    es_virtual: Optional[bool] = False
     fecha_hora: Optional[datetime] = None
     usuario_id: Optional[int] = None
 
@@ -19,6 +20,7 @@ class AlmacenamientoCreate(AlmacenamientoResponse):
     nombre: str = Field(..., max_length=50)
     capacidad: Decimal = Field(..., max_digits=10, decimal_places=2)
     poli_material: bool = False
+    es_virtual: bool = False
     fecha_hora: Optional[datetime] = None
     usuario_id: Optional[int] = None
 
@@ -27,7 +29,8 @@ class AlmacenamientoCreate(AlmacenamientoResponse):
             "example": {
                 "nombre": "SILO 5",
                 "capacidad": 1500.00,
-                "poli_material": False
+                "poli_material": False,
+                "es_virtual": False
             }
         }
 
@@ -35,5 +38,6 @@ class AlmacenamientoUpdate(AlmacenamientoResponse):
     nombre: str = Field(..., max_length=50)
     capacidad: Decimal = Field(..., max_digits=10, decimal_places=2)
     poli_material: bool = False
+    es_virtual: bool = False
     fecha_hora: Optional[datetime] = None
     usuario_id: Optional[int] = None

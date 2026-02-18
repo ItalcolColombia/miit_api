@@ -312,6 +312,24 @@ class TransaccionesService:
                         raise BasedException(message="Transacción sin campo 'tipo'.", status_code=status.HTTP_400_BAD_REQUEST)
                     tipo_lower = str(tipo_tran_raw).strip().lower()
 
+                    # Verificar si es despacho directo consultando el viaje
+                    es_despacho_directo = False
+                    viaje_id = getattr(tran_obj, 'viaje_id', None)
+                    if viaje_id is not None and self.viajes_repo is not None:
+                        try:
+                            from database.models import Viajes as _Viajes
+                            viaje_result = await session.execute(_select(_Viajes).where(_Viajes.id == int(viaje_id)))
+                            viaje_obj = viaje_result.scalar_one_or_none()
+                            if viaje_obj is not None:
+                                es_despacho_directo = bool(getattr(viaje_obj, 'despacho_directo', False))
+                        except Exception as e_viaje:
+                            log.warning(f"No se pudo verificar despacho_directo para viaje {viaje_id}: {e_viaje}")
+
+                    # Obtener ID del almacenamiento virtual para despacho directo
+                    from core.config.settings import get_settings
+                    settings = get_settings()
+                    almacen_virtual_id = settings.ALMACENAMIENTO_DESPACHO_DIRECTO_ID
+
                     # Determinar configuración de movimientos según el tipo
                     if tipo_lower == 'despacho':
                         mov_config = [{'tipo': 'Salida', 'almacen_id': getattr(tran_obj, 'origen_id', None)}]
@@ -355,7 +373,7 @@ class TransaccionesService:
                     if pit is not None:
                         tran_obj.pit = pit
 
-                    from database.models import VAlmMateriales, Movimientos, AlmacenamientosMateriales
+                    from database.models import VAlmMateriales, Movimientos, AlmacenamientosMateriales, Almacenamientos as _Almacenamientos
 
                     movimientos_creados = []
 
@@ -364,30 +382,51 @@ class TransaccionesService:
                         almacen_id = cfg['almacen_id']
                         mov_tipo = cfg['tipo']
 
+                        # Verificar si el almacenamiento es virtual
+                        es_almacen_virtual = int(almacen_id) == almacen_virtual_id
+                        if not es_almacen_virtual:
+                            # También verificar el campo es_virtual en la tabla
+                            try:
+                                alm_result = await session.execute(
+                                    _select(_Almacenamientos.es_virtual).where(_Almacenamientos.id == int(almacen_id))
+                                )
+                                alm_virtual_flag = alm_result.scalar_one_or_none()
+                                if alm_virtual_flag is True:
+                                    es_almacen_virtual = True
+                            except Exception as e_alm_check:
+                                log.warning(f"No se pudo verificar es_virtual para almacen {almacen_id}: {e_alm_check}")
+
                         # --- Obtener saldo anterior desde la vista VAlmMateriales ---
+                        # Para almacenamientos virtuales, el saldo siempre es 0
                         saldo_anterior = Decimal('0')
-                        try:
-                            res = await session.execute(_select(VAlmMateriales).where(VAlmMateriales.almacenamiento_id == int(almacen_id), VAlmMateriales.material_id == int(getattr(tran_obj, 'material_id', 0))))
-                            vrow = res.scalar_one_or_none()
-                            if vrow is not None:
-                                saldo_anterior = Decimal(getattr(vrow, 'saldo', 0) or 0)
-                        except Exception as e_saldo:
-                            log.error(f"Error consultando saldo anterior en VAlmMateriales para almacen {almacen_id}: {e_saldo}")
+                        if not es_almacen_virtual:
+                            try:
+                                res = await session.execute(_select(VAlmMateriales).where(VAlmMateriales.almacenamiento_id == int(almacen_id), VAlmMateriales.material_id == int(getattr(tran_obj, 'material_id', 0))))
+                                vrow = res.scalar_one_or_none()
+                                if vrow is not None:
+                                    saldo_anterior = Decimal(getattr(vrow, 'saldo', 0) or 0)
+                            except Exception as e_saldo:
+                                log.error(f"Error consultando saldo anterior en VAlmMateriales para almacen {almacen_id}: {e_saldo}")
 
                         # Calcular saldo nuevo
-                        if mov_tipo == 'Salida':
+                        # Para almacenamientos virtuales, saldo_nuevo siempre es 0 (no afecta inventario real)
+                        if es_almacen_virtual:
+                            saldo_nuevo = Decimal('0')
+                        elif mov_tipo == 'Salida':
                             saldo_nuevo = saldo_anterior - peso_acc
                         else:
                             saldo_nuevo = saldo_anterior + peso_acc
 
-                        # Crear objeto Movimientos ORM
+                        # Crear objeto Movimientos ORM (siempre se crea para trazabilidad)
+                        # Para despacho directo, la observación indica que es despacho directo
+                        observacion_mov = 'Despacho Directo' if es_despacho_directo else None
                         mov_obj = Movimientos(
                             transaccion_id=int(tran_id),
                             almacenamiento_id=int(almacen_id),
                             material_id=int(getattr(tran_obj, 'material_id', None)),
                             tipo=mov_tipo,
                             accion='Automático',
-                            observacion=None,
+                            observacion=observacion_mov,
                             peso=peso_acc,
                             saldo_anterior=saldo_anterior,
                             saldo_nuevo=saldo_nuevo,
@@ -398,29 +437,32 @@ class TransaccionesService:
                         await session.refresh(mov_obj)
                         movimientos_creados.append(mov_obj)
 
-                        # Actualizar tabla almacenamientos_materiales (registro existente) con nuevo saldo
-                        try:
-                            # Intentar actualizar el registro existente
-                            update_stmt = (
-                                sqlalchemy_update(AlmacenamientosMateriales)
-                                .where(AlmacenamientosMateriales.c.almacenamiento_id == int(almacen_id))
-                                .where(AlmacenamientosMateriales.c.material_id == int(getattr(tran_obj, 'material_id', 0)))
-                                .values(saldo=saldo_nuevo, fecha_hora=now_local(), usuario_id=current_user_id.get())
-                            )
-                            res_update = await session.execute(update_stmt)
-                            # Si no se actualizó ninguna fila, insertar el registro
-                            rowcount = getattr(res_update, 'rowcount', None)
-                            if not rowcount:
-                                insert_stmt = AlmacenamientosMateriales.insert().values(
-                                    almacenamiento_id=int(almacen_id),
-                                    material_id=int(getattr(tran_obj, 'material_id', 0)),
-                                    saldo=saldo_nuevo,
-                                    fecha_hora=now_local(),
-                                    usuario_id=current_user_id.get()
+                        # Actualizar tabla almacenamientos_materiales SOLO si NO es almacenamiento virtual
+                        if not es_almacen_virtual:
+                            try:
+                                # Intentar actualizar el registro existente
+                                update_stmt = (
+                                    sqlalchemy_update(AlmacenamientosMateriales)
+                                    .where(AlmacenamientosMateriales.c.almacenamiento_id == int(almacen_id))
+                                    .where(AlmacenamientosMateriales.c.material_id == int(getattr(tran_obj, 'material_id', 0)))
+                                    .values(saldo=saldo_nuevo, fecha_hora=now_local(), usuario_id=current_user_id.get())
                                 )
-                                await session.execute(insert_stmt)
-                        except Exception as e_update_alm:
-                            log.error(f"Error actualizando almacenamientos_materiales para almacen {almacen_id}: {e_update_alm}")
+                                res_update = await session.execute(update_stmt)
+                                # Si no se actualizó ninguna fila, insertar el registro
+                                rowcount = getattr(res_update, 'rowcount', None)
+                                if not rowcount:
+                                    insert_stmt = AlmacenamientosMateriales.insert().values(
+                                        almacenamiento_id=int(almacen_id),
+                                        material_id=int(getattr(tran_obj, 'material_id', 0)),
+                                        saldo=saldo_nuevo,
+                                        fecha_hora=now_local(),
+                                        usuario_id=current_user_id.get()
+                                    )
+                                    await session.execute(insert_stmt)
+                            except Exception as e_update_alm:
+                                log.error(f"Error actualizando almacenamientos_materiales para almacen {almacen_id}: {e_update_alm}")
+                        else:
+                            log.info(f"Almacenamiento virtual {almacen_id}: no se actualiza saldo en almacenamientos_materiales (despacho_directo={es_despacho_directo})")
 
                     # Flush/commit handled by context manager
 
@@ -827,12 +869,12 @@ class TransaccionesService:
             # 3. Resolver almacenamientos según tipo
             if tran_ext.origen:
                 origen_id = await self.alm_service.get_mat_by_name(tran_ext.origen)
-                if not origen_id:
+                if origen_id is None:
                     raise EntityNotFoundException(f"No existe almacenamiento con nombre '{tran_ext.origen}'")
 
             if tran_ext.destino:
                 destino_id = await self.alm_service.get_mat_by_name(tran_ext.destino)
-                if not destino_id:
+                if destino_id is None:
                     raise EntityNotFoundException(f"No existe almacenamiento con nombre '{tran_ext.destino}'")
 
             # 4. Si es Recibo o Despacho, obtener ref1 del viaje y calcular peso_meta
@@ -864,9 +906,12 @@ class TransaccionesService:
                     if peso_meta <= 0:
                         log.warning(f"El viaje {viaje_id} no tiene peso_meta definido. peso_meta = 0")
 
-                    # Buscar el bl_id correspondiente al viaje de recibo (buque)
-                    # El viaje de despacho tiene viaje_origen que contiene el puerto_id del viaje de recibo
-                    if viaje.viaje_origen:
+                    # Usar el bl_id del viaje si ya está asignado (viene del registro de camión)
+                    if viaje.bl_id:
+                        bl_id = viaje.bl_id
+                        log.info(f"Usando bl_id del viaje de despacho: bl_id={bl_id}")
+                    # Si no tiene bl_id, buscar el BL correspondiente al viaje de recibo (buque)
+                    elif viaje.viaje_origen:
                         # Buscar el viaje de recibo por puerto_id
                         viaje_recibo = await self.viajes_repo.check_puerto_id(viaje.viaje_origen)
                         if viaje_recibo:

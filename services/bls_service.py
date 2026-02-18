@@ -208,4 +208,27 @@ class BlsService:
                 message="Error inesperado al obtener el BL por viaje.",
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
-   
+
+    async def get_bl_by_no_bl_and_viaje(self, no_bl: str, viaje_id: int) -> Optional[BlsResponse]:
+        """
+        Retrieve a BL by its number and viaje_id.
+
+        Args:
+            no_bl (str): The BL number to search for.
+            viaje_id (int): The ID of the voyage (recibo/buque).
+
+        Returns:
+            Optional[BlsResponse]: The BL object if found, or None.
+
+        Raises:
+            BasedException: For unexpected errors during the retrieval process.
+        """
+        try:
+            bl = await self._repo.get_bl_by_no_bl_and_viaje(no_bl, viaje_id)
+            return BlsResponse.model_validate(bl) if bl else None
+        except Exception as e:
+            log.error(f"Error al obtener BL con no_bl {no_bl} y viaje_id {viaje_id}: {e}")
+            raise BasedException(
+                message="Error inesperado al obtener el BL por número y viaje.",
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )

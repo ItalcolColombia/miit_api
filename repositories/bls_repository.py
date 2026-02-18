@@ -49,3 +49,42 @@ class BlsRepository(IRepository[Bls, BlsResponse]):
         result = await self.db.execute(query)
         return result.scalar_one_or_none()
 
+    async def get_bl_by_no_bl_and_viaje(self, no_bl: str, viaje_id: int) -> Optional[Bls]:
+        """
+        Busca un BL por su número de BL y viaje_id.
+
+        Args:
+            no_bl: Número del BL
+            viaje_id: ID del viaje de recibo (buque)
+
+        Returns:
+            El BL encontrado o None si no existe
+        """
+        query = (
+            select(Bls)
+            .where(Bls.no_bl == no_bl)
+            .where(Bls.viaje_id == viaje_id)
+            .limit(1)
+        )
+        result = await self.db.execute(query)
+        return result.scalar_one_or_none()
+
+    async def get_bl_by_no_bl(self, no_bl: str) -> Optional[Bls]:
+        """
+        Busca un BL por su número de BL.
+
+        Args:
+            no_bl: Número del BL
+
+        Returns:
+            El BL encontrado o None si no existe
+        """
+        query = (
+            select(Bls)
+            .where(Bls.no_bl == no_bl)
+            .order_by(Bls.fecha_hora.desc())
+            .limit(1)
+        )
+        result = await self.db.execute(query)
+        return result.scalar_one_or_none()
+

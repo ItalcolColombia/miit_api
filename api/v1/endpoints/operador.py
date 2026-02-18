@@ -264,7 +264,8 @@ async def load_release_operador(
              status_code=status.HTTP_201_CREATED,
              summary="Registrar camión",
              description="Evento realizado por el operador con la cita de enturnamiento notificada a través de la interfaz de PBCU. "
-                         "Corresponde a CamionRegistro en el diagrama de flujo de proceso.",
+                         "Corresponde a CamionRegistro en el diagrama de flujo de proceso. "
+                         "Opcionalmente se puede incluir el no_bl para asociar el despacho a un BL específico.",
              response_model=CamionRegistroResponse,
              responses={
                  status.HTTP_201_CREATED: {"model": CamionRegistroResponse},
