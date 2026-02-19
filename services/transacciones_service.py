@@ -26,6 +26,85 @@ from utils.time_util import now_local
 
 log = LoggerUtil()
 
+
+async def _determinar_despacho_directo(session, tran_obj, viajes_repo=None, flotas_repo=None) -> bool:
+    """
+    Determina si una transacción corresponde a un despacho directo.
+
+    Las reglas para determinar despacho directo son:
+    1. Si el origen_id o destino_id de la transacción es el almacenamiento de Despacho Directo (ID 0)
+    2. Para despachos: si hay un viaje de recibo (buque) activo (estado_puerto=True y estado_operador=True)
+       que comparte el viaje_origen con el puerto_id de este viaje
+
+    Args:
+        session: Sesión de base de datos activa
+        tran_obj: Objeto de transacción ORM
+        viajes_repo: Repositorio de viajes (opcional)
+        flotas_repo: Repositorio de flotas (opcional)
+
+    Returns:
+        bool: True si es despacho directo, False en caso contrario
+    """
+    from core.config.settings import get_settings
+    from database.models import Viajes as _Viajes, Flotas as _Flotas
+
+    settings = get_settings()
+    almacen_virtual_id = settings.ALMACENAMIENTO_DESPACHO_DIRECTO_ID
+
+    # Regla 1: Si origen o destino es el almacenamiento de Despacho Directo (ID 0)
+    origen_id = getattr(tran_obj, 'origen_id', None)
+    destino_id = getattr(tran_obj, 'destino_id', None)
+
+    if origen_id == almacen_virtual_id or destino_id == almacen_virtual_id:
+        log.debug(f"Transacción {tran_obj.id}: es despacho directo por almacenamiento virtual (origen={origen_id}, destino={destino_id})")
+        return True
+
+    # Regla 2: Para despachos, verificar si hay un recibo activo relacionado
+    tipo_tran = getattr(tran_obj, 'tipo', None)
+    viaje_id = getattr(tran_obj, 'viaje_id', None)
+
+    if tipo_tran and str(tipo_tran).strip().lower() == 'despacho' and viaje_id is not None:
+        try:
+            # Obtener el viaje del camión (despacho)
+            viaje_result = await session.execute(
+                select(_Viajes).where(_Viajes.id == int(viaje_id))
+            )
+            viaje_camion = viaje_result.scalar_one_or_none()
+
+            if viaje_camion is not None:
+                # Verificar si hay un viaje de recibo (buque) activo con viaje_origen igual al puerto_id del camión
+                # o si el viaje_origen del camión apunta a un buque activo
+                viaje_origen = getattr(viaje_camion, 'viaje_origen', None)
+
+                if viaje_origen:
+                    # Buscar el viaje del buque por puerto_id
+                    viaje_buque_result = await session.execute(
+                        select(_Viajes).where(_Viajes.puerto_id == viaje_origen)
+                    )
+                    viaje_buque = viaje_buque_result.scalar_one_or_none()
+
+                    if viaje_buque is not None:
+                        # Obtener la flota del buque para verificar estado
+                        flota_buque_result = await session.execute(
+                            select(_Flotas).where(_Flotas.id == viaje_buque.flota_id)
+                        )
+                        flota_buque = flota_buque_result.scalar_one_or_none()
+
+                        if flota_buque is not None:
+                            # Verificar si es un buque y está activo
+                            es_buque = getattr(flota_buque, 'tipo', '') == 'buque'
+                            estado_puerto = getattr(flota_buque, 'estado_puerto', False)
+                            estado_operador = getattr(flota_buque, 'estado_operador', False)
+
+                            if es_buque and estado_puerto and estado_operador:
+                                log.debug(f"Transacción {tran_obj.id}: es despacho directo por buque activo (viaje_origen={viaje_origen})")
+                                return True
+        except Exception as e:
+            log.warning(f"Error al verificar despacho directo para transacción {tran_obj.id}: {e}")
+
+    return False
+
+
 class TransaccionesService:
 
     def __init__(
@@ -312,18 +391,13 @@ class TransaccionesService:
                         raise BasedException(message="Transacción sin campo 'tipo'.", status_code=status.HTTP_400_BAD_REQUEST)
                     tipo_lower = str(tipo_tran_raw).strip().lower()
 
-                    # Verificar si es despacho directo consultando el viaje
-                    es_despacho_directo = False
-                    viaje_id = getattr(tran_obj, 'viaje_id', None)
-                    if viaje_id is not None and self.viajes_repo is not None:
-                        try:
-                            from database.models import Viajes as _Viajes
-                            viaje_result = await session.execute(_select(_Viajes).where(_Viajes.id == int(viaje_id)))
-                            viaje_obj = viaje_result.scalar_one_or_none()
-                            if viaje_obj is not None:
-                                es_despacho_directo = bool(getattr(viaje_obj, 'despacho_directo', False))
-                        except Exception as e_viaje:
-                            log.warning(f"No se pudo verificar despacho_directo para viaje {viaje_id}: {e_viaje}")
+                    # Verificar si es despacho directo usando la nueva lógica
+                    es_despacho_directo = await _determinar_despacho_directo(
+                        session=session,
+                        tran_obj=tran_obj,
+                        viajes_repo=self.viajes_repo,
+                        flotas_repo=self.flotas_repo
+                    )
 
                     # Obtener ID del almacenamiento virtual para despacho directo
                     from core.config.settings import get_settings
@@ -636,6 +710,7 @@ class TransaccionesService:
         Ejecuta la lógica de finalización de camión (despacho):
         - Actualiza el estado_operador de la flota a False
         - Envía notificación a la API externa CamionCargue
+        - Si es despacho directo, envía notificación adicional a la API externa (similar a FinalizaBuque)
 
         Args:
             tran: La transacción de despacho que se acaba de finalizar
@@ -645,7 +720,7 @@ class TransaccionesService:
         """
         from core.config.settings import get_settings
         from services.ext_api_service import ExtApiService
-        from schemas.ext_api_schema import NotificationCargue
+        from schemas.ext_api_schema import NotificationCargue, NotificationBuque, NotificationBlsPeso
         from utils.any_utils import AnyUtils
         import httpx
 
@@ -731,6 +806,108 @@ class TransaccionesService:
             except Exception as e_notify:
                 log.error(f"Error inesperado al enviar notificación CamionCargue para flota {flota.referencia}: {e_notify}", exc_info=True)
                 resultado['message'] = f"Error inesperado al enviar notificación: {e_notify}"
+
+            # Determinar si es despacho directo usando la nueva lógica:
+            # 1. Si el origen de la transacción es el almacenamiento de Despacho Directo (ID 0)
+            # 2. Si hay un viaje de recibo (buque) activo relacionado
+            es_despacho_directo = False
+            almacen_virtual_id = settings.ALMACENAMIENTO_DESPACHO_DIRECTO_ID
+
+            # Regla 1: Verificar si el origen es el almacenamiento virtual
+            origen_id = getattr(tran, 'origen_id', None)
+            if origen_id == almacen_virtual_id:
+                es_despacho_directo = True
+                log.debug(f"Viaje {viaje_id}: es despacho directo por almacenamiento virtual (origen_id={origen_id})")
+
+            # Regla 2: Verificar si hay un buque activo relacionado
+            if not es_despacho_directo:
+                viaje_origen = getattr(viaje, 'viaje_origen', None)
+                if viaje_origen and self.viajes_repo is not None:
+                    try:
+                        # Buscar el viaje del buque por puerto_id
+                        viaje_buque = await self.viajes_repo.find_one(puerto_id=viaje_origen)
+                        if viaje_buque and self.flotas_repo is not None:
+                            # Obtener la flota del buque
+                            flota_buque = await self.flotas_repo.get_by_id(viaje_buque.flota_id)
+                            if flota_buque:
+                                es_buque = getattr(flota_buque, 'tipo', '') == 'buque'
+                                estado_puerto = getattr(flota_buque, 'estado_puerto', False)
+                                estado_operador = getattr(flota_buque, 'estado_operador', False)
+
+                                if es_buque and estado_puerto and estado_operador:
+                                    es_despacho_directo = True
+                                    log.debug(f"Viaje {viaje_id}: es despacho directo por buque activo (viaje_origen={viaje_origen})")
+                    except Exception as e_check:
+                        log.warning(f"Error verificando buque activo para viaje {viaje_id}: {e_check}")
+
+            # Si es despacho directo, enviar notificación adicional (similar a FinalizaBuque)
+            if es_despacho_directo:
+                log.info(f"Despacho directo detectado para viaje {viaje_id}, enviando notificación adicional a API externa")
+
+                try:
+                    # Obtener el BL asociado al viaje de despacho directo
+                    bl_id = getattr(viaje, 'bl_id', None) or getattr(tran, 'bl_id', None)
+                    dt_bl = None
+
+                    if bl_id:
+                        # Obtener el BL específico
+                        bl = await self.bls_repo.get_by_id(bl_id)
+                        if bl:
+                            dt_bl = [
+                                NotificationBlsPeso(
+                                    noBL=bl.no_bl,
+                                    voyage=viaje.puerto_id,
+                                    weightBl=tran.peso_real  # Usar el peso real de la transacción
+                                ).model_dump()
+                            ]
+                            log.info(f"DespachoDirecto - BL encontrado: {bl.no_bl}, peso_real={tran.peso_real}")
+
+                    # Preparar notificación con estructura similar a FinalizaBuque
+                    notification_despacho_directo = NotificationBuque(
+                        voyage=viaje.puerto_id,
+                        status="Finished",
+                        data=dt_bl
+                    ).model_dump()
+
+                    # TODO: Cambiar endpoint cuando se confirme el nombre de la API externa
+                    # Por ahora usamos el mismo endpoint de FinalizaBuque para simular
+                    endpoint_despacho_directo = f"{settings.TG_API_URL}/api/v1/Metalsoft/FinalizaBuque"
+
+                    serialized_dd = AnyUtils.serialize_data(notification_despacho_directo)
+                    log.info(f"DespachoDirecto - Payload a enviar para puerto_id {viaje.puerto_id}: {serialized_dd}")
+                    log.info(f"DespachoDirecto - Endpoint destino: {endpoint_despacho_directo}")
+
+                    await ext_service.post(serialized_dd, endpoint_despacho_directo)
+                    log.info(f"DespachoDirecto - Notificación enviada exitosamente para viaje {viaje_id} (puerto_id={viaje.puerto_id})")
+
+                    # Actualizar mensaje de resultado
+                    if resultado['success']:
+                        resultado['message'] += ". Notificación DespachoDirecto enviada exitosamente"
+                    else:
+                        resultado['success'] = True
+                        resultado['message'] = "Notificación DespachoDirecto enviada exitosamente"
+
+                except httpx.HTTPStatusError as e_dd:
+                    try:
+                        error_json_dd = e_dd.response.json()
+                    except Exception:
+                        error_json_dd = None
+
+                    if isinstance(error_json_dd, dict):
+                        msg_dd = error_json_dd.get('message') or error_json_dd.get('error') or e_dd.response.text
+                    else:
+                        msg_dd = e_dd.response.text
+
+                    log.error(f"DespachoDirecto - Notificación falló. API externa error: {e_dd.response.status_code}: {e_dd.response.text}")
+                    try:
+                        log.error(f"DespachoDirecto - Payload que falló: {serialized_dd}")
+                    except NameError:
+                        log.error(f"DespachoDirecto - Payload que falló: {notification_despacho_directo}")
+                    resultado['message'] += f". Notificación DespachoDirecto falló: {msg_dd}"
+
+                except Exception as e_dd_notify:
+                    log.error(f"DespachoDirecto - Error inesperado al enviar notificación para viaje {viaje_id}: {e_dd_notify}", exc_info=True)
+                    resultado['message'] += f". Error en notificación DespachoDirecto: {e_dd_notify}"
 
             return resultado
 

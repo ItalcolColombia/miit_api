@@ -163,6 +163,95 @@ async def _crear_snapshots_pesada(
 
     return snapshots_creados
 
+
+async def _actualizar_pesos_reales_bls_por_transaccion(session: AsyncSession, tran_obj) -> None:
+    """
+    Actualiza los pesos reales de los BLs del viaje mediante prorrateo basado en las pesadas acumuladas.
+
+    Esta función se llama después de crear cada pesada de tipo Recibo (buque) para mantener
+    los pesos reales de los BLs actualizados en tiempo real.
+
+    La lógica de prorrateo es:
+    1. Obtener el viaje_id y material_id de la transacción
+    2. Calcular la suma de peso_real de todas las pesadas de transacciones del mismo viaje y material
+    3. Obtener todos los BLs del viaje con ese material
+    4. Calcular el peso_real de cada BL proporcionalmente:
+       peso_real_bl = (peso_bl / suma_peso_bl_material) * peso_real_pesadas
+
+    Args:
+        session: Sesión de base de datos activa
+        tran_obj: Objeto de transacción ORM
+    """
+    from decimal import ROUND_HALF_UP
+    from sqlalchemy import func
+    from database.models import Bls
+
+    try:
+        # Verificar que sea una transacción de tipo Recibo
+        tipo_tran = getattr(tran_obj, 'tipo', None)
+        if tipo_tran is None or str(tipo_tran).strip().lower() != 'recibo':
+            return  # Solo aplicar para transacciones de Recibo (buques)
+
+        viaje_id = getattr(tran_obj, 'viaje_id', None)
+        material_id = getattr(tran_obj, 'material_id', None)
+
+        if viaje_id is None or material_id is None:
+            log.warning(f"Transacción {tran_obj.id} sin viaje_id o material_id, no se puede actualizar pesos de BLs")
+            return
+
+        # 1. Calcular suma de peso_real de pesadas para transacciones del mismo viaje y material
+        query_peso_pesadas = (
+            select(func.sum(Pesadas.peso_real).label('peso_total'))
+            .join(Transacciones, Pesadas.transaccion_id == Transacciones.id)
+            .where(Transacciones.viaje_id == viaje_id)
+            .where(Transacciones.material_id == material_id)
+            .where(Transacciones.tipo == 'Recibo')
+        )
+        result_peso = await session.execute(query_peso_pesadas)
+        peso_real_total = result_peso.scalar_one_or_none()
+        peso_real_total = Decimal(str(peso_real_total or 0))
+
+        if peso_real_total <= 0:
+            log.debug(f"No hay peso acumulado de pesadas para viaje {viaje_id}, material {material_id}")
+            return
+
+        # 2. Obtener todos los BLs del viaje con ese material
+        query_bls = (
+            select(Bls)
+            .where(Bls.viaje_id == viaje_id)
+            .where(Bls.material_id == material_id)
+        )
+        result_bls = await session.execute(query_bls)
+        bls = result_bls.scalars().all()
+
+        if not bls:
+            log.debug(f"No se encontraron BLs para viaje {viaje_id}, material {material_id}")
+            return
+
+        # 3. Calcular suma de peso_bl de los BLs
+        suma_peso_bl = sum(Decimal(str(bl.peso_bl or 0)) for bl in bls)
+
+        if suma_peso_bl <= 0:
+            log.warning(f"Suma de peso_bl es 0 para viaje {viaje_id}, material {material_id}")
+            return
+
+        # 4. Actualizar peso_real de cada BL proporcionalmente
+        for bl in bls:
+            peso_bl = Decimal(str(bl.peso_bl or 0))
+            if peso_bl > 0:
+                proporcion = peso_bl / suma_peso_bl
+                peso_real_calculado = (proporcion * peso_real_total).quantize(Decimal('0.01'), rounding=ROUND_HALF_UP)
+                bl.peso_real = peso_real_calculado
+
+        await session.flush()
+        log.info(f"Pesos reales de BLs actualizados para viaje {viaje_id}, material {material_id}: "
+                 f"peso_pesadas={peso_real_total}, suma_peso_bl={suma_peso_bl}, bls_actualizados={len(bls)}")
+
+    except Exception as e:
+        log.error(f"Error al actualizar pesos reales de BLs: {e}", exc_info=True)
+        # No lanzar excepción para no interrumpir el flujo de creación de pesada
+
+
 class PesadasService:
 
     def __init__(self, pesada_repository: PesadasRepository, pesadas_corte_repository: PesadasCorteRepository, transacciones_repository: Optional[TransaccionesRepository] = None) -> None:
@@ -276,6 +365,12 @@ class PesadasService:
                                 except Exception as e_snap:
                                     log.error(f"No se pudo crear snapshot en transacción independiente: {e_snap}", exc_info=True)
 
+                                # Actualizar pesos reales de BLs por prorrateo (para transacciones de Recibo)
+                                try:
+                                    await _actualizar_pesos_reales_bls_por_transaccion(new_s, tran_obj)
+                                except Exception as e_bls:
+                                    log.error(f"No se pudo actualizar pesos reales de BLs: {e_bls}", exc_info=True)
+
                         log.info(f"create_pesada: sesión independiente commit completado para transaccion {trans_id}.")
                         return PesadaResponse.model_validate(pesada_model)
                     else:
@@ -328,6 +423,12 @@ class PesadasService:
                             except Exception as e_snap:
                                 log.error(f"No se pudo crear snapshot en transacción principal: {e_snap}", exc_info=True)
 
+                            # Actualizar pesos reales de BLs por prorrateo (para transacciones de Recibo)
+                            try:
+                                await _actualizar_pesos_reales_bls_por_transaccion(session, tran_obj)
+                            except Exception as e_bls:
+                                log.error(f"No se pudo actualizar pesos reales de BLs: {e_bls}", exc_info=True)
+
                         log.info(f"Pesada creada con referencia: {getattr(pesada_model, 'referencia', None)} y transacción {trans_id} actualizada a 'Proceso' (transaccional).")
                         return PesadaResponse.model_validate(pesada_model)
 
@@ -368,8 +469,26 @@ class PesadasService:
                                     saldo_nuevo_origen=Decimal(str(sn)),
                                     auditor=auditor
                                 )
+                                # Actualizar pesos reales de BLs por prorrateo (para transacciones de Recibo)
+                                try:
+                                    await _actualizar_pesos_reales_bls_por_transaccion(s, tran_obj)
+                                except Exception as e_bls:
+                                    log.error(f"No se pudo actualizar pesos reales de BLs en fallback: {e_bls}", exc_info=True)
             except Exception as e_snap:
                 log.error(f"No fue posible crear snapshot de saldo en fallback: {e_snap}", exc_info=True)
+
+            # Actualizar pesos reales de BLs por prorrateo (para transacciones de Recibo)
+            # Se ejecuta siempre, independientemente de si vienen saldos o no
+            try:
+                async with DatabaseConfiguration._async_session() as s_bls:
+                    async with s_bls.begin():
+                        from sqlalchemy import select as _sel_bls
+                        result_tran = await s_bls.execute(_sel_bls(Transacciones).filter(Transacciones.id == int(trans_id)))
+                        tran_obj_bls = result_tran.scalar_one_or_none()
+                        if tran_obj_bls is not None:
+                            await _actualizar_pesos_reales_bls_por_transaccion(s_bls, tran_obj_bls)
+            except Exception as e_bls_fallback:
+                log.error(f"No se pudo actualizar pesos reales de BLs en fallback (sin saldos): {e_bls_fallback}", exc_info=True)
 
             try:
                 if self._trans_repo is not None:
