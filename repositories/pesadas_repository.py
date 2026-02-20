@@ -50,7 +50,7 @@ class PesadasRepository(IRepository[Pesadas, PesadaResponse]):
                 Flotas.referencia,
                 Viajes.id.label('consecutivo'),
                 Transacciones.id.label('transaccion'),
-                Transacciones.pit,
+                func.max(Pesadas.bascula_id).label('pit'),
                 Materiales.codigo.label('material'),
                 func.sum(Pesadas.peso_real).label('peso'),
                 func.max(Pesadas.fecha_hora).label('fecha_hora'),
@@ -68,7 +68,6 @@ class PesadasRepository(IRepository[Pesadas, PesadaResponse]):
                 Transacciones.id,
                 Flotas.referencia,
                 Viajes.id,
-                Transacciones.pit,
                 Materiales.codigo,
                 Pesadas.usuario_id
             )
@@ -173,7 +172,7 @@ class PesadasRepository(IRepository[Pesadas, PesadaResponse]):
                     Flotas.referencia,
                     Viajes.id.label('consecutivo'),
                     Transacciones.id.label('transaccion'),
-                    Transacciones.pit,
+                    func.max(Pesadas.bascula_id).label('pit'),
                     Materiales.codigo.label('material'),
                     func.sum(Pesadas.peso_real).label('peso'),
                     func.max(Pesadas.fecha_hora).label('fecha_hora'),
@@ -191,7 +190,6 @@ class PesadasRepository(IRepository[Pesadas, PesadaResponse]):
                     Transacciones.id,
                     Flotas.referencia,
                     Viajes.id,
-                    Transacciones.pit,
                     Materiales.codigo,
                     Pesadas.usuario_id
                 )
@@ -266,7 +264,7 @@ class PesadasRepository(IRepository[Pesadas, PesadaResponse]):
     async def count_pesadas_pendientes_by_puerto(self, puerto_ref: str) -> List[dict]:
         """
         Cuenta las pesadas pendientes (leido=False) agrupadas por transacción
-        para un puerto específico. Solo considera transacciones en estado 'Proceso'.
+        para un puerto específico. Considera transacciones en estado 'Proceso' o 'Finalizado'.
 
         Args:
             puerto_ref: ID del puerto (puerto_id en viajes)
@@ -285,7 +283,7 @@ class PesadasRepository(IRepository[Pesadas, PesadaResponse]):
             .where(
                 Viajes.puerto_id == puerto_ref,
                 Pesadas.leido == False,
-                Transacciones.estado == 'Proceso'
+                Transacciones.estado.in_(['Proceso', 'Finalizado'])
             )
             .group_by(Transacciones.id)
             .order_by(func.count(Pesadas.id).desc())

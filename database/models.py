@@ -56,8 +56,8 @@ class Bls(Base):
 class Clientes(Base):
     __tablename__ = "clientes"
     id = Column(Integer, primary_key=True, index=True)
-    tipo_idetificacion = Column(String(10), nullable=False)
-    num_identificacion = Column(Integer, nullable=False)
+    tipo_idetificacion = Column(String(10), nullable=True)
+    num_identificacion = Column(Integer, nullable=True)
     razon_social = Column(String(100), nullable=False)
     primer_nombre = Column(String(30))
     segundo_nombre = Column(String(30))

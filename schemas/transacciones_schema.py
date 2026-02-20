@@ -57,12 +57,6 @@ class TransaccionCreate(TransaccionResponse):
             raise ValueError("Tipo debe tener máximo 10 carácteres")
         return value
 
-    @field_validator('peso_meta')
-    def peso_positivo(cls, value):
-        if value <= 0:
-            raise ValueError("Peso debe ser positivo")
-        return value
-
     @model_validator(mode='after')
     def validar_campos_por_tipo(self):
         tipo_lower = (self.tipo or '').strip().lower()
@@ -79,6 +73,9 @@ class TransaccionCreate(TransaccionResponse):
                 raise ValueError("viaje_id es obligatorio para transacciones de tipo Despacho/Recibo")
             if self.pit is None:
                 raise ValueError("pit es obligatorio para transacciones de tipo Despacho/Recibo")
+            # Solo para Despacho: peso_meta debe ser positivo
+            if tipo_lower == 'despacho' and self.peso_meta is not None and self.peso_meta <= 0:
+                raise ValueError("peso_meta debe ser positivo para transacciones de tipo Despacho")
 
         return self
 

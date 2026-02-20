@@ -3,7 +3,6 @@ from typing import List, Optional
 from starlette import status
 
 from core.exceptions.base_exception import BasedException
-from database.models import Bls
 from repositories.clientes_repository import ClientesRepository
 from schemas.clientes_schema import ClientesResponse, ClienteCreate, ClienteUpdate
 from utils.logger_util import LoggerUtil
@@ -16,12 +15,12 @@ class ClientesService:
     def __init__(self, clientes_repository: ClientesRepository) -> None:
         self._repo = clientes_repository
 
-    async def create(self, bl: ClienteCreate) -> ClientesResponse:
+    async def create(self, cliente: ClienteCreate) -> ClientesResponse:
         """
         Create a new cliente in the database.
 
         Args:
-            bl (ClienteCreate): The data for the cliente to be created.
+            cliente (ClienteCreate): The data for the cliente to be created.
 
         Returns:
             ClientesResponse: The created cliente object.
@@ -30,10 +29,10 @@ class ClientesService:
             BasedException: For unexpected errors during the creation process.
         """
         try:
-            cliente_model = Bls(**bl.model_dump())
-            created_bl = await self._repo.create(cliente_model)
-            log.info(f"Cliente creado con N°: {created_bl.no_bl}")
-            return ClientesResponse.model_validate(created_bl)
+            # Usa create_with_sequence_fix para manejar secuencias desincronizadas
+            created_cliente = await self._repo.create_with_sequence_fix(cliente)
+            log.info(f"Cliente creado con razon_social: {created_cliente.razon_social}")
+            return created_cliente
         except Exception as e:
             log.error(f"Error al crear cliente: {e}")
             raise BasedException(
@@ -41,13 +40,13 @@ class ClientesService:
                 status_code=status.HTTP_409_CONFLICT
             )
 
-    async def update(self, cliente_id: int, bl: ClienteUpdate) -> Optional[ClientesResponse]:
+    async def update(self, cliente_id: int, cliente_data: ClienteUpdate) -> Optional[ClientesResponse]:
         """
         Update an existing cliente in the database.
 
         Args:
             cliente_id (int): The ID of the cliente to update.
-            bl (ClienteUpdate): The updated cliente data.
+            cliente_data (ClienteUpdate): The updated cliente data.
 
         Returns:
             Optional[ClientesResponse]: The updated cliente object, or None if not found.
@@ -56,10 +55,9 @@ class ClientesService:
             BasedException: For unexpected errors during the update process.
         """
         try:
-            cliente_model = Bls(**bl.model_dump())
-            updated_bl = await self._repo.update(cliente_id, cliente_model)
+            updated_cliente = await self._repo.update(cliente_id, cliente_data)
             log.info(f"Cliente actualizado con ID: {cliente_id}")
-            return ClientesResponse.model_validate(updated_bl) if updated_bl else None
+            return ClientesResponse.model_validate(updated_cliente) if updated_cliente else None
         except Exception as e:
             log.error(f"Error al actualizar cliente con ID {cliente_id}: {e}")
             raise BasedException(
@@ -136,7 +134,7 @@ class ClientesService:
 
     async def create_client_if_not_exists(self, cliente_data: ClienteCreate) -> ClientesResponse:
         """
-        Check if a cliente with the same no_bl already exists. If not, create a new one.
+        Check if a cliente with the same razon_social already exists. If not, create a new one.
 
         Args:
             cliente_data (ClienteCreate): The data for the cliente to be created.
@@ -149,17 +147,17 @@ class ClientesService:
         """
         try:
             # Check if a Cliente already exists
-            cliente_existente = await self._repo.get_cliente_by_name(cliente_data.no_bl)
+            cliente_existente = await self._repo.get_cliente_by_name(cliente_data.razon_social)
             if cliente_existente:
-                log.info(f"Cliente ya existente con N°: {cliente_data.no_bl}")
+                log.info(f"Cliente ya existente con razon_social: {cliente_data.razon_social}")
                 return ClientesResponse.model_validate(cliente_existente)
 
             # Create a new cliente
             cliente_creado = await self._repo.create(cliente_data)
-            log.info(f"Se creó Cliente: {cliente_creado.no_bl}")
+            log.info(f"Se creó Cliente: {cliente_creado.razon_social}")
             return ClientesResponse.model_validate(cliente_creado)
         except Exception as e:
-            log.error(f"Error al crear o consultar Cliente: {cliente_data.no_bl} - {e}")
+            log.error(f"Error al crear o consultar Cliente: {cliente_data.razon_social} - {e}")
             raise BasedException(
                 message="Error inesperado al crear o consultar el cliente.",
                 status_code=status.HTTP_409_CONFLICT

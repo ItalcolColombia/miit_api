@@ -1102,9 +1102,9 @@ class TransaccionesService:
                         else:
                             log.warning(f"No se encontró viaje de recibo con puerto_id '{viaje.viaje_origen}'")
 
-            # 5. Verificar si ya existe una transacción similar
+            # 5. Verificar si ya existe una transacción similar que NO esté finalizada
             existing = await self._repo.find_one(viaje_id=viaje_id, material_id=material_id, tipo=tran_ext.tipo)
-            if existing:
+            if existing and existing.estado != 'Finalizada':
                 raise EntityAlreadyRegisteredException(
                     f"Ya existe transacción de tipo '{tran_ext.tipo}' para viaje '{viaje_id}' con material '{tran_ext.material}'. ID de transacción existente: {existing.id}"
                 )
