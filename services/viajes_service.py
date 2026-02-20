@@ -14,6 +14,7 @@ from core.exceptions.entity_exceptions import (
 )
 from repositories.viajes_repository import ViajesRepository
 from schemas.bls_schema import BlsCreate, BlsExtCreate, BlsResponse, BlsUpdate, VBlsResponse
+from schemas.clientes_schema import ClienteCreate
 from schemas.ext_api_schema import NotificationCargue, NotificationBuque, NotificationPitCargue, NotificationBlsPeso
 from schemas.flotas_schema import FlotasResponse, FlotaCreate
 from schemas.transacciones_schema import TransaccionResponse
@@ -196,8 +197,10 @@ class ViajesService:
             # Obtiene el ID del cliente
             cliente_find = await self.clientes_service.get_cliente_by_name(bl_input.cliente_name)
             if cliente_find is None:
-                cliente_find = await self.clientes_service.get_cliente_by_name("CUSTOMER COMPANY NAME")
-                #raise EntityNotFoundException(f"El cliente '{bl_input.cliente_name}' no existe")
+                # Crea el cliente si no existe, con solo el nombre (razon_social)
+                nuevo_cliente = ClienteCreate(razon_social=bl_input.cliente_name)
+                cliente_find = await self.clientes_service.create(nuevo_cliente)
+                log.info(f"Cliente '{bl_input.cliente_name}' creado automáticamente con ID: {cliente_find.id}")
 
             # Prepara los datos para la creación
             bl_data = bl_input.model_dump(exclude={"material_name", "puerto_id", "cliente_name"})

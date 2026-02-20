@@ -8,7 +8,7 @@ from schemas.base_schema import BaseSchema
 
 class ClientesResponse(BaseSchema):
     id: int
-    tipo_idetificacion: str
+    tipo_idetificacion: Optional[str] = None
     num_identificacion: Optional[int] = None
     razon_social: str = Field(..., max_length=100)
     primer_nombre: Optional[str] = Field(None, max_length=30)
@@ -22,7 +22,7 @@ class ClientesResponse(BaseSchema):
     model_config = ConfigDict(from_attributes=True)
 
 class ClienteCreate(BaseSchema):
-    tipo_idetificacion: str
+    tipo_idetificacion: Optional[str] = None
     num_identificacion: Optional[int] = None
     razon_social: str = Field(..., max_length=100)
     primer_nombre: Optional[str] = Field(None, max_length=30)

@@ -134,7 +134,7 @@ class ViajesRepository(IRepository[Viajes, ViajesResponse]):
                     .join(Flotas, Viajes.flota_id == Flotas.id)
                     .join(Materiales, Viajes.material_id == Materiales.id)
                     .where(Flotas.tipo == 'camion')
-                    .where(Flotas.estado_operador == True)
+                    .where(Flotas.estado_puerto == True)
                     .where(Viajes.material_id.isnot(None))
                     .where(
                         and_(
