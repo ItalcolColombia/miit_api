@@ -29,9 +29,10 @@ class ClientesService:
             BasedException: For unexpected errors during the creation process.
         """
         try:
-            created_cliente = await self._repo.create(cliente)
+            # Usa create_with_sequence_fix para manejar secuencias desincronizadas
+            created_cliente = await self._repo.create_with_sequence_fix(cliente)
             log.info(f"Cliente creado con razon_social: {created_cliente.razon_social}")
-            return ClientesResponse.model_validate(created_cliente)
+            return created_cliente
         except Exception as e:
             log.error(f"Error al crear cliente: {e}")
             raise BasedException(
