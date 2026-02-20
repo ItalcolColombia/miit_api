@@ -570,13 +570,12 @@ class ViajesService:
                 raise EntityNotFoundException(
                     f"La flota es del tipo '{flota.tipo}' diferente al tipo esperado 'camion'")
 
-            from utils.time_util import normalize_to_app_tz
-            # Normalizar y loguear para debugging en producción
-            fecha_norm = normalize_to_app_tz(fecha)
-            log.info(f"[DEBUG chg_camion_salida] fecha original={fecha} (tzinfo={getattr(fecha, 'tzinfo', None)}), fecha_norm={fecha_norm} (tzinfo={getattr(fecha_norm, 'tzinfo', None)}) peso={peso}")
+            # La normalización de la fecha se delega al repositorio base (_normalize_datetimes).
+            # Eliminar normalizaciones redundantes aquí para evitar desfases de zona horaria.
+            log.info(f"[DEBUG chg_camion_salida] fecha recibida={fecha} (tzinfo={getattr(fecha, 'tzinfo', None)}) peso={peso}")
             update_fields = {
                 # Guardar la hora tal como llegó el cliente, asumiendo APP_TIMEZONE
-                "fecha_salida": fecha_norm,
+                "fecha_salida": fecha,
                 "peso_real": peso
             }
             update_data = ViajeUpdate(**update_fields)

@@ -742,7 +742,7 @@ class PesadasService:
         Obtener y procesar pesadas acumuladas para un puerto.
 
         Flujo (prioriza transacción con más pesadas pendientes):
-        1) Obtener la lista de transacciones en estado 'Proceso' con pesadas pendientes (leido=False)
+        1) Obtener la lista de transacciones en estado 'Proceso' o 'Finalizado' con pesadas pendientes (leido=False)
            ordenadas por cantidad de pesadas pendientes DESC (la que tenga más pesadas primero).
         2) Seleccionar la transacción con más pesadas pendientes.
         3) Obtener el acumulado de pesadas solo de esa transacción y marcarlas como leídas atómicamente.
@@ -796,7 +796,7 @@ class PesadasService:
                         trans_list = await self._trans_repo.find_many(ref1=puerto_id)
                         if trans_list:
                             from datetime import datetime
-                            proceso = [t for t in trans_list if getattr(t, 'estado', None) == 'Proceso']
+                            proceso = [t for t in trans_list if getattr(t, 'estado', None) in ['Proceso', 'Finalizado']]
                             proceso_sorted = sorted(proceso, key=lambda t: getattr(t, 'fecha_hora') or datetime.min, reverse=True)
 
                             for t in proceso_sorted:

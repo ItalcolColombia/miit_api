@@ -22,7 +22,7 @@ from services.pesadas_service import PesadasService
 from services.viajes_service import ViajesService
 from utils.logger_util import LoggerUtil
 from utils.response_util import ResponseUtil
-from utils.time_util import normalize_to_app_tz, now_local
+from utils.time_util import now_local
 
 log = LoggerUtil()
 response_json = ResponseUtil.json_response
@@ -328,10 +328,11 @@ async def in_camion(
             log.info(f"[DEBUG endpoint in_camion] raw fecha_ingreso={fecha_ingreso} (type={type(fecha_ingreso)}, tzinfo={getattr(fecha_ingreso, 'tzinfo', None)})")
         except Exception:
             log.warning("[DEBUG endpoint in_camion] no se pudo inspeccionar fecha_ingreso")
-        fecha_ingreso_utc = normalize_to_app_tz(fecha_ingreso)
-        log.info(f"[DEBUG endpoint in_camion] fecha_ingreso_normalized={fecha_ingreso_utc} (tzinfo={getattr(fecha_ingreso_utc, 'tzinfo', None)})")
+        # No normalizar aquí: el servicio y el repositorio ya lo hacen.
+        # La normalización múltiple puede causar desfase de horas.
+        log.info(f"[DEBUG endpoint in_camion] pasando fecha_ingreso sin normalizar al servicio")
 
-        service_data = await service.chg_camion_ingreso(puerto_id, fecha_ingreso_utc)
+        service_data = await service.chg_camion_ingreso(puerto_id, fecha_ingreso)
 
         try:
             await service.chg_estado_flota(puerto_id, estado_puerto=True, estado_operador=True)
@@ -383,11 +384,11 @@ async def out_camion(
             log.info(f"[DEBUG endpoint out_camion] raw fecha_salida={fecha_salida} (type={type(fecha_salida)}, tzinfo={getattr(fecha_salida, 'tzinfo', None)}) peso_real={peso_real} (type={type(peso_real)})")
         except Exception:
             log.warning("[DEBUG endpoint out_camion] no se pudo inspeccionar parametros de salida")
-        # Normalizar fecha_salida a UTC
-        fecha_salida_utc = normalize_to_app_tz(fecha_salida)
-        log.info(f"[DEBUG endpoint out_camion] fecha_salida_normalized={fecha_salida_utc} (tzinfo={getattr(fecha_salida_utc, 'tzinfo', None)})")
+        # No normalizar aquí: el servicio y el repositorio ya lo hacen.
+        # La normalización múltiple puede causar desfase de horas.
+        log.info(f"[DEBUG endpoint out_camion] pasando fecha_salida sin normalizar al servicio")
 
-        await service.chg_camion_salida(puerto_id, fecha_salida_utc, peso_real)
+        await service.chg_camion_salida(puerto_id, fecha_salida, peso_real)
         try:
             await service.chg_estado_flota(puerto_id, estado_puerto=False)
             log.info(f"Estado de puerto para flota {puerto_id} puesto en False tras egreso de camión.")
