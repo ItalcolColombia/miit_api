@@ -808,13 +808,22 @@ class ViajesService:
             log.error(f"Error al calcular pesos reales de BLs para viaje {viaje_id}: {e}", exc_info=True)
             return bls_actualizados
 
-    async def finalizar_buque(self, puerto_id: str) -> tuple:
+    async def finalizar_buque(
+        self,
+        puerto_id: str,
+        estado_puerto: Optional[bool] = None,
+        estado_operador: Optional[bool] = False,
+        fecha_salida: Optional[datetime] = None
+    ) -> tuple:
         """
-        Finaliza un buque actualizando el estado_operador a False y enviando
+        Finaliza un buque actualizando los estados de la flota y enviando
         la notificación FinalizaBuque a la API externa con retry.
 
         Args:
             puerto_id (str): El puerto_id del viaje del buque.
+            estado_puerto (Optional[bool]): El estado_puerto a actualizar. Default None (sin cambio).
+            estado_operador (Optional[bool]): El estado_operador a actualizar. Default False.
+            fecha_salida (Optional[datetime]): Fecha de salida a actualizar en el viaje. Default None.
 
         Returns:
             tuple: (FlotasResponse, dict) - La flota actualizada y el resultado de la notificación.
@@ -879,11 +888,25 @@ class ViajesService:
             else:
                 dt_bl = None
 
-            # Actualizar estado_operador de la flota a False
+            # Actualizar fecha_salida del viaje si se proporciona
+            if fecha_salida is not None:
+                from utils.time_util import normalize_to_app_tz
+                fecha_salida_norm = normalize_to_app_tz(fecha_salida)
+                log.info(f"FinalizaBuque - fecha_salida original={fecha_salida} (tzinfo={getattr(fecha_salida, 'tzinfo', None)}), normalizada={fecha_salida_norm} (tzinfo={getattr(fecha_salida_norm, 'tzinfo', None)})")
+                update_viaje_data = ViajeUpdate(fecha_salida=fecha_salida_norm)
+                await self._repo.update(viaje.id, update_viaje_data)
+                log.info(f"FinalizaBuque - Fecha de salida actualizada para viaje {viaje.id}: {fecha_salida_norm}")
+
+            # Actualizar estados de la flota
             try:
-                updated_flota = await self.flotas_service.update_status(flota, estado_puerto=None, estado_operador=False)
+                updated_flota = await self.flotas_service.update_status(flota, estado_puerto=estado_puerto, estado_operador=estado_operador)
                 resultado['flota_actualizada'] = True
-                log.info(f"Estado operador de flota {flota.id} (buque {flota.referencia}) actualizado a False para puerto_id {puerto_id}")
+                estados_actualizados = []
+                if estado_puerto is not None:
+                    estados_actualizados.append(f"estado_puerto={estado_puerto}")
+                if estado_operador is not None:
+                    estados_actualizados.append(f"estado_operador={estado_operador}")
+                log.info(f"Estados de flota {flota.id} (buque {flota.referencia}) actualizados: {', '.join(estados_actualizados)} para puerto_id {puerto_id}")
             except Exception as e_flota:
                 log.error(f"Error al actualizar estado de flota {flota.id}: {e_flota}")
                 raise BasedException(
