@@ -777,7 +777,8 @@ class TransaccionesService:
                 truckPlate=flota.referencia,
                 truckTransaction=viaje.puerto_id,
                 weighingPitId=tran.pit,
-                weight=tran.peso_real
+                weight=tran.peso_real,
+                despacho_directo=viaje.despacho_directo
             ).model_dump()
 
             endpoint = f"{settings.TG_API_URL}/api/v1/Metalsoft/CamionCargue"
@@ -841,51 +842,148 @@ class TransaccionesService:
                         log.warning(f"Error verificando buque activo para viaje {viaje_id}: {e_check}")
 
             # Si es despacho directo, enviar notificación adicional (similar a FinalizaBuque)
+            # con el DELTA del peso prorrateado de TODOS los BLs del buque
             if es_despacho_directo:
                 log.info(f"Despacho directo detectado para viaje {viaje_id}, enviando notificación adicional a API externa")
 
                 try:
-                    # Obtener el BL asociado al viaje de despacho directo
-                    bl_id = getattr(viaje, 'bl_id', None) or getattr(tran, 'bl_id', None)
-                    dt_bl = None
+                    from decimal import Decimal, ROUND_HALF_UP
+                    from collections import defaultdict
+                    from sqlalchemy import select, func
+                    from database.models import Transacciones as _Transacciones, Bls as _Bls, Viajes as _Viajes
+                    from schemas.bls_schema import BlsUpdate
 
-                    if bl_id:
-                        # Obtener el BL específico
-                        bl = await self.bls_repo.get_by_id(bl_id)
-                        if bl:
-                            dt_bl = [
-                                NotificationBlsPeso(
-                                    noBL=bl.no_bl,
-                                    voyage=viaje.puerto_id,
-                                    weightBl=tran.peso_real  # Usar el peso real de la transacción
-                                ).model_dump()
-                            ]
-                            log.info(f"DespachoDirecto - BL encontrado: {bl.no_bl}, peso_real={tran.peso_real}")
+                    # Obtener el viaje del buque (recibo) relacionado
+                    viaje_origen = getattr(viaje, 'viaje_origen', None)
+                    viaje_buque = None
+                    viaje_buque_id = None
 
-                    # Preparar notificación con estructura similar a FinalizaBuque
-                    notification_despacho_directo = NotificationBuque(
-                        voyage=viaje.puerto_id,
-                        status="Finished",
-                        data=dt_bl
-                    ).model_dump()
+                    if viaje_origen and self.viajes_repo is not None:
+                        viaje_buque = await self.viajes_repo.find_one(puerto_id=viaje_origen)
+                        if viaje_buque:
+                            viaje_buque_id = viaje_buque.id
+                            log.info(f"DespachoDirecto - Viaje del buque encontrado: id={viaje_buque_id}, puerto_id={viaje_origen}")
 
-                    # TODO: Cambiar endpoint cuando se confirme el nombre de la API externa
-                    # Por ahora usamos el mismo endpoint de FinalizaBuque para simular
-                    endpoint_despacho_directo = f"{settings.TG_API_URL}/api/v1/Metalsoft/FinalizaBuque"
-
-                    serialized_dd = AnyUtils.serialize_data(notification_despacho_directo)
-                    log.info(f"DespachoDirecto - Payload a enviar para puerto_id {viaje.puerto_id}: {serialized_dd}")
-                    log.info(f"DespachoDirecto - Endpoint destino: {endpoint_despacho_directo}")
-
-                    await ext_service.post(serialized_dd, endpoint_despacho_directo)
-                    log.info(f"DespachoDirecto - Notificación enviada exitosamente para viaje {viaje_id} (puerto_id={viaje.puerto_id})")
-
-                    # Actualizar mensaje de resultado
-                    if resultado['success']:
-                        resultado['message'] += ". Notificación DespachoDirecto enviada exitosamente"
+                    if not viaje_buque_id:
+                        log.warning(f"DespachoDirecto - No se encontró viaje del buque para viaje_origen={viaje_origen}")
+                        resultado['message'] += ". No se pudo enviar notificación DespachoDirecto: viaje del buque no encontrado"
                     else:
-                        resultado['success'] = True
-                        resultado['message'] = "Notificación DespachoDirecto enviada exitosamente"
+                        # 1. Obtener suma de peso_real de las PESADAS por material de las transacciones de RECIBO del buque
+                        # Importar modelo Pesadas si aún no está importado
+                        from database.models import Pesadas as _Pesadas
+
+                        query_pesadas = (
+                            select(
+                                _Transacciones.material_id,
+                                func.sum(_Pesadas.peso_real).label('peso_real_total')
+                            )
+                            .join(_Pesadas, _Pesadas.transaccion_id == _Transacciones.id)
+                            .where(_Transacciones.viaje_id == viaje_buque_id)
+                            .where(_Transacciones.tipo == 'Recibo')
+                            .group_by(_Transacciones.material_id)
+                        )
+                        result_trans = await self._repo.db.execute(query_pesadas)
+                        pesos_por_material = {row.material_id: Decimal(str(row.peso_real_total or 0)) for row in result_trans.fetchall()}
+
+                        log.info(f"DespachoDirecto - Pesos reales (de pesadas acumuladas) por material para buque {viaje_buque_id}: {pesos_por_material}")
+
+                        # 2. Obtener TODOS los BLs del buque
+                        query_bls = select(_Bls).where(_Bls.viaje_id == viaje_buque_id)
+                        result_bls = await self._repo.db.execute(query_bls)
+                        bls = result_bls.scalars().all()
+
+                        if not bls:
+                            log.warning(f"DespachoDirecto - No se encontraron BLs para buque {viaje_buque_id}")
+                            resultado['message'] += ". No se encontraron BLs para el buque"
+                        else:
+                            # 3. Agrupar BLs por material y calcular suma de peso_bl por material
+                            bls_por_material = defaultdict(list)
+                            suma_peso_bl_por_material = defaultdict(Decimal)
+
+                            for bl in bls:
+                                material_id = bl.material_id
+                                peso_bl = Decimal(str(bl.peso_bl or 0))
+                                bls_por_material[material_id].append(bl)
+                                suma_peso_bl_por_material[material_id] += peso_bl
+
+                            # 4. Calcular peso prorrateado actual y delta para cada BL
+                            dt_bl = []
+                            bls_a_actualizar = []
+
+                            for material_id, bls_del_material in bls_por_material.items():
+                                peso_real_total = pesos_por_material.get(material_id, Decimal('0'))
+                                suma_peso_bl = suma_peso_bl_por_material[material_id]
+
+                                if suma_peso_bl == 0:
+                                    log.warning(f"DespachoDirecto - Suma de peso_bl es 0 para material {material_id}")
+                                    continue
+
+                                for bl in bls_del_material:
+                                    peso_bl = Decimal(str(bl.peso_bl or 0))
+                                    peso_enviado_anterior = Decimal(str(bl.peso_enviado_api or 0))
+
+                                    # Calcular proporción: peso_prorrateado = (peso_bl / suma_peso_bl) * peso_real_total
+                                    if suma_peso_bl > 0:
+                                        proporcion = peso_bl / suma_peso_bl
+                                        peso_prorrateado_actual = (proporcion * peso_real_total).quantize(Decimal('0.01'), rounding=ROUND_HALF_UP)
+                                    else:
+                                        peso_prorrateado_actual = Decimal('0')
+
+                                    # Calcular delta: peso a enviar = peso_prorrateado_actual - peso_enviado_anterior
+                                    delta_peso = (peso_prorrateado_actual - peso_enviado_anterior).quantize(Decimal('0.01'), rounding=ROUND_HALF_UP)
+
+                                    log.info(f"DespachoDirecto - BL {bl.no_bl}: peso_bl={peso_bl}, proporción={proporcion:.4f}, "
+                                             f"peso_prorrateado_actual={peso_prorrateado_actual}, peso_enviado_anterior={peso_enviado_anterior}, "
+                                             f"delta_peso={delta_peso}")
+
+                                    # Agregar a la lista de notificación (enviar delta, incluso si es 0)
+                                    dt_bl.append(
+                                        NotificationBlsPeso(
+                                            noBL=bl.no_bl,
+                                            voyage=viaje_origen,  # Usar el puerto_id del buque
+                                            weightBl=float(delta_peso)
+                                        ).model_dump()
+                                    )
+
+                                    # Guardar para actualizar peso_enviado_api después del envío exitoso
+                                    bls_a_actualizar.append({
+                                        'bl_id': bl.id,
+                                        'peso_enviado_api': peso_prorrateado_actual
+                                    })
+
+                            # Preparar notificación con estructura similar a FinalizaBuque
+                            notification_despacho_directo = NotificationBuque(
+                                voyage=viaje_origen,  # Usar el puerto_id del buque
+                                status="InProgress",  # Estado en progreso porque el buque aún está activo
+                                data=dt_bl if dt_bl else None
+                            ).model_dump()
+
+                            # TODO: Cambiar endpoint cuando se confirme el nombre de la API externa
+                            # Por ahora usamos el mismo endpoint de FinalizaBuque para simular
+                            endpoint_despacho_directo = f"{settings.TG_API_URL}/api/v1/Metalsoft/FinalizaBuque"
+
+                            serialized_dd = AnyUtils.serialize_data(notification_despacho_directo)
+                            log.info(f"DespachoDirecto - Payload a enviar para buque {viaje_origen}: {serialized_dd}")
+                            log.info(f"DespachoDirecto - Endpoint destino: {endpoint_despacho_directo}")
+
+                            await ext_service.post(serialized_dd, endpoint_despacho_directo)
+                            log.info(f"DespachoDirecto - Notificación enviada exitosamente para buque {viaje_origen}")
+
+                            # 5. Actualizar peso_enviado_api de cada BL después del envío exitoso
+                            for bl_update_info in bls_a_actualizar:
+                                try:
+                                    update_data = BlsUpdate(peso_enviado_api=bl_update_info['peso_enviado_api'])
+                                    await self.bls_repo.update(bl_update_info['bl_id'], update_data)
+                                    log.debug(f"DespachoDirecto - Actualizado peso_enviado_api del BL {bl_update_info['bl_id']} a {bl_update_info['peso_enviado_api']}")
+                                except Exception as e_bl_update:
+                                    log.error(f"DespachoDirecto - Error al actualizar peso_enviado_api del BL {bl_update_info['bl_id']}: {e_bl_update}")
+
+                            # Actualizar mensaje de resultado
+                            if resultado['success']:
+                                resultado['message'] += ". Notificación DespachoDirecto enviada exitosamente"
+                            else:
+                                resultado['success'] = True
+                                resultado['message'] = "Notificación DespachoDirecto enviada exitosamente"
 
                 except httpx.HTTPStatusError as e_dd:
                     try:
@@ -902,7 +1000,7 @@ class TransaccionesService:
                     try:
                         log.error(f"DespachoDirecto - Payload que falló: {serialized_dd}")
                     except NameError:
-                        log.error(f"DespachoDirecto - Payload que falló: {notification_despacho_directo}")
+                        log.error(f"DespachoDirecto - Payload que falló: (no disponible)")
                     resultado['message'] += f". Notificación DespachoDirecto falló: {msg_dd}"
 
                 except Exception as e_dd_notify:

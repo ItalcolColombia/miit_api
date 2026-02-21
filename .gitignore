@@ -32,6 +32,7 @@ build/
 
 # Archivos de datos o logs generados localmente
 *.log
+!.gitkeep
 *.sqlite3
 *.db
 !db.sqlite3  # Si usas SQLite y quieres rastrear el archivo, descomenta esta línea y ajústala

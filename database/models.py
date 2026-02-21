@@ -39,6 +39,7 @@ class Bls(Base):
     no_bl = Column(String)
     peso_bl = Column(Numeric(10, 2))
     peso_real = Column(Numeric(10, 2), nullable=True)
+    peso_enviado_api = Column(Numeric(10, 2), nullable=True, default=0)
     cargue_directo = Column(Boolean, nullable=False, default=0)
     estado_puerto = Column(Boolean, nullable=False, default=0)
     estado_operador = Column(Boolean, nullable=False, default=0)

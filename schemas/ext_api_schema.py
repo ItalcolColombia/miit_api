@@ -11,6 +11,7 @@ class NotificationCargue(BaseSchema):
     truckTransaction: Optional[str] = None
     weighingPitId: Optional[int] = None
     weight: Optional[Decimal] = None
+    despacho_directo: Optional[bool] = None
 
 
     model_config = ConfigDict(
@@ -21,6 +22,7 @@ class NotificationCargue(BaseSchema):
                 "truckTransaction": "CamionPrueba1",
                 "weighingPitId": 2,
                 "weight": 18742,
+                "despacho_directo": True,
             }
         }
     )

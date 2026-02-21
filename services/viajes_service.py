@@ -291,8 +291,24 @@ class ViajesService:
                     else:
                         log.warning(f"No se encontró BL con no_bl '{viaje_create.no_bl}'")
 
-            # 6. Ajustar el schema al requerido
+            # 6. Determinar si es despacho directo
+            # Regla: Si hay un viaje_origen que apunta a un buque activo (estado_puerto=True y estado_operador=True)
+            es_despacho_directo = False
+            if viaje_create.viaje_origen:
+                viaje_buque = await self.get_viaje_by_puerto_id(viaje_create.viaje_origen)
+                if viaje_buque:
+                    flota_buque = await self.flotas_service.get_flota(viaje_buque.flota_id)
+                    if flota_buque:
+                        es_buque = getattr(flota_buque, 'tipo', '') == 'buque'
+                        estado_puerto = getattr(flota_buque, 'estado_puerto', False)
+                        estado_operador = getattr(flota_buque, 'estado_operador', False)
+                        if es_buque and estado_puerto and estado_operador:
+                            es_despacho_directo = True
+                            log.info(f"Viaje camión {viaje_create.puerto_id}: marcado como despacho directo (buque activo viaje_origen={viaje_create.viaje_origen})")
+
+            # 7. Ajustar el schema al requerido
             viaje_data = viaje_create.model_dump(exclude={"referencia", "puntos", "no_bl"})
+            viaje_data["despacho_directo"] = es_despacho_directo
             # DEBUG: inspeccionar viaje_data después de model_dump
             try:
                 vll = viaje_data.get('fecha_llegada')
@@ -317,7 +333,7 @@ class ViajesService:
                     except Exception:
                         pass
 
-            # 7. Crear registro en la base de datos
+            # 8. Crear registro en la base de datos
             db_viaje = ViajeCreate(**viaje_data)
             try:
                 await self._repo.create(db_viaje)
@@ -333,7 +349,7 @@ class ViajesService:
                     user_msg = f"Violación de integridad al crear viaje: {detail}"
                 raise BasedException(message=user_msg, status_code=status.HTTP_409_CONFLICT)
 
-            # 8. Consultar el viaje recién añadido
+            # 9. Consultar el viaje recién añadido
             created_viaje = await self.get_viaje_by_puerto_id(viaje_create.puerto_id)
             if not created_viaje:
                 raise EntityNotFoundException("Error al recuperar la cita recién creada")
@@ -521,8 +537,24 @@ class ViajesService:
             fecha_norm = normalize_to_app_tz(fecha)
             log.info(f"[DEBUG chg_camion_ingreso] fecha original={fecha} (tzinfo={getattr(fecha, 'tzinfo', None)}), fecha_norm={fecha_norm} (tzinfo={getattr(fecha_norm, 'tzinfo', None)})")
 
+            # Determinar si es despacho directo
+            # Regla: Si hay un viaje_origen que apunta a un buque activo (estado_puerto=True y estado_operador=True)
+            es_despacho_directo = False
+            if viaje.viaje_origen:
+                viaje_buque = await self.get_viaje_by_puerto_id(viaje.viaje_origen)
+                if viaje_buque:
+                    flota_buque = await self.flotas_service.get_flota(viaje_buque.flota_id)
+                    if flota_buque:
+                        es_buque = getattr(flota_buque, 'tipo', '') == 'buque'
+                        estado_puerto = getattr(flota_buque, 'estado_puerto', False)
+                        estado_operador = getattr(flota_buque, 'estado_operador', False)
+                        if es_buque and estado_puerto and estado_operador:
+                            es_despacho_directo = True
+                            log.info(f"Viaje camión {puerto_id}: marcado como despacho directo en ingreso (buque activo viaje_origen={viaje.viaje_origen})")
+
             update_fields = {
                 "fecha_llegada": fecha_norm,
+                "despacho_directo": es_despacho_directo,
             }
             update_data = ViajeUpdate(**update_fields)
             await self._repo.update(viaje.id, update_data)
@@ -611,7 +643,8 @@ class ViajesService:
                 truckPlate=flota.referencia,
                 truckTransaction=viaje.puerto_id,
                 weighingPitId=tran.pit,
-                weight=tran.peso_real
+                weight=tran.peso_real,
+                despacho_directo=viaje.despacho_directo
             ).model_dump()
             endpoint = f"{get_settings().TG_API_URL}/api/v1/Metalsoft/CamionCargue"
         else:

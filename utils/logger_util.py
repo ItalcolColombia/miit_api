@@ -3,6 +3,7 @@
 import logging
 import os
 from datetime import datetime, timezone
+from logging.handlers import RotatingFileHandler
 
 from colorlog import ColoredFormatter
 from starlette import status
@@ -52,11 +53,12 @@ class LoggerUtil:
 
             # Directory and path for the log file
             log_date = datetime.now(timezone.utc).strftime("%Y-%m-%d")
-            _project_root = os.path.abspath(os.path.dirname(__file__))
-            _log_dir = self.__app_log_dir
+
+            # Determinar la ruta de logs inteligentemente
+            _log_dir = self._get_log_directory()
             os.makedirs(_log_dir, exist_ok=True)
 
-            _log_file_name = f"{log_date}.log"
+            _log_file_name = f"{self.__api_name}_{log_date}.log"
             _log_file = os.path.join(_log_dir, _log_file_name)
 
             # Console format and message format
@@ -75,8 +77,8 @@ class LoggerUtil:
                 _stream_format, datefmt=_date_format, log_colors=_log_colors
             )
 
-            # File formatter setup
-            _file_format = "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+            # File formatter setup - formato más detallado para archivos
+            _file_format = "%(asctime)s - %(levelname)s - %(message)s"
             _file_formatter = logging.Formatter(_file_format, datefmt=_date_format)
 
             # Initialize the logger
@@ -85,8 +87,13 @@ class LoggerUtil:
             if not self.__logger.hasHandlers():
                 _level = self.__get_log_level_variable()
 
-                # File handler and console handler configuration
-                _file_handler = logging.FileHandler(_log_file)
+                # File handler con rotación (máximo 10MB por archivo, mantener 5 backups)
+                _file_handler = RotatingFileHandler(
+                    _log_file,
+                    maxBytes=10*1024*1024,  # 10 MB
+                    backupCount=5,
+                    encoding='utf-8'
+                )
                 _file_handler.setFormatter(_file_formatter)
 
                 _stream_handler = logging.StreamHandler()
@@ -95,6 +102,9 @@ class LoggerUtil:
                 self.__logger.setLevel(_level)
                 self.__logger.addHandler(_file_handler)
                 self.__logger.addHandler(_stream_handler)
+
+                # Log inicial indicando dónde se guardan los logs
+                self.__logger.info(f"Logs guardándose en: {_log_file}")
 
                 if _level != "DEBUG":
                     logging.getLogger("uvicorn.access").disabled = True
@@ -110,6 +120,41 @@ class LoggerUtil:
                 message=f"Error en logging_util: {str(e)}",
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
+
+    def _get_log_directory(self) -> str:
+        """
+        Determina el directorio de logs a utilizar.
+
+        Prioridad:
+        1. APP_LOG_DIR configurado en settings (si existe y es accesible)
+        2. Carpeta 'logs/miit_api' relativa al proyecto (para desarrollo local)
+
+        Returns:
+            str: La ruta del directorio de logs a utilizar.
+        """
+        configured_dir = self.__app_log_dir
+
+        # Intentar usar el directorio configurado
+        if configured_dir:
+            try:
+                # Verificar si el directorio padre existe o se puede crear
+                os.makedirs(configured_dir, exist_ok=True)
+                # Verificar si podemos escribir en el directorio
+                test_file = os.path.join(configured_dir, '.write_test')
+                with open(test_file, 'w') as f:
+                    f.write('test')
+                os.remove(test_file)
+                return configured_dir
+            except (OSError, PermissionError):
+                # No se puede usar el directorio configurado
+                pass
+
+        # Usar directorio relativo al proyecto (desarrollo local)
+        # Obtener la raíz del proyecto (dos niveles arriba de utils/)
+        project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
+        local_log_dir = os.path.join(project_root, 'logs', 'miit_api')
+
+        return local_log_dir
 
 
     # def _log_to_db(self, level: str, message: str, resource: Optional[str] = None):
