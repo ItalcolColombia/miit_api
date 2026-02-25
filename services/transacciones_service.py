@@ -406,9 +406,20 @@ class TransaccionesService:
 
                     # Determinar configuración de movimientos según el tipo
                     if tipo_lower == 'despacho':
-                        mov_config = [{'tipo': 'Salida', 'almacen_id': getattr(tran_obj, 'origen_id', None)}]
+                        origen_id_despacho = getattr(tran_obj, 'origen_id', None)
+                        destino_id_despacho = getattr(tran_obj, 'destino_id', None)
+                        # Para despacho directo: si origen_id es None pero destino_id es el almacén virtual,
+                        # usar el almacén virtual como origen del movimiento de salida
+                        if es_despacho_directo and origen_id_despacho is None and destino_id_despacho == almacen_virtual_id:
+                            log.debug(f"Despacho directo con origen_id=None: usando almacén virtual {almacen_virtual_id} como origen")
+                            origen_id_despacho = almacen_virtual_id
+                        mov_config = [{'tipo': 'Salida', 'almacen_id': origen_id_despacho}]
                     elif tipo_lower == 'recibo':
-                        mov_config = [{'tipo': 'Entrada', 'almacen_id': getattr(tran_obj, 'destino_id', None) or getattr(tran_obj, 'origen_id', None)}]
+                        destino_id_recibo = getattr(tran_obj, 'destino_id', None)
+                        origen_id_recibo = getattr(tran_obj, 'origen_id', None)
+                        # Usar destino_id si está definido (incluyendo 0), sino usar origen_id
+                        almacen_recibo = destino_id_recibo if destino_id_recibo is not None else origen_id_recibo
+                        mov_config = [{'tipo': 'Entrada', 'almacen_id': almacen_recibo}]
                     elif tipo_lower == 'traslado':
                         origen_id = getattr(tran_obj, 'origen_id', None)
                         destino_id = getattr(tran_obj, 'destino_id', None)
