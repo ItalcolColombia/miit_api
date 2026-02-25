@@ -342,17 +342,20 @@ class TransaccionesService:
     async def transaccion_finalizar(self, tran_id: int, pit: Optional[int] = None) -> Tuple[TransaccionResponse, Optional[dict]]:
         """
         Updates the 'estado' of an active transaction to 'Finalizada' and creates a corresponding movement.
+        If the transaction has no registered pesadas (weighings), it is cancelled ('Cancelada') without
+        generating any movements or calling external APIs (cancellation due to human/mechanical error).
 
         Args:
             tran_id (int): The ID of the transaction to finalize.
             pit (Optional[int]): Optional pit value to update in the transaction.
 
         Returns:
-            tuple: (TransaccionResponse, Optional[dict]) - La transacción actualizada y el resultado de la notificación (si aplica)
+            tuple: (TransaccionResponse, Optional[dict]) - La transacción actualizada y el resultado de la notificación (si aplica).
+                   Para transacciones canceladas (sin pesadas), retorna (TransaccionResponse con estado 'Cancelada', None).
 
         Raises:
             EntityNotFoundException: If the transaction with the given ID is not found.
-            BasedException: If the transaction is not in 'Activa' state or for unexpected errors.
+            BasedException: If the transaction is not in 'Proceso' or 'Registrada' state or for unexpected errors.
         """
         try:
             # 1. Obtener la transacción y validar su estado (usamos repo sólo para leer)
@@ -360,9 +363,9 @@ class TransaccionesService:
             if tran is None:
                 raise EntityNotFoundException(f"La transacción con ID '{tran_id}' no fue encontrada.")
 
-            if tran.estado != "Proceso":
+            if tran.estado not in ("Proceso", "Registrada"):
                 raise BasedException(
-                    message=f"La transacción no se puede finalizar porque su estado es '{tran.estado}'. Solo las transacciones en estado 'Proceso' pueden finalizarse.",
+                    message=f"La transacción no se puede finalizar porque su estado es '{tran.estado}'. Solo las transacciones en estado 'Proceso' o 'Registrada' pueden finalizarse.",
                     status_code=status.HTTP_400_BAD_REQUEST
                 )
 
@@ -371,6 +374,70 @@ class TransaccionesService:
             # incluyendo Traslados (no depende de JOINs con Viajes/Flotas)
             suma_pesadas = await self.pesadas_service.get_suma_peso_by_transaccion(tran_id=tran.id)
             peso_acc = Decimal(suma_pesadas.get('peso_total', 0) or 0) if suma_pesadas else Decimal('0')
+            cantidad_pesadas = int(suma_pesadas.get('cantidad_pesadas', 0)) if suma_pesadas else 0
+
+            # 2.1 Si no hay pesadas registradas, cancelar la transacción sin generar
+            # movimientos ni llamar a APIs externas (cancelación por error humano/mecánico)
+            if cantidad_pesadas == 0:
+                log.info(f"Transacción {tran_id} sin pesadas registradas. Se procederá a cancelar sin generar movimientos.")
+
+                # Capturar valores previos para auditoría (antes de modificar)
+                valor_prev = {
+                    'estado': tran.estado,
+                    'fecha_fin': str(tran.fecha_fin) if tran.fecha_fin else None,
+                    'peso_real': str(tran.peso_real) if tran.peso_real else None,
+                    'pit': tran.pit
+                }
+
+                # Actualizar estado en BD dentro de sesión transaccional
+                async with DatabaseConfiguration._async_session() as session:
+                    async with session.begin():
+                        from sqlalchemy import select as _select
+                        result = await session.execute(_select(Transacciones).where(Transacciones.id == int(tran_id)))
+                        tran_obj = result.scalar_one_or_none()
+                        if tran_obj is None:
+                            raise EntityNotFoundException(f"Transacción con ID {tran_id} no encontrada (dentro de sesión).")
+
+                        # Aplicar cambios: estado Cancelada, sin movimientos
+                        tran_obj.estado = 'Cancelada'
+                        tran_obj.fecha_fin = now_local()
+                        tran_obj.peso_real = Decimal('0')
+
+                        if pit is not None:
+                            tran_obj.pit = pit
+
+                        await session.flush()
+                        await session.refresh(tran_obj)
+
+                        from schemas.transacciones_schema import TransaccionResponse as _TR
+                        updated_resp = _TR.model_validate(tran_obj)
+
+                    # session.begin() hace commit automático al salir sin excepción
+
+                # Auditoría fuera de la sesión transaccional (no crítica)
+                valor_new = {
+                    'estado': updated_resp.estado,
+                    'fecha_fin': str(updated_resp.fecha_fin) if updated_resp.fecha_fin else None,
+                    'peso_real': str(updated_resp.peso_real) if updated_resp.peso_real else None,
+                    'pit': updated_resp.pit
+                }
+                try:
+                    await self._repo.auditor.log_audit(
+                        audit_log_data=__import__('schemas.logs_auditoria_schema', fromlist=['LogsAuditoriaCreate']).LogsAuditoriaCreate(
+                            entidad='transacciones',
+                            entidad_id=str(tran_id),
+                            accion='UPDATE',
+                            valor_anterior=AnyUtils.serialize_data(valor_prev),
+                            valor_nuevo=AnyUtils.serialize_data(valor_new),
+                            usuario_id=current_user_id.get()
+                        )
+                    )
+                except Exception as e_aud:
+                    log.error(f"No se pudo registrar auditoría para cancelación de transacción {tran_id}: {e_aud}")
+
+
+                log.info(f"Transacción {tran_id} cancelada exitosamente (sin pesadas, sin movimientos, sin notificaciones externas).")
+                return updated_resp, None
 
             # Obtener el tipo de transacción para usar después del bloque de sesión
             tipo_tran_para_envio = str(tran.tipo).strip().lower() if tran.tipo else ''

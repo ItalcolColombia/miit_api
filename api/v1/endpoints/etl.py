@@ -410,6 +410,8 @@ async def create_transaccion(
             status_code=status.HTTP_200_OK,
             summary="Modifica el estado de una transacción en curso",
             description="Evento realizado por la automatización cuando se detiene una ruta en proceso. "
+                        "Si la transacción no tiene pesadas registradas, se cancela sin generar movimientos "
+                        "ni notificaciones a APIs externas (cancelación por error humano/mecánico). "
                         "Para transacciones de tipo Despacho (camiones): actualiza el estado de la flota y "
                         "envía notificación a la API externa CamionCargue. "
                         "Para transacciones de tipo Recibo (buques): si es la última transacción del viaje, "
@@ -429,6 +431,15 @@ async def end_transaction(
     try:
 
         tran_result, notificacion_resultado = await service.transaccion_finalizar(tran_id, pit=pit)
+
+        # Verificar si la transacción fue cancelada (sin pesadas registradas)
+        if getattr(tran_result, 'estado', None) == 'Cancelada':
+            mensaje = "Transacción cancelada exitosamente (sin pesadas registradas, sin movimientos generados)"
+            log.info(f"La Transacción {tran_id} cancelada exitosamente (sin pesadas).")
+            return response_json(
+                status_code=status.HTTP_200_OK,
+                message=mensaje,
+            )
 
         # Construir mensaje de respuesta basado en el resultado de la notificación
         if notificacion_resultado is None:
@@ -472,24 +483,27 @@ async def end_transaction(
 
 @router.post("/ajustes",
              status_code=status.HTTP_201_CREATED,
-             summary="Crear un ajuste de saldo de material en almacenamiento",
-             description="Crea un ajuste de saldo y el movimiento asociado, actualizando el saldo en almacenamiento_materiales.",
+             summary="Crear ajuste(s) de saldo para todos los materiales de un almacenamiento",
+             description="Recibe el nombre del almacenamiento y el saldo nuevo. "
+                         "Busca todos los materiales asociados a ese almacenamiento y crea un ajuste para cada uno, "
+                         "llevando el saldo al valor indicado. Útil para liberar (llevar a 0) un almacenamiento completo.",
              response_model=CreateResponse,
              responses={
                  status.HTTP_400_BAD_REQUEST: {"model": ErrorResponse},
+                 status.HTTP_404_NOT_FOUND: {"model": ErrorResponse},
                  status.HTTP_422_UNPROCESSABLE_CONTENT: {"model": ValidationErrorResponse},
              })
 async def crear_ajuste(
     data: AjusteCreate,
     ajustes_service: AjustesService = Depends(get_ajustes_service),
 ):
-    log.info(f"Payload recibido: Ajuste {data} - Crear")
+    log.info(f"Payload recibido: Ajuste almacenamiento='{data.almacenamiento}', saldo_nuevo={data.saldo_nuevo} - Crear")
     try:
-        ajuste_resp = await ajustes_service.create_ajuste(data)
+        ajustes_resp = await ajustes_service.create_ajuste(data)
         return response_json(
             status_code=status.HTTP_201_CREATED,
             message="Registro exitoso.",
-            data={"ajuste": ajuste_resp}
+            data={"ajustes": ajustes_resp}
         )
 
     except HTTPException as http_exc:

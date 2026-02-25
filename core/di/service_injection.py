@@ -167,9 +167,10 @@ async def get_ajustes_service(
         ajustes_repository: Annotated[AjustesRepository, Depends(get_ajustes_repository)],
         movimientos_repository: Annotated[MovimientosRepository, Depends(get_movimientos_repository)],
         alm_mat_repository: Annotated[AlmacenamientosMaterialesRepository, Depends(get_alm_mat_repository)],
+        alm_repository: Annotated[AlmacenamientosRepository, Depends(get_alm_repository)],
         auditor: Annotated[Auditor, Depends(get_auditor_service)],
 ) -> AjustesService:
-    return AjustesService(ajustes_repository, movimientos_repository, alm_mat_repository, auditor)
+    return AjustesService(ajustes_repository, movimientos_repository, alm_mat_repository, alm_repository, auditor)
 
 
 # ============================================================

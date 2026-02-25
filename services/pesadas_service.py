@@ -4,6 +4,7 @@ from typing import List, Optional
 
 from fastapi_pagination import Page, Params
 from sqlalchemy import select
+from sqlalchemy.exc import IntegrityError as SAIntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 from starlette import status
 
@@ -77,89 +78,142 @@ async def _crear_snapshots_pesada(
 
     # Crear snapshot de origen
     if almacenamiento_origen is not None:
-        s_origen = SaldoSnapshotScada(
-            pesada_id=int(pesada_id),
-            almacenamiento_id=int(almacenamiento_origen),
-            material_id=int(material_id) if material_id is not None else None,
-            saldo_anterior=saldo_anterior_origen,
-            saldo_nuevo=saldo_nuevo_origen,
-            tipo_almacenamiento='ORIGEN'
+        # Verificar si ya existe un snapshot para esta pesada y almacenamiento origen
+        existing_origen = await session.execute(
+            select(SaldoSnapshotScada).where(
+                SaldoSnapshotScada.pesada_id == int(pesada_id),
+                SaldoSnapshotScada.almacenamiento_id == int(almacenamiento_origen)
+            )
         )
-        session.add(s_origen)
-        await session.flush()
-        snapshots_creados.append(s_origen)
-
-        # Auditoría del snapshot de origen
-        if auditor is not None:
+        if existing_origen.scalar_one_or_none() is not None:
+            log.warning(
+                f"Ya existe snapshot para pesada_id={pesada_id}, almacenamiento_id={almacenamiento_origen}. "
+                f"Se omite creación de snapshot de origen."
+            )
+        else:
+            nested_origen = await session.begin_nested()
             try:
-                audit_snap = LogsAuditoriaCreate(
-                    entidad='saldo_snapshot_scada',
-                    entidad_id=str(getattr(s_origen, 'id', None)),
-                    accion='CREATE',
-                    valor_anterior=None,
-                    valor_nuevo=AnyUtils.serialize_orm_object(s_origen),
-                    usuario_id=current_user_id.get()
+                s_origen = SaldoSnapshotScada(
+                    pesada_id=int(pesada_id),
+                    almacenamiento_id=int(almacenamiento_origen),
+                    material_id=int(material_id) if material_id is not None else None,
+                    saldo_anterior=saldo_anterior_origen,
+                    saldo_nuevo=saldo_nuevo_origen,
+                    tipo_almacenamiento='ORIGEN'
                 )
-                await auditor.log_audit(audit_log_data=audit_snap)
-            except Exception as e_aud:
-                log.error(f"No se pudo registrar auditoría para snapshot origen: {e_aud}")
+                session.add(s_origen)
+                await session.flush()
+                await nested_origen.commit()
+                snapshots_creados.append(s_origen)
+
+                # Auditoría del snapshot de origen
+                if auditor is not None:
+                    try:
+                        audit_snap = LogsAuditoriaCreate(
+                            entidad='saldo_snapshot_scada',
+                            entidad_id=str(getattr(s_origen, 'id', None)),
+                            accion='CREATE',
+                            valor_anterior=None,
+                            valor_nuevo=AnyUtils.serialize_orm_object(s_origen),
+                            usuario_id=current_user_id.get()
+                        )
+                        await auditor.log_audit(audit_log_data=audit_snap)
+                    except Exception as e_aud:
+                        log.error(f"No se pudo registrar auditoría para snapshot origen: {e_aud}")
+            except SAIntegrityError as e_dup:
+                await nested_origen.rollback()
+                log.warning(
+                    f"Snapshot de origen duplicado para pesada_id={pesada_id}, "
+                    f"almacenamiento_id={almacenamiento_origen}. Se omite: {e_dup}"
+                )
 
     # Para Traslado, crear también snapshot de destino (calculado)
     if tipo_tran == 'traslado' and destino_id is not None and origen_id is not None:
-        try:
-            # Calcular delta (lo que sale del origen)
-            delta = saldo_anterior_origen - saldo_nuevo_origen  # positivo = salida
-
-            # Obtener saldo actual del destino desde VAlmMateriales
-            saldo_anterior_destino = Decimal('0')
+        # Si origen y destino son el mismo almacenamiento, no crear un segundo snapshot
+        # porque la constraint uk_snapshot_pesada_alm (pesada_id, almacenamiento_id) lo impide.
+        if int(destino_id) == int(almacenamiento_origen or 0):
+            log.warning(
+                f"Traslado con origen_id == destino_id ({destino_id}): "
+                f"no se crea snapshot de destino duplicado para pesada {pesada_id}."
+            )
+        else:
             try:
-                res = await session.execute(
-                    select(VAlmMateriales).where(
-                        VAlmMateriales.almacenamiento_id == int(destino_id),
-                        VAlmMateriales.material_id == int(material_id) if material_id else True
+                # Calcular delta (lo que sale del origen)
+                delta = saldo_anterior_origen - saldo_nuevo_origen  # positivo = salida
+
+                # Obtener saldo actual del destino desde VAlmMateriales
+                saldo_anterior_destino = Decimal('0')
+                try:
+                    res = await session.execute(
+                        select(VAlmMateriales).where(
+                            VAlmMateriales.almacenamiento_id == int(destino_id),
+                            VAlmMateriales.material_id == int(material_id) if material_id else True
+                        )
+                    )
+                    vrow = res.scalar_one_or_none()
+                    if vrow is not None:
+                        saldo_anterior_destino = Decimal(str(getattr(vrow, 'saldo', 0) or 0))
+                except Exception as e_saldo:
+                    log.warning(f"No se pudo obtener saldo anterior del destino {destino_id}: {e_saldo}")
+
+                # Saldo nuevo del destino = saldo anterior + lo que sale del origen
+                saldo_nuevo_destino = saldo_anterior_destino + delta
+
+                # Verificar si ya existe un snapshot para esta pesada y almacenamiento destino
+                existing_snap = await session.execute(
+                    select(SaldoSnapshotScada).where(
+                        SaldoSnapshotScada.pesada_id == int(pesada_id),
+                        SaldoSnapshotScada.almacenamiento_id == int(destino_id)
                     )
                 )
-                vrow = res.scalar_one_or_none()
-                if vrow is not None:
-                    saldo_anterior_destino = Decimal(str(getattr(vrow, 'saldo', 0) or 0))
-            except Exception as e_saldo:
-                log.warning(f"No se pudo obtener saldo anterior del destino {destino_id}: {e_saldo}")
-
-            # Saldo nuevo del destino = saldo anterior + lo que sale del origen
-            saldo_nuevo_destino = saldo_anterior_destino + delta
-
-            # Crear snapshot de destino
-            s_destino = SaldoSnapshotScada(
-                pesada_id=int(pesada_id),
-                almacenamiento_id=int(destino_id),
-                material_id=int(material_id) if material_id is not None else None,
-                saldo_anterior=saldo_anterior_destino,
-                saldo_nuevo=saldo_nuevo_destino,
-                tipo_almacenamiento='DESTINO'
-            )
-            session.add(s_destino)
-            await session.flush()
-            snapshots_creados.append(s_destino)
-
-            log.info(f"Snapshot destino creado para traslado: destino_id={destino_id}, saldo_anterior={saldo_anterior_destino}, saldo_nuevo={saldo_nuevo_destino}")
-
-            # Auditoría del snapshot de destino
-            if auditor is not None:
-                try:
-                    audit_snap_dest = LogsAuditoriaCreate(
-                        entidad='saldo_snapshot_scada',
-                        entidad_id=str(getattr(s_destino, 'id', None)),
-                        accion='CREATE',
-                        valor_anterior=None,
-                        valor_nuevo=AnyUtils.serialize_orm_object(s_destino),
-                        usuario_id=current_user_id.get()
+                if existing_snap.scalar_one_or_none() is not None:
+                    log.warning(
+                        f"Ya existe snapshot para pesada_id={pesada_id}, almacenamiento_id={destino_id}. "
+                        f"Se omite creación de snapshot de destino."
                     )
-                    await auditor.log_audit(audit_log_data=audit_snap_dest)
-                except Exception as e_aud:
-                    log.error(f"No se pudo registrar auditoría para snapshot destino: {e_aud}")
+                else:
+                    # Usar savepoint (nested transaction) para aislar posible fallo de constraint
+                    nested = await session.begin_nested()
+                    try:
+                        # Crear snapshot de destino
+                        s_destino = SaldoSnapshotScada(
+                            pesada_id=int(pesada_id),
+                            almacenamiento_id=int(destino_id),
+                            material_id=int(material_id) if material_id is not None else None,
+                            saldo_anterior=saldo_anterior_destino,
+                            saldo_nuevo=saldo_nuevo_destino,
+                            tipo_almacenamiento='DESTINO'
+                        )
+                        session.add(s_destino)
+                        await session.flush()
+                        await nested.commit()
+                        snapshots_creados.append(s_destino)
 
-        except Exception as e_destino:
-            log.error(f"Error creando snapshot de destino para traslado: {e_destino}", exc_info=True)
+                        log.info(f"Snapshot destino creado para traslado: destino_id={destino_id}, saldo_anterior={saldo_anterior_destino}, saldo_nuevo={saldo_nuevo_destino}")
+
+                        # Auditoría del snapshot de destino
+                        if auditor is not None:
+                            try:
+                                audit_snap_dest = LogsAuditoriaCreate(
+                                    entidad='saldo_snapshot_scada',
+                                    entidad_id=str(getattr(s_destino, 'id', None)),
+                                    accion='CREATE',
+                                    valor_anterior=None,
+                                    valor_nuevo=AnyUtils.serialize_orm_object(s_destino),
+                                    usuario_id=current_user_id.get()
+                                )
+                                await auditor.log_audit(audit_log_data=audit_snap_dest)
+                            except Exception as e_aud:
+                                log.error(f"No se pudo registrar auditoría para snapshot destino: {e_aud}")
+                    except SAIntegrityError as e_dup:
+                        await nested.rollback()
+                        log.warning(
+                            f"Snapshot de destino duplicado para pesada_id={pesada_id}, "
+                            f"almacenamiento_id={destino_id}. Se omite: {e_dup}"
+                        )
+
+            except Exception as e_destino:
+                log.error(f"Error creando snapshot de destino para traslado: {e_destino}", exc_info=True)
 
     return snapshots_creados
 
