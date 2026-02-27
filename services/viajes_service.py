@@ -322,16 +322,9 @@ class ViajesService:
             viaje_data["material_id"] = material_id
             viaje_data["bl_id"] = bl_id
 
-            # Salvaguarda: asegurar que las fechas estén en UTC
-            for f in ("fecha_llegada", "fecha_salida", "fecha_hora"):
-                if f in viaje_data and viaje_data[f] is not None:
-                    from utils.time_util import normalize_to_app_tz
-                    before_val = viaje_data[f]
-                    viaje_data[f] = normalize_to_app_tz(viaje_data[f])
-                    try:
-                        log.info(f"[DEBUG create_camion_nuevo NORMALIZE] field={f} before={before_val} (type={type(before_val)}, tzinfo={getattr(before_val, 'tzinfo', None)}) after={viaje_data[f]} (type={type(viaje_data[f])}, tzinfo={getattr(viaje_data[f], 'tzinfo', None)})")
-                    except Exception:
-                        pass
+            # La normalización de las fechas se delega al repositorio base (_normalize_datetimes).
+            # El schema ViajeCamionExtCreate ya normaliza vía @field_validator.
+            # NO normalizar aquí para evitar conversiones múltiples.
 
             # 8. Crear registro en la base de datos
             db_viaje = ViajeCreate(**viaje_data)

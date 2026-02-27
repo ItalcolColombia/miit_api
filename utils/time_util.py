@@ -94,8 +94,9 @@ def normalize_to_app_tz(value: Optional[object]) -> Optional[datetime]:
 
     - Si value es None -> None
     - Si es str -> parsea ISO
-    - Si es naive -> asigna APP_TIMEZONE como tzinfo (no convierte)
-    - Si es aware -> lo convierte a APP_TIMEZONE
+    - Si es naive -> asigna APP_TIMEZONE como tzinfo (no convierte la hora de pared)
+    - Si es aware y tiene el mismo UTC offset que APP_TIMEZONE -> reemplaza tzinfo sin convertir
+    - Si es aware con offset diferente -> convierte a APP_TIMEZONE
     """
     if value is None:
         return None
@@ -111,6 +112,20 @@ def normalize_to_app_tz(value: Optional[object]) -> Optional[datetime]:
     if dt.tzinfo is None:
         # asignar la zona sin convertir la hora de pared
         return dt.replace(tzinfo=app_tz)
+
+    # Si el datetime ya tiene el mismo offset UTC que la zona destino,
+    # simplemente reemplazar el tzinfo para evitar dobles conversiones.
+    try:
+        # Calcular el offset actual del datetime
+        current_offset = dt.utcoffset()
+        # Calcular el offset que tendría la zona de la app en ese momento
+        target_offset = app_tz.utcoffset(dt.replace(tzinfo=None))
+        if current_offset is not None and target_offset is not None and current_offset == target_offset:
+            # Mismo offset -> solo reemplazar tzinfo, no convertir
+            return dt.replace(tzinfo=app_tz)
+    except Exception:
+        pass
+
     return dt.astimezone(app_tz)
 
 

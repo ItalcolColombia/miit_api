@@ -8,6 +8,8 @@ services:
     ports:
       - "8443:8443"
     environment:
+      TZ: America/Bogota
+      APP_TIMEZONE: America/Bogota
       API_NAME: ${API_NAME}
       API_HOST: ${API_HOST}
       API_PORT: ${API_PORT}
