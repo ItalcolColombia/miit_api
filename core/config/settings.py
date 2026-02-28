@@ -22,9 +22,9 @@ class Settings(BaseSettings):
     API_HOST: str = "0.0.0.0"
     API_PORT: int = 8000
     API_V1_STR: str = "v1"
-    API_VERSION_NUM: str = "0.0.52"
+    API_VERSION_NUM: str = "0.0.53"
     API_LOG_LEVEL: str = "DEBUG"
-    APP_LOG_DIR: str = "/var/www/metalteco/log/app_logs"
+    APP_LOG_DIR: str = "/var/www/metalsoft/miit_api/logs/miit_api/"
 
     ALLOWED_HOSTS: list[str] = [
         "integrador.turbograneles.com",
