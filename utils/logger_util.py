@@ -2,8 +2,9 @@
 
 import logging
 import os
+import sys
 from datetime import datetime, timezone
-from logging.handlers import RotatingFileHandler
+from logging.handlers import RotatingFileHandler, TimedRotatingFileHandler
 
 from colorlog import ColoredFormatter
 from starlette import status
@@ -51,15 +52,16 @@ class LoggerUtil:
             self.__app_log_dir = get_settings().APP_LOG_DIR
             self.__valid_log_levels = ["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"]
 
-            # Directory and path for the log file
-            log_date = datetime.now(timezone.utc).strftime("%Y-%m-%d")
-
             # Determinar la ruta de logs inteligentemente
             _log_dir = self._get_log_directory()
             os.makedirs(_log_dir, exist_ok=True)
 
-            _log_file_name = f"{self.__api_name}_{log_date}.log"
-            _log_file = os.path.join(_log_dir, _log_file_name)
+            # Nombre base del archivo de log (sin fecha, ya que TimedRotatingFileHandler la añade)
+            _log_file_base = os.path.join(_log_dir, f"{self.__api_name}.log")
+
+            # También crear archivo con fecha actual para referencia inmediata
+            log_date = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+            _log_file_dated = os.path.join(_log_dir, f"{self.__api_name}_{log_date}.log")
 
             # Console format and message format
             _date_format = "%d-%m-%Y | %H:%M:%S"
@@ -78,7 +80,7 @@ class LoggerUtil:
             )
 
             # File formatter setup - formato más detallado para archivos
-            _file_format = "%(asctime)s - %(levelname)s - %(message)s"
+            _file_format = "%(asctime)s - %(levelname)s - [%(filename)s:%(lineno)d] - %(message)s"
             _file_formatter = logging.Formatter(_file_format, datefmt=_date_format)
 
             # Initialize the logger
@@ -87,24 +89,45 @@ class LoggerUtil:
             if not self.__logger.hasHandlers():
                 _level = self.__get_log_level_variable()
 
-                # File handler con rotación (máximo 10MB por archivo, mantener 5 backups)
+                # TimedRotatingFileHandler - crea un nuevo archivo cada día a medianoche
+                _timed_handler = TimedRotatingFileHandler(
+                    _log_file_base,
+                    when='midnight',
+                    interval=1,
+                    backupCount=30,  # Mantener logs de los últimos 30 días
+                    encoding='utf-8'
+                )
+                _timed_handler.suffix = "_%Y-%m-%d.log"
+                _timed_handler.setFormatter(_file_formatter)
+                _timed_handler.setLevel(logging.DEBUG)
+
+                # RotatingFileHandler adicional para el archivo con fecha actual
                 _file_handler = RotatingFileHandler(
-                    _log_file,
-                    maxBytes=10*1024*1024,  # 10 MB
+                    _log_file_dated,
+                    maxBytes=50*1024*1024,  # 50 MB
                     backupCount=5,
                     encoding='utf-8'
                 )
                 _file_handler.setFormatter(_file_formatter)
+                _file_handler.setLevel(logging.DEBUG)
 
-                _stream_handler = logging.StreamHandler()
+                # Console handler
+                _stream_handler = logging.StreamHandler(sys.stdout)
                 _stream_handler.setFormatter(_stream_formatter)
+                _stream_handler.setLevel(logging.DEBUG)
 
                 self.__logger.setLevel(_level)
+                self.__logger.addHandler(_timed_handler)
                 self.__logger.addHandler(_file_handler)
                 self.__logger.addHandler(_stream_handler)
 
                 # Log inicial indicando dónde se guardan los logs
-                self.__logger.info(f"Logs guardándose en: {_log_file}")
+                self.__logger.info(f"="*60)
+                self.__logger.info(f"Sistema de logging inicializado")
+                self.__logger.info(f"Directorio de logs: {_log_dir}")
+                self.__logger.info(f"Archivo de log actual: {_log_file_dated}")
+                self.__logger.info(f"Nivel de log: {_level}")
+                self.__logger.info(f"="*60)
 
                 if _level != "DEBUG":
                     logging.getLogger("uvicorn.access").disabled = True
@@ -137,15 +160,20 @@ class LoggerUtil:
         # Intentar usar el directorio configurado
         if configured_dir:
             try:
-                # Verificar si el directorio padre existe o se puede crear
-                os.makedirs(configured_dir, exist_ok=True)
-                # Verificar si podemos escribir en el directorio
-                test_file = os.path.join(configured_dir, '.write_test')
-                with open(test_file, 'w') as f:
-                    f.write('test')
-                os.remove(test_file)
-                return configured_dir
-            except (OSError, PermissionError):
+                # En Windows, verificar si la ruta es de estilo Unix (no válida)
+                if os.name == 'nt' and configured_dir.startswith('/'):
+                    # Ruta de estilo Unix en Windows - usar fallback
+                    pass
+                else:
+                    # Verificar si el directorio padre existe o se puede crear
+                    os.makedirs(configured_dir, exist_ok=True)
+                    # Verificar si podemos escribir en el directorio
+                    test_file = os.path.join(configured_dir, '.write_test')
+                    with open(test_file, 'w') as f:
+                        f.write('test')
+                    os.remove(test_file)
+                    return configured_dir
+            except (OSError, PermissionError, FileNotFoundError):
                 # No se puede usar el directorio configurado
                 pass
 
@@ -252,6 +280,25 @@ class LoggerUtil:
             self.__logger.warning(message)
         except Exception as e:
             self.__logger.error(f"Error al registrar mensaje WARNING: {e}")
+
+    def flush(self) -> None:
+        """
+        Fuerza la escritura de los logs pendientes al disco.
+
+        Returns:
+            None
+        """
+        for handler in self.__logger.handlers:
+            handler.flush()
+
+    def get_log_directory(self) -> str:
+        """
+        Retorna el directorio donde se guardan los logs.
+
+        Returns:
+            str: Ruta del directorio de logs.
+        """
+        return self._get_log_directory()
 
     def __get_log_level_variable(self) -> str:
         """

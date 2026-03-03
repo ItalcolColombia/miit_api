@@ -2,6 +2,7 @@
 
 import time
 from http import HTTPStatus
+from urllib.parse import urlparse
 
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.responses import Response
@@ -47,7 +48,22 @@ class LoggerMiddleware(BaseHTTPMiddleware):
         method = request.method
         url = str(request.url)
 
-        log.info(f"Incoming Request: {host} - {method} {url} HTTP/1.1")
+        # Extraer información detallada de la URL
+        parsed_url = urlparse(url)
+        endpoint = parsed_url.path
+        query_params = parsed_url.query
+
+        # Obtener headers relevantes
+        user_agent = request.headers.get("user-agent", "N/A")
+        content_type = request.headers.get("content-type", "N/A")
+
+        # Log de entrada más descriptivo
+        log_entry = f"[REQUEST] {method} {endpoint}"
+        if query_params:
+            log_entry += f"?{query_params}"
+        log_entry += f" | IP: {host} | Content-Type: {content_type}"
+
+        log.info(log_entry)
 
         try:
             response = await call_next(request)
@@ -55,10 +71,13 @@ class LoggerMiddleware(BaseHTTPMiddleware):
             status_code = response.status_code
             status_name = HTTPStatus(status_code).phrase
 
-            log_message = f"{host} - {method} {url} HTTP/1.1 {status_code} {status_name} - {process_time:.2f}ms"
+            # Log de respuesta más descriptivo
+            log_message = f"[RESPONSE] {method} {endpoint} | Status: {status_code} {status_name} | Time: {process_time:.2f}ms | IP: {host}"
 
-            if status_code >= 400:
+            if status_code >= 500:
                 log.error(log_message)
+            elif status_code >= 400:
+                log.warning(log_message)
             else:
                 log.info(log_message)
 
@@ -66,7 +85,9 @@ class LoggerMiddleware(BaseHTTPMiddleware):
 
 
         except Exception as e:
+            process_time = (time.time() - start_time) * 1000
             import traceback
             tb = "".join(traceback.format_exception(type(e), e, e.__traceback__))
-            log.error(f"Middleware caught exception: {type(e).__name__}: {str(e)}\n{tb}")
+            log.error(f"[EXCEPTION] {method} {endpoint} | Time: {process_time:.2f}ms | Error: {type(e).__name__}: {str(e)}")
+            log.error(f"[TRACEBACK]\n{tb}")
             raise

@@ -24,7 +24,7 @@ class Settings(BaseSettings):
     API_V1_STR: str = "v1"
     API_VERSION_NUM: str = "0.0.53"
     API_LOG_LEVEL: str = "DEBUG"
-    APP_LOG_DIR: str = "/var/www/metalsoft/miit_api/logs/miit_api/"
+    APP_LOG_DIR: str = "/var/www/metalsoft/logs/miit_api/"
 
     ALLOWED_HOSTS: list[str] = [
         "integrador.turbograneles.com",
