@@ -214,6 +214,18 @@ class ViajeUpdate(BaseSchema):
     usuario_id: Optional[int] = None
     bl_id: Optional[int] = None
 
+    # Normalizar datetimes aware/naive a APP_TIMEZONE antes de persistir.
+    # Esto asegura que el datetime ya esté en la zona correcta antes de
+    # llegar al repositorio y a asyncpg, evitando desfases de 5 horas
+    # cuando el cliente envía datetimes con offset (ej. -05:00).
+    @field_validator('fecha_llegada', 'fecha_salida', 'fecha_hora', mode='before')
+    @classmethod
+    def _normalize_datetimes(cls, v):
+        from utils.time_util import normalize_to_app_tz
+        if v is None:
+            return None
+        return normalize_to_app_tz(v)
+
 
 class ViajesActivosPorMaterialResponse(BaseModel):
     consecutivo: int

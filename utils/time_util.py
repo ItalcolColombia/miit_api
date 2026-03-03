@@ -95,8 +95,7 @@ def normalize_to_app_tz(value: Optional[object]) -> Optional[datetime]:
     - Si value es None -> None
     - Si es str -> parsea ISO
     - Si es naive -> asigna APP_TIMEZONE como tzinfo (no convierte la hora de pared)
-    - Si es aware y tiene el mismo UTC offset que APP_TIMEZONE -> reemplaza tzinfo sin convertir
-    - Si es aware con offset diferente -> convierte a APP_TIMEZONE
+    - Si es aware -> convierte a APP_TIMEZONE usando astimezone (seguro contra dobles conversiones)
     """
     if value is None:
         return None
@@ -113,19 +112,11 @@ def normalize_to_app_tz(value: Optional[object]) -> Optional[datetime]:
         # asignar la zona sin convertir la hora de pared
         return dt.replace(tzinfo=app_tz)
 
-    # Si el datetime ya tiene el mismo offset UTC que la zona destino,
-    # simplemente reemplazar el tzinfo para evitar dobles conversiones.
-    try:
-        # Calcular el offset actual del datetime
-        current_offset = dt.utcoffset()
-        # Calcular el offset que tendría la zona de la app en ese momento
-        target_offset = app_tz.utcoffset(dt.replace(tzinfo=None))
-        if current_offset is not None and target_offset is not None and current_offset == target_offset:
-            # Mismo offset -> solo reemplazar tzinfo, no convertir
-            return dt.replace(tzinfo=app_tz)
-    except Exception:
-        pass
-
+    # Para datetimes aware, SIEMPRE usar astimezone que convierte correctamente
+    # entre zonas horarias. Evitamos usar replace(tzinfo=...) en datetimes aware
+    # porque si el datetime fue convertido a UTC en algún punto intermedio
+    # (por Pydantic, asyncpg u otro), replace solo cambiaría la etiqueta de zona
+    # sin ajustar la hora de pared, causando un desfase.
     return dt.astimezone(app_tz)
 
 
