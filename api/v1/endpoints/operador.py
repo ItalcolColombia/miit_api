@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import datetime, timezone
 from decimal import Decimal
 from typing import List
 
@@ -350,9 +350,16 @@ async def in_camion(
             log.info(f"[DEBUG endpoint in_camion] raw fecha_ingreso={fecha_ingreso} (type={type(fecha_ingreso)}, tzinfo={getattr(fecha_ingreso, 'tzinfo', None)})")
         except Exception:
             log.warning("[DEBUG endpoint in_camion] no se pudo inspeccionar fecha_ingreso")
-        # No normalizar aquí: el servicio y el repositorio ya lo hacen.
-        # La normalización múltiple puede causar desfase de horas.
-        log.info(f"[DEBUG endpoint in_camion] pasando fecha_ingreso sin normalizar al servicio")
+        # Si el datetime llega naive (sin timezone), asumirlo como UTC.
+        # El cliente .NET envía el offset -05:00 pero se pierde en la codificación
+        # de la URL, así que FastAPI recibe la hora ya convertida a UTC pero sin
+        # tzinfo.  Al marcarlo como UTC, normalize_to_app_tz lo convertirá
+        # correctamente a America/Bogota vía astimezone.
+        if fecha_ingreso.tzinfo is None:
+            fecha_ingreso = fecha_ingreso.replace(tzinfo=timezone.utc)
+            log.info(f"[DEBUG endpoint in_camion] fecha_ingreso era naive -> marcada como UTC: {fecha_ingreso}")
+        else:
+            log.info(f"[DEBUG endpoint in_camion] fecha_ingreso ya es aware: {fecha_ingreso}")
 
         service_data = await service.chg_camion_ingreso(puerto_id, fecha_ingreso)
 
@@ -406,9 +413,16 @@ async def out_camion(
             log.info(f"[DEBUG endpoint out_camion] raw fecha_salida={fecha_salida} (type={type(fecha_salida)}, tzinfo={getattr(fecha_salida, 'tzinfo', None)}) peso_real={peso_real} (type={type(peso_real)})")
         except Exception:
             log.warning("[DEBUG endpoint out_camion] no se pudo inspeccionar parametros de salida")
-        # No normalizar aquí: el servicio y el repositorio ya lo hacen.
-        # La normalización múltiple puede causar desfase de horas.
-        log.info(f"[DEBUG endpoint out_camion] pasando fecha_salida sin normalizar al servicio")
+        # Si el datetime llega naive (sin timezone), asumirlo como UTC.
+        # El cliente .NET envía el offset -05:00 pero se pierde en la codificación
+        # de la URL, así que FastAPI recibe la hora ya convertida a UTC pero sin
+        # tzinfo.  Al marcarlo como UTC, normalize_to_app_tz lo convertirá
+        # correctamente a America/Bogota vía astimezone.
+        if fecha_salida.tzinfo is None:
+            fecha_salida = fecha_salida.replace(tzinfo=timezone.utc)
+            log.info(f"[DEBUG endpoint out_camion] fecha_salida era naive -> marcada como UTC: {fecha_salida}")
+        else:
+            log.info(f"[DEBUG endpoint out_camion] fecha_salida ya es aware: {fecha_salida}")
 
         await service.chg_camion_salida(puerto_id, fecha_salida, peso_real)
         try:
