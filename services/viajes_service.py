@@ -964,6 +964,145 @@ class ViajesService:
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
 
+    async def obtener_entrada_parcial_buque(self, puerto_id: str) -> dict:
+        """
+        Calcula los pesos parciales (delta) de los BLs de un buque con arribo activo.
+
+        Obtiene la suma de peso_real de las pesadas por material de las transacciones
+        de Recibo del buque, prorratea por BL, calcula el delta respecto a lo ya
+        enviado (peso_enviado_api) y actualiza peso_enviado_api tras el cálculo.
+
+        Args:
+            puerto_id (str): El puerto_id del viaje del buque.
+
+        Returns:
+            dict: Estructura compatible con NotificationBuque con voyage, status="InProgress"
+                  y data con los deltas por BL.
+        """
+        from collections import defaultdict
+        from decimal import Decimal, ROUND_HALF_UP
+        from sqlalchemy import select, func
+        from database.models import Transacciones, Bls, Pesadas
+
+        # 1. Obtener viaje del buque
+        viaje = await self.get_viaje_by_puerto_id(puerto_id)
+        if not viaje:
+            raise EntityNotFoundException(f"Viaje con puerto_id: '{puerto_id}' no existe")
+
+        # 2. Verificar que sea un buque activo
+        flota = await self.flotas_service.get_flota(viaje.flota_id)
+        if not flota:
+            raise EntityNotFoundException(f"Flota con id '{viaje.flota_id}' no existe")
+
+        if flota.tipo != "buque":
+            raise BasedException(
+                message=f"La flota no es de tipo buque, es {flota.tipo}",
+                status_code=status.HTTP_400_BAD_REQUEST
+            )
+
+        if not flota.estado_puerto or not flota.estado_operador:
+            raise BasedException(
+                message=f"El buque {puerto_id} no tiene un arribo activo (estado_puerto={flota.estado_puerto}, estado_operador={flota.estado_operador})",
+                status_code=status.HTTP_400_BAD_REQUEST
+            )
+
+        viaje_id = viaje.id
+
+        # 3. Obtener suma de peso_real de las PESADAS por material de transacciones de RECIBO del buque
+        query_pesadas = (
+            select(
+                Transacciones.material_id,
+                func.sum(Pesadas.peso_real).label('peso_real_total')
+            )
+            .join(Pesadas, Pesadas.transaccion_id == Transacciones.id)
+            .where(Transacciones.viaje_id == viaje_id)
+            .where(Transacciones.tipo == 'Recibo')
+            .group_by(Transacciones.material_id)
+        )
+        result_trans = await self._repo.db.execute(query_pesadas)
+        pesos_por_material = {row.material_id: Decimal(str(row.peso_real_total or 0)) for row in result_trans.fetchall()}
+
+        log.info(f"EntradaParcialBuque - Pesos reales (pesadas acumuladas) por material para buque {viaje_id}: {pesos_por_material}")
+
+        # 4. Obtener TODOS los BLs del buque
+        query_bls = select(Bls).where(Bls.viaje_id == viaje_id)
+        result_bls = await self._repo.db.execute(query_bls)
+        bls = result_bls.scalars().all()
+
+        if not bls:
+            log.warning(f"EntradaParcialBuque - No se encontraron BLs para buque {viaje_id}")
+            return NotificationBuque(
+                voyage=puerto_id,
+                status="InProgress",
+                data=[]
+            ).model_dump()
+
+        # 5. Agrupar BLs por material y calcular suma de peso_bl por material
+        bls_por_material = defaultdict(list)
+        suma_peso_bl_por_material = defaultdict(Decimal)
+
+        for bl in bls:
+            material_id = bl.material_id
+            peso_bl = Decimal(str(bl.peso_bl or 0))
+            bls_por_material[material_id].append(bl)
+            suma_peso_bl_por_material[material_id] += peso_bl
+
+        # 6. Calcular peso prorrateado actual y delta para cada BL
+        dt_bl = []
+        bls_a_actualizar = []
+
+        for material_id, bls_del_material in bls_por_material.items():
+            peso_real_total = pesos_por_material.get(material_id, Decimal('0'))
+            suma_peso_bl = suma_peso_bl_por_material[material_id]
+
+            if suma_peso_bl == 0:
+                log.warning(f"EntradaParcialBuque - Suma de peso_bl es 0 para material {material_id}")
+                continue
+
+            for bl in bls_del_material:
+                peso_bl = Decimal(str(bl.peso_bl or 0))
+                peso_enviado_anterior = Decimal(str(bl.peso_enviado_api or 0))
+
+                proporcion = peso_bl / suma_peso_bl
+                peso_prorrateado_actual = (proporcion * peso_real_total).quantize(Decimal('0.01'), rounding=ROUND_HALF_UP)
+
+                delta_peso = (peso_prorrateado_actual - peso_enviado_anterior).quantize(Decimal('0.01'), rounding=ROUND_HALF_UP)
+
+                log.info(f"EntradaParcialBuque - BL {bl.no_bl}: peso_bl={peso_bl}, proporción={proporcion:.4f}, "
+                         f"peso_prorrateado_actual={peso_prorrateado_actual}, peso_enviado_anterior={peso_enviado_anterior}, "
+                         f"delta_peso={delta_peso}")
+
+                dt_bl.append(
+                    NotificationBlsPeso(
+                        noBL=bl.no_bl,
+                        voyage=puerto_id,
+                        weightBl=float(delta_peso)
+                    ).model_dump()
+                )
+
+                bls_a_actualizar.append({
+                    'bl_id': bl.id,
+                    'peso_enviado_api': peso_prorrateado_actual
+                })
+
+        # 7. Actualizar peso_enviado_api de cada BL
+        for bl_update_info in bls_a_actualizar:
+            try:
+                update_data = BlsUpdate(peso_enviado_api=bl_update_info['peso_enviado_api'])
+                await self.bls_service.update(bl_update_info['bl_id'], update_data)
+                log.debug(f"EntradaParcialBuque - Actualizado peso_enviado_api del BL {bl_update_info['bl_id']} a {bl_update_info['peso_enviado_api']}")
+            except Exception as e_bl_update:
+                log.error(f"EntradaParcialBuque - Error al actualizar peso_enviado_api del BL {bl_update_info['bl_id']}: {e_bl_update}")
+
+        resultado = NotificationBuque(
+            voyage=puerto_id,
+            status="InProgress",
+            data=dt_bl if dt_bl else None
+        ).model_dump()
+
+        log.info(f"EntradaParcialBuque - Resultado para buque {puerto_id}: {resultado}")
+        return resultado
+
     async def send_envio_final_external(self, voyage: str, envio_list: list, external_accepts_list: Optional[bool] = None, send_last_as_object: Optional[bool] = True) -> None:
         """
         Envía la lista de 'envio final' a la API externa en el endpoint /api/v1/Metalsoft/EnvioFinal.

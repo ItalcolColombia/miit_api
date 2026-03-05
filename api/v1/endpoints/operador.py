@@ -210,6 +210,52 @@ async def end_buque(
             message=str(e)
         )
 
+@router.get("/entrada-parcial-buque/{puerto_id}",
+            status_code=status.HTTP_200_OK,
+            summary="Obtener pesos parciales (delta) de BLs de un buque con arribo activo",
+            description="Calcula y retorna los pesos parciales (delta) prorrateados de los BLs "
+                        "de un buque con arribo en curso, basándose en las pesadas acumuladas de "
+                        "las transacciones de recibo. Cada consulta actualiza el acumulado enviado "
+                        "(peso_enviado_api) para que la siguiente consulta retorne solo el incremento. "
+                        "Corresponde a la notificación de despacho directo parcial.",
+            responses={
+                status.HTTP_400_BAD_REQUEST: {"model": ErrorResponse},
+                status.HTTP_404_NOT_FOUND: {"model": ErrorResponse},
+                status.HTTP_500_INTERNAL_SERVER_ERROR: {"model": ErrorResponse},
+            })
+async def entrada_parcial_buque(
+        puerto_id: str,
+        service: ViajesService = Depends(get_viajes_service)):
+    log.info(f"Payload recibido: Entrada parcial buque {puerto_id}")
+    try:
+        resultado = await service.obtener_entrada_parcial_buque(puerto_id)
+        log.info(f"Entrada parcial buque {puerto_id} obtenida exitosamente.")
+        return resultado
+
+    except EntityNotFoundException as e:
+        raise e
+
+    except BasedException as be:
+        log.error(f"Entrada parcial buque {puerto_id} no pudo obtenerse: {be}")
+        return response_json(
+            status_code=getattr(be, 'status_code', status.HTTP_400_BAD_REQUEST),
+            message=str(getattr(be, 'message', str(be)))
+        )
+
+    except HTTPException as http_exc:
+        log.error(f"Entrada parcial buque {puerto_id} no pudo obtenerse: {http_exc.detail}")
+        return response_json(
+            status_code=http_exc.status_code,
+            message=http_exc.detail
+        )
+
+    except Exception as e:
+        log.error(f"Error al obtener entrada parcial de buque {puerto_id}: {e}")
+        return response_json(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            message=str(e)
+        )
+
 @router.put("/levante-carga-puerto/{no_bl}",
             status_code=status.HTTP_200_OK,
             summary="Modificar bit del estado_puerto de un BL",
