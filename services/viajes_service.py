@@ -523,12 +523,9 @@ class ViajesService:
             # Pit por defecto establecido en 1
             pit = 1
 
-            # Asegurar que la fecha se normalice a la zona de la aplicación antes de guardar.
-            # Esto evita diferencias en producción si el payload viene con tzinfo distinto o si
-            # el cliente envía un datetime naive que deba interpretarse según APP_TIMEZONE.
-            from utils.time_util import normalize_to_app_tz
-            fecha_norm = normalize_to_app_tz(fecha)
-            log.info(f"[DEBUG chg_camion_ingreso] fecha original={fecha} (tzinfo={getattr(fecha, 'tzinfo', None)}), fecha_norm={fecha_norm} (tzinfo={getattr(fecha_norm, 'tzinfo', None)})")
+            # La fecha ya viene como timestamp del servidor (now_local) desde el
+            # endpoint, así que no necesita normalización adicional.
+            log.info(f"[DEBUG chg_camion_ingreso] fecha={fecha} (tzinfo={getattr(fecha, 'tzinfo', None)})")
 
             # Determinar si es despacho directo
             # Regla: Si hay un viaje_origen que apunta a un buque activo (estado_puerto=True y estado_operador=True)
@@ -546,7 +543,7 @@ class ViajesService:
                             log.info(f"Viaje camión {puerto_id}: marcado como despacho directo en ingreso (buque activo viaje_origen={viaje.viaje_origen})")
 
             update_fields = {
-                "fecha_llegada": fecha_norm,
+                "fecha_llegada": fecha,
                 "despacho_directo": es_despacho_directo,
             }
             update_data = ViajeUpdate(**update_fields)
@@ -595,11 +592,10 @@ class ViajesService:
                 raise EntityNotFoundException(
                     f"La flota es del tipo '{flota.tipo}' diferente al tipo esperado 'camion'")
 
-            # La normalización de la fecha se delega al repositorio base (_normalize_datetimes).
-            # Eliminar normalizaciones redundantes aquí para evitar desfases de zona horaria.
-            log.info(f"[DEBUG chg_camion_salida] fecha recibida={fecha} (tzinfo={getattr(fecha, 'tzinfo', None)}) peso={peso}")
+            # La fecha ya viene como timestamp del servidor (now_local) desde el
+            # endpoint, así que no necesita normalización adicional.
+            log.info(f"[DEBUG chg_camion_salida] fecha={fecha} (tzinfo={getattr(fecha, 'tzinfo', None)}) peso={peso}")
             update_fields = {
-                # Guardar la hora tal como llegó el cliente, asumiendo APP_TIMEZONE
                 "fecha_salida": fecha,
                 "peso_real": peso
             }

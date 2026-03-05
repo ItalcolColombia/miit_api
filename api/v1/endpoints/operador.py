@@ -1,6 +1,6 @@
 from datetime import datetime, timezone
 from decimal import Decimal
-from typing import List
+from typing import List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, status
 
@@ -387,27 +387,18 @@ async def create_camion(
             })
 async def in_camion(
         puerto_id: str,
-        fecha_ingreso: datetime,
+        fecha_ingreso: Optional[datetime] = None,
         service: ViajesService = Depends(get_viajes_service)):
     log.info(f"Payload recibido: Flota {puerto_id} - Ingreso ")
     try:
-        # Debug: mostrar cómo llegó el parámetro desde el cliente (tipo y tzinfo)
-        try:
-            log.info(f"[DEBUG endpoint in_camion] raw fecha_ingreso={fecha_ingreso} (type={type(fecha_ingreso)}, tzinfo={getattr(fecha_ingreso, 'tzinfo', None)})")
-        except Exception:
-            log.warning("[DEBUG endpoint in_camion] no se pudo inspeccionar fecha_ingreso")
-        # Si el datetime llega naive (sin timezone), asumirlo como UTC.
-        # El cliente .NET envía el offset -05:00 pero se pierde en la codificación
-        # de la URL, así que FastAPI recibe la hora ya convertida a UTC pero sin
-        # tzinfo.  Al marcarlo como UTC, normalize_to_app_tz lo convertirá
-        # correctamente a America/Bogota vía astimezone.
-        if fecha_ingreso.tzinfo is None:
-            fecha_ingreso = fecha_ingreso.replace(tzinfo=timezone.utc)
-            log.info(f"[DEBUG endpoint in_camion] fecha_ingreso era naive -> marcada como UTC: {fecha_ingreso}")
-        else:
-            log.info(f"[DEBUG endpoint in_camion] fecha_ingreso ya es aware: {fecha_ingreso}")
+        # Ignorar la fecha del cliente y usar timestamp del servidor,
+        # igual que en buque_in / end_buque.  Esto evita problemas de
+        # offset cuando el cliente .NET envía la hora con zona horaria
+        # que se pierde en la codificación de la URL.
+        fecha_ingreso_actual = now_local()
+        log.info(f"[DEBUG endpoint in_camion] fecha_ingreso del servidor={fecha_ingreso_actual} (tzinfo={fecha_ingreso_actual.tzinfo})")
 
-        service_data = await service.chg_camion_ingreso(puerto_id, fecha_ingreso)
+        service_data = await service.chg_camion_ingreso(puerto_id, fecha_ingreso_actual)
 
         try:
             await service.chg_estado_flota(puerto_id, estado_puerto=True, estado_operador=True)
@@ -449,28 +440,19 @@ async def in_camion(
             })
 async def out_camion(
         puerto_id: str,
-        fecha_salida: datetime,
         peso_real: Decimal,
+        fecha_salida: Optional[datetime] = None,
         service: ViajesService = Depends(get_viajes_service)):
     log.info(f"Payload recibido: Camion {puerto_id} - Salida")
     try:
-        # Debug: inspeccionar parámetros recibidos
-        try:
-            log.info(f"[DEBUG endpoint out_camion] raw fecha_salida={fecha_salida} (type={type(fecha_salida)}, tzinfo={getattr(fecha_salida, 'tzinfo', None)}) peso_real={peso_real} (type={type(peso_real)})")
-        except Exception:
-            log.warning("[DEBUG endpoint out_camion] no se pudo inspeccionar parametros de salida")
-        # Si el datetime llega naive (sin timezone), asumirlo como UTC.
-        # El cliente .NET envía el offset -05:00 pero se pierde en la codificación
-        # de la URL, así que FastAPI recibe la hora ya convertida a UTC pero sin
-        # tzinfo.  Al marcarlo como UTC, normalize_to_app_tz lo convertirá
-        # correctamente a America/Bogota vía astimezone.
-        if fecha_salida.tzinfo is None:
-            fecha_salida = fecha_salida.replace(tzinfo=timezone.utc)
-            log.info(f"[DEBUG endpoint out_camion] fecha_salida era naive -> marcada como UTC: {fecha_salida}")
-        else:
-            log.info(f"[DEBUG endpoint out_camion] fecha_salida ya es aware: {fecha_salida}")
+        # Ignorar la fecha del cliente y usar timestamp del servidor,
+        # igual que en buque_in / end_buque.  Esto evita problemas de
+        # offset cuando el cliente .NET envía la hora con zona horaria
+        # que se pierde en la codificación de la URL.
+        fecha_salida_actual = now_local()
+        log.info(f"[DEBUG endpoint out_camion] fecha_salida del servidor={fecha_salida_actual} (tzinfo={fecha_salida_actual.tzinfo}) peso_real={peso_real}")
 
-        await service.chg_camion_salida(puerto_id, fecha_salida, peso_real)
+        await service.chg_camion_salida(puerto_id, fecha_salida_actual, peso_real)
         try:
             await service.chg_estado_flota(puerto_id, estado_puerto=False)
             log.info(f"Estado de puerto para flota {puerto_id} puesto en False tras egreso de camión.")
