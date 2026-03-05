@@ -853,27 +853,27 @@ class ViajesService:
             # (para evitar problemas de lazy loading fuera de sesión)
             bl = await self.bls_service.get_bl_by_viaje(viaje.id)
 
-            # Preparar datos de BLs para la notificación
-            # Usamos los datos de bls_actualizados que ya tienen los pesos reales calculados
-            if bls_actualizados:
-                dt_bl = [
-                    NotificationBlsPeso(
-                        noBL=bl_data['no_bl'],
-                        voyage=viaje.puerto_id,
-                        weightBl=bl_data['peso_real']
-                    ).model_dump()
-                    for bl_data in bls_actualizados
-                ]
-            elif bl:
-                # Fallback: usar los BLs directamente si no se actualizaron
-                dt_bl = [
-                    NotificationBlsPeso(
-                        noBL=bl_item.no_bl,
-                        voyage=viaje.puerto_id,
-                        weightBl=bl_item.peso_real if hasattr(bl_item, 'peso_real') and bl_item.peso_real else bl_item.peso_bl
-                    ).model_dump()
-                    for bl_item in bl
-                ]
+            # Preparar datos de BLs para la notificación.
+            # Se calcula el delta (peso_real - peso_enviado_api) para cada BL:
+            # - Despacho directo: peso_enviado_api > 0 (parciales ya enviados vía entrada-parcial-buque),
+            #   por lo que se envía solo el restante.
+            # - No despacho directo: peso_enviado_api = 0, por lo que el delta equivale al total.
+            if bl:
+                dt_bl = []
+                for bl_item in bl:
+                    peso_real = Decimal(str(bl_item.peso_real or 0)) if hasattr(bl_item, 'peso_real') and bl_item.peso_real else Decimal(str(bl_item.peso_bl or 0))
+                    peso_enviado = Decimal(str(bl_item.peso_enviado_api or 0)) if hasattr(bl_item, 'peso_enviado_api') and bl_item.peso_enviado_api else Decimal('0')
+                    delta = peso_real - peso_enviado
+
+                    log.info(f"FinalizaBuque - BL {bl_item.no_bl}: peso_real={peso_real}, peso_enviado_api={peso_enviado}, delta={delta}")
+
+                    dt_bl.append(
+                        NotificationBlsPeso(
+                            noBL=bl_item.no_bl,
+                            voyage=viaje.puerto_id,
+                            weightBl=float(delta)
+                        ).model_dump()
+                    )
             else:
                 dt_bl = None
 
