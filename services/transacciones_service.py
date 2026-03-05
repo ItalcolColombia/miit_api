@@ -688,7 +688,8 @@ class TransaccionesService:
         """
         Verifica el tipo de transacción y ejecuta las acciones correspondientes:
         - Despacho (camiones): Actualiza estado_operador de la flota y envía notificación CamionCargue
-        - Recibo (buques): Si es la última transacción del viaje, ejecuta el envío final
+        - Recibo (buques): No ejecuta envío final automático; este se realiza manualmente
+          desde el endpoint POST /envio-final/{viaje_id}/notify
 
         Args:
             tran: La transacción que se acaba de finalizar
@@ -701,87 +702,7 @@ class TransaccionesService:
         if tipo_lower == 'despacho':
             return await self._ejecutar_finalizacion_camion(tran)
 
-        # Solo aplica para transacciones de tipo Recibo (buques)
-        if tipo_lower != 'recibo':
-            return None
-
-        viaje_id = tran.viaje_id
-        if viaje_id is None:
-            log.warning(f"Transacción {tran.id} de tipo Recibo sin viaje_id, no se puede verificar envío final")
-            return
-
-        try:
-            # Contar transacciones pendientes (estado='Proceso') para este viaje
-            pending_count = await self._repo.count_pending_by_viaje(viaje_id)
-
-            log.info(f"Verificando envío final para viaje {viaje_id}: {pending_count} transacciones pendientes")
-
-            if pending_count > 0:
-                log.info(f"Aún quedan {pending_count} transacciones pendientes para viaje {viaje_id}, no se ejecuta envío final")
-                return
-
-            # No quedan transacciones pendientes, ejecutar envío final
-            log.info(f"Última transacción finalizada para viaje {viaje_id}, ejecutando envío final automático")
-
-            # Obtener el puerto_id del viaje
-            viaje = await self.viajes_repo.get_by_id(viaje_id)
-            if not viaje:
-                log.error(f"No se encontró viaje con ID {viaje_id} para envío final")
-                return
-
-            puerto_id = viaje.puerto_id
-
-            # Obtener las pesadas para el envío final
-            from services.envio_final_service import fetch_preview_for_puerto, notify_envio_final
-
-            pesadas_to_send = await fetch_preview_for_puerto(puerto_id, self.pesadas_service)
-
-            log.info(f"EnvioFinal automático: lista preparada para envío para {puerto_id} con {len(pesadas_to_send)} items")
-
-            # Loguear el contenido completo que se va a enviar
-            try:
-                import json
-                pesadas_log = []
-                for item in pesadas_to_send:
-                    if hasattr(item, 'model_dump'):
-                        pesadas_log.append(item.model_dump())
-                    elif hasattr(item, '__dict__'):
-                        pesadas_log.append(item.__dict__)
-                    else:
-                        pesadas_log.append(item)
-                log.info(f"EnvioFinal automático - contenido a enviar para {puerto_id}: {json.dumps(pesadas_log, default=str, indent=2)}")
-            except Exception as e_log:
-                log.warning(f"No se pudo loguear el contenido del envío final: {e_log}")
-
-            # Para ejecutar notify_envio_final necesitamos viajes_service
-            # Como no lo tenemos directamente, usamos el método send_envio_final_external del viaje
-            # Necesitamos crear una instancia temporal o usar otra estrategia
-
-            # Convertir pesadas a formato requerido
-            pesadas_converted = []
-            for item in pesadas_to_send:
-                try:
-                    if hasattr(item, 'model_dump'):
-                        obj = item.model_dump()
-                    elif hasattr(item, 'dict'):
-                        obj = item.dict()
-                    elif hasattr(item, '__dict__'):
-                        obj = item.__dict__
-                    else:
-                        obj = dict(item)
-                except Exception:
-                    obj = item if isinstance(item, dict) else {}
-                obj['voyage'] = puerto_id
-                pesadas_converted.append(obj)
-
-            # Ejecutar envío final usando el servicio de API externa
-            await self._ejecutar_envio_final_externo(puerto_id, pesadas_converted)
-
-            log.info(f"EnvioFinal automático completado exitosamente para viaje {viaje_id} (puerto_id={puerto_id})")
-
-        except Exception as e:
-            # No lanzar excepción para no interrumpir el flujo de finalización de transacción
-            log.error(f"Error al ejecutar envío final automático para viaje {viaje_id}: {e}", exc_info=True)
+        return None
 
     async def _ejecutar_finalizacion_camion(self, tran: TransaccionResponse) -> Optional[dict]:
         """
@@ -893,99 +814,6 @@ class TransaccionesService:
             log.error(f"Error al ejecutar finalización de camión para viaje {viaje_id}: {e}", exc_info=True)
             resultado['message'] = f"Error al ejecutar finalización de camión: {e}"
             return resultado
-
-    async def _ejecutar_envio_final_externo(self, puerto_id: str, pesadas: list) -> None:
-        """
-        Ejecuta el envío final a la API externa.
-
-        Args:
-            puerto_id: ID del puerto/viaje
-            pesadas: Lista de pesadas a enviar
-        """
-        from core.config.settings import get_settings
-        from services.ext_api_service import ExtApiService
-        from decimal import Decimal
-        from datetime import datetime, timezone
-        from utils.time_util import now_local
-        import uuid
-        import json
-
-        settings = get_settings()
-        ext_service = ExtApiService()
-
-        # Normalizar payloads
-        payloads = []
-        for item in pesadas:
-            it = item if isinstance(item, dict) else {}
-
-            peso_val = it.get('peso', None)
-            try:
-                if peso_val is None:
-                    peso_str = "0"
-                else:
-                    peso_dec = Decimal(peso_val) if not isinstance(peso_val, str) else Decimal(peso_val)
-                    peso_str = format(peso_dec.quantize(Decimal('0.00')), 'f')
-            except Exception:
-                peso_str = "0"
-
-            fecha = it.get('fecha_hora', None)
-            if fecha is None:
-                fecha_iso = now_local().isoformat()
-            else:
-                try:
-                    fecha_iso = fecha if isinstance(fecha, str) else (fecha.isoformat() if hasattr(fecha, 'isoformat') else str(fecha))
-                except Exception:
-                    fecha_iso = str(fecha)
-
-            payloads.append({
-                "voyage": puerto_id,
-                "referencia": it.get('referencia'),
-                "consecutivo": int(it.get('consecutivo') or 0),
-                "transaccion": int(it.get('transaccion') or 0),
-                "pit": int(it.get('pit') or 0),
-                "material": it.get('material') or "",
-                "peso": peso_str,
-                "puerto_id": it.get('puerto_id') or puerto_id,
-                "fecha_hora": fecha_iso,
-                "usuario_id": int(it.get('usuario_id') or 0),
-                "usuario": it.get('usuario') or "",
-            })
-
-        if not payloads:
-            log.warning(f"EnvioFinal automático: no hay payloads para enviar a {puerto_id}")
-            return
-
-        # Enviar solo el último registro (más reciente por fecha_hora)
-        def _parse_date(v):
-            try:
-                if isinstance(v, str):
-                    try:
-                        return datetime.fromisoformat(v)
-                    except Exception:
-                        return datetime.fromisoformat(v.replace('Z', '+00:00'))
-                return v
-            except Exception:
-                return datetime.min.replace(tzinfo=timezone.utc)
-
-        last_item = max(payloads, key=lambda x: _parse_date(x.get('fecha_hora')))
-
-        # Headers
-        idempotency_key = f"{last_item.get('referencia') or ''}-{last_item.get('transaccion') or 0}"
-        correlation_id = str(uuid.uuid4())
-        headers = {"Idempotency-Key": idempotency_key, "X-Correlation-Id": correlation_id}
-
-        endpoint = f"{settings.TG_API_URL}/api/v1/Metalsoft/EnvioFinal"
-
-        # Loguear el payload final
-        log.info(f"EnvioFinal automático - enviando a {endpoint}")
-        log.info(f"EnvioFinal automático - headers: {json.dumps(headers)}")
-        log.info(f"EnvioFinal automático - payload: {json.dumps(last_item, default=str)}")
-
-        # Serializar y enviar
-        serialized = AnyUtils.serialize_data(last_item)
-        await ext_service.post(serialized, endpoint, extra_headers=headers)
-
-        log.info(f"EnvioFinal automático - notificación enviada exitosamente para {puerto_id}")
 
     async def create_transaccion_ext(self, tran_ext: TransaccionCreateExt) -> TransaccionResponse:
         """

@@ -69,6 +69,16 @@ class ViajesService:
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
 
+    async def get_viaje_by_id(self, viaje_id: int) -> Optional[ViajesResponse]:
+        try:
+            return await self._repo.get_by_id(viaje_id)
+        except Exception as e:
+            log.error(f"Error obteniendo viaje con ID {viaje_id}: {e}")
+            raise BasedException(
+                message=f"Error al obtener el viaje con ID {viaje_id}",
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
+
     async def get_viajes_activos_por_material(self, tipo_flota: str) -> List[ViajesActivosPorMaterialResponse]:
         """
         Retrieve active viajes grouped by material.

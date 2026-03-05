@@ -19,6 +19,30 @@ class ExtApiService:
     def __init__(self):
         self._http_client = httpx.AsyncClient()
 
+    async def _authenticate(self) -> str:
+        """Obtiene un token JWT válido, convirtiendo errores de autenticación en BasedException controladas."""
+        try:
+            token = await get_token()
+            if not token:
+                raise BasedException(
+                    message="No se pudo obtener un token JWT válido de la API externa.",
+                    status_code=status.HTTP_502_BAD_GATEWAY
+                )
+            return token
+        except httpx.HTTPStatusError as e:
+            log.error(f"Error de autenticación con API externa (status {e.response.status_code}): {e.response.text}")
+            raise BasedException(
+                message=f"Error de autenticación con la API externa (status {e.response.status_code}). "
+                        f"El servicio de autenticación no está disponible. Contacte al proveedor.",
+                status_code=status.HTTP_424_FAILED_DEPENDENCY
+            ) from e
+        except httpx.RequestError as e:
+            log.error(f"Error de conexión al autenticar con API externa: {e}")
+            raise BasedException(
+                message=f"No se pudo conectar al servicio de autenticación de la API externa: {e}",
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE
+            ) from e
+
     async def get(self, url: str, params: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
         """Retrieve data from an external API via a GET request.
 
@@ -38,8 +62,7 @@ class ExtApiService:
             httpx.RequestError: If a network error occurs during the request.
         """
         try:
-            # Obtener token válido (refresca si expiró)
-            jwt_token = await get_token()
+            jwt_token = await self._authenticate()
 
             headers = {
                 "Authorization": f"Bearer {jwt_token}",
@@ -56,6 +79,8 @@ class ExtApiService:
             response_data = response.json()
             log.info(f"GET request successful for URL: {url}")
             return response_data
+        except BasedException:
+            raise
         except httpx.HTTPStatusError as e:
             log.error(f"GET request failed (status: {e.response.status_code}): {e.response.text}")
             raise
@@ -98,14 +123,7 @@ class ExtApiService:
                     message="Los datos de notificación no pueden estar vacíos.",
                     status_code=status.HTTP_400_BAD_REQUEST
                 )
-            # Obtener token válido (refresca si expiró)
-            jwt_token = await get_token()
-            if not jwt_token:
-                log.error("No se pudo obtener un token JWT válido.")
-                raise BasedException(
-                    message="No se pudo obtener un token JWT válido.",
-                    status_code=status.HTTP_401_UNAUTHORIZED
-                )
+            jwt_token = await self._authenticate()
 
             headers = {
                 "Authorization": f"Bearer {jwt_token}",
@@ -182,6 +200,8 @@ class ExtApiService:
                 message=f"Error inesperado al enviar la notificación: {str(last_exc)}",
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
+        except BasedException:
+            raise
         except httpx.HTTPStatusError as e:
             log.error(f"Fallo en la notificación a la API {e.response.status_code}: {e.response.text}")
             raise
@@ -192,8 +212,7 @@ class ExtApiService:
                 status_code=status.HTTP_503_SERVICE_UNAVAILABLE
             )
         except Exception as e:
-            log.error(f"Error inesperado al enviar notificación: {str(e)}",
-            )
+            log.error(f"Error inesperado al enviar notificación: {str(e)}")
             raise BasedException(
                 message=f"Error inesperado al enviar la notificación: {str(e)}",
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR
@@ -224,8 +243,7 @@ class ExtApiService:
                     message="Los datos de actualización no pueden estar vacíos.",
                     status_code=status.HTTP_400_BAD_REQUEST
                 )
-            # Obtener token válido (refresca si expiró)
-            jwt_token = await get_token()
+            jwt_token = await self._authenticate()
 
             headers = {
                 "Authorization": f"Bearer {jwt_token}",
@@ -278,6 +296,8 @@ class ExtApiService:
                         message=f"Error de conexión al realizar PUT: {str(e)}",
                         status_code=status.HTTP_503_SERVICE_UNAVAILABLE
                     ) from e
+        except BasedException:
+            raise
         except httpx.HTTPStatusError as e:
             log.error(f"PUT request failed (status: {e.response.status_code}): {e.response.text}")
             raise
@@ -319,8 +339,7 @@ class ExtApiService:
                     message="Los datos de actualización parcial no pueden estar vacíos.",
                     status_code=status.HTTP_400_BAD_REQUEST
                 )
-            # Obtener token válido (refresca si expiró)
-            jwt_token = await get_token()
+            jwt_token = await self._authenticate()
 
             headers = {
                 "Authorization": f"Bearer {jwt_token}",
@@ -373,6 +392,8 @@ class ExtApiService:
                         message=f"Error de conexión al realizar PATCH: {str(e)}",
                         status_code=status.HTTP_503_SERVICE_UNAVAILABLE
                     ) from e
+        except BasedException:
+            raise
         except httpx.HTTPStatusError as e:
             log.error(f"PATCH request failed (status: {e.response.status_code}): {e.response.text}")
             raise

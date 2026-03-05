@@ -6,11 +6,12 @@ from fastapi_pagination import Page
 from core.di.service_injection import get_viajes_service, get_mat_service, get_mov_service, \
     get_pesadas_service, get_transacciones_service, get_flotas_service, get_alm_mat_service, get_ajustes_service
 from core.enums.user_role_enum import UserRoleEnum
+from core.exceptions.entity_exceptions import EntityNotFoundException
 from schemas.ajustes_schema import AjusteCreate
 from schemas.almacenamientos_materiales_schema import VAlmMaterialesResponse
 from schemas.materiales_schema import MaterialesResponse
 from schemas.movimientos_schema import MovimientosResponse
-from schemas.pesadas_schema import PesadaResponse, PesadaCreate
+from schemas.pesadas_schema import PesadaResponse, PesadaCreate, VPesadasAcumResponse
 from schemas.response_models import CreateResponse, ErrorResponse, ValidationErrorResponse, UpdateResponse, \
     TransaccionRegistroResponse
 from schemas.transacciones_schema import TransaccionResponse, TransaccionCreateExt
@@ -18,6 +19,7 @@ from schemas.viajes_schema import ViajesActivosPorMaterialResponse
 from services.ajustes_service import AjustesService
 from services.almacenamientos_materiales_service import AlmacenamientosMaterialesService
 from services.auth_service import AuthService
+from services.envio_final_service import notify_envio_final, fetch_preview_for_puerto, prepare_preview_envio_final
 from services.flotas_service import FlotasService
 from services.materiales_service import MaterialesService
 from services.movimientos_service import MovimientosService
@@ -414,8 +416,6 @@ async def create_transaccion(
                         "ni notificaciones a APIs externas (cancelación por error humano/mecánico). "
                         "Para transacciones de tipo Despacho (camiones): actualiza el estado de la flota y "
                         "envía notificación a la API externa CamionCargue. "
-                        "Para transacciones de tipo Recibo (buques): si es la última transacción del viaje, "
-                        "ejecuta el envío final automáticamente. "
                         "Opcionalmente se puede actualizar el pit de la transacción.",
             response_model=UpdateResponse,
             responses={
@@ -526,6 +526,115 @@ async def crear_ajuste(
             pass
 
         log.error(f"Error al procesar petición de registro de ajuste: {e}")
+        return response_json(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            message=str(e)
+        )
+
+@router.get("/envio-final/{viaje_id}",
+            status_code=status.HTTP_200_OK,
+            summary="Envio final (previsión): mostrar la sumatoria de pesadas pendientes para la última transacción del viaje",
+            description="Muestra qué sería enviado en el envio final: la sumatoria de las pesadas pendientes (leido=False) correspondiente a la última transacción del viaje. "
+                        "No notifica a la API externa.",
+            response_model=List[VPesadasAcumResponse],
+            responses={
+                status.HTTP_404_NOT_FOUND: {"model": ErrorResponse},
+                status.HTTP_500_INTERNAL_SERVER_ERROR: {"model": ErrorResponse},
+            })
+async def envio_final(
+        viaje_id: int,
+        viajes_service: ViajesService = Depends(get_viajes_service),
+        service: PesadasService = Depends(get_pesadas_service)):
+    try:
+        # Resolver puerto_id desde el viaje
+        viaje = await viajes_service.get_viaje_by_id(viaje_id)
+        if not viaje:
+            return response_json(
+                status_code=status.HTTP_404_NOT_FOUND,
+                message=f"No se encontró viaje con ID {viaje_id}"
+            )
+        puerto_id = viaje.puerto_id
+
+        # Obtener la vista previa
+        try:
+            pesadas_preview = await fetch_preview_for_puerto(puerto_id, service)
+        except EntityNotFoundException:
+            log.info(f"EnvioFinal (preview): EntityNotFound para viaje {viaje_id} (puerto_id={puerto_id}), generando placeholder desde servicio")
+            pesadas_preview = await prepare_preview_envio_final(puerto_id, [])
+        except HTTPException as he:
+            if getattr(he, 'status_code', None) == status.HTTP_404_NOT_FOUND:
+                log.info(f"EnvioFinal (preview): HTTP 404 desde servicio para viaje {viaje_id} (puerto_id={puerto_id}), generando placeholder")
+                pesadas_preview = await prepare_preview_envio_final(puerto_id, [])
+            else:
+                raise
+
+        log.info(f"EnvioFinal (preview): preview generada para viaje {viaje_id} (puerto_id={puerto_id}) con items={len(pesadas_preview)}")
+
+        return pesadas_preview
+
+    except HTTPException as http_exc:
+        log.error(f"EnvioFinal (preview): consulta de viaje {viaje_id} no pudo realizarse: {http_exc.detail}")
+        return response_json(
+            status_code=http_exc.status_code,
+            message=http_exc.detail
+        )
+    except EntityNotFoundException as e:
+        raise e
+    except Exception as e:
+        log.error(f"EnvioFinal (preview): Error al consultar pesadas pendientes de viaje {viaje_id}: {e}")
+        return response_json(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            message=str(e)
+        )
+
+@router.post("/envio-final/{viaje_id}/notify",
+             status_code=status.HTTP_200_OK,
+             summary="Notificar Envio Final a API externa",
+             description="Obtiene la lista de envio final para el viaje indicado y la notifica a la API externa. "
+                         "mode='auto' usa la configuración TG_API_ACCEPTS_LIST; "
+                         "'list' fuerza envío único con lista; "
+                         "'single' envía item-por-item; "
+                         "'last' envía el último registro como objeto. "
+                         "Corresponde a EnvioFinal en el diagrama de flujo de proceso.",
+             responses={
+                 status.HTTP_400_BAD_REQUEST: {"model": ErrorResponse},
+                 status.HTTP_404_NOT_FOUND: {"model": ErrorResponse},
+                 status.HTTP_424_FAILED_DEPENDENCY: {"model": ErrorResponse},
+                 status.HTTP_500_INTERNAL_SERVER_ERROR: {"model": ErrorResponse},
+             })
+async def envio_final_notify(
+        viaje_id: int,
+        mode: str = 'last',
+        service: PesadasService = Depends(get_pesadas_service),
+        viajes_service: ViajesService = Depends(get_viajes_service)):
+    try:
+        # Resolver puerto_id desde el viaje
+        viaje = await viajes_service.get_viaje_by_id(viaje_id)
+        if not viaje:
+            return response_json(
+                status_code=status.HTTP_404_NOT_FOUND,
+                message=f"No se encontró viaje con ID {viaje_id}"
+            )
+        puerto_id = viaje.puerto_id
+
+        # Obtener la lista a notificar
+        pesadas_to_send = await fetch_preview_for_puerto(puerto_id, service)
+        log.info(f"EnvioFinal notify: lista preparada para envío para viaje {viaje_id} (puerto_id={puerto_id}) con {len(pesadas_to_send)} items")
+
+        await notify_envio_final(puerto_id, pesadas_to_send, viajes_service, mode=mode)
+
+        return response_json(status_code=status.HTTP_200_OK, message="Notificación enviada")
+
+    except HTTPException as http_exc:
+        log.error(f"EnvioFinal notify: consulta de viaje {viaje_id} no pudo realizarse: {http_exc.detail}")
+        return response_json(
+            status_code=http_exc.status_code,
+            message=http_exc.detail
+        )
+    except EntityNotFoundException as e:
+        raise e
+    except Exception as e:
+        log.error(f"EnvioFinal notify: Error al notificar pesadas de viaje {viaje_id}: {e}")
         return response_json(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             message=str(e)

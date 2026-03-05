@@ -17,7 +17,6 @@ from schemas.viajes_schema import (
     ViajeCamionExtCreate
 )
 from services.auth_service import AuthService
-from services.envio_final_service import notify_envio_final, fetch_preview_for_puerto, prepare_preview_envio_final
 from services.pesadas_service import PesadasService
 from services.viajes_service import ViajesService
 from utils.logger_util import LoggerUtil
@@ -513,92 +512,3 @@ async def get_acum_pesadas(
             message=str(e)
         )
 
-@router.get("/envio-final/{puerto_id}",
-             status_code=status.HTTP_200_OK,
-             summary="Envio final (previsión): mostrar la sumatoria de pesadas pendientes para la última transacción",
-             description="Muestra qué sería enviado en el envio final: la sumatoria de las pesadas pendientes (leido=False) correspondiente a la última transacción del puerto. "
-                         "No notifica a la API externa.",
-             response_model=List[VPesadasAcumResponse],
-             responses={
-                 status.HTTP_404_NOT_FOUND: {"model": ErrorResponse},
-                 status.HTTP_500_INTERNAL_SERVER_ERROR: {"model": ErrorResponse},
-             })
-async def envio_final(
-        puerto_id: str,
-        service: PesadasService = Depends(get_pesadas_service)):
-    try:
-        # Obtener la vista previa (servicio centraliza la lógica y maneja casos sin pesadas)
-        try:
-            pesadas_preview = await fetch_preview_for_puerto(puerto_id, service)
-        except EntityNotFoundException:
-            # Fallback seguro: generar placeholder desde el servicio
-            log.info(f"EnvioFinal (preview): EntityNotFound para {puerto_id}, generando placeholder desde servicio")
-            pesadas_preview = await prepare_preview_envio_final(puerto_id, [])
-        except HTTPException as he:
-            if getattr(he, 'status_code', None) == status.HTTP_404_NOT_FOUND:
-                log.info(f"EnvioFinal (preview): HTTP 404 desde servicio para {puerto_id}, generando placeholder")
-                pesadas_preview = await prepare_preview_envio_final(puerto_id, [])
-            else:
-                raise
-
-        log.info(f"EnvioFinal (preview): preview generada para flota {puerto_id} con items={len(pesadas_preview)}")
-
-        return pesadas_preview
-
-    except HTTPException as http_exc:
-        log.error(f"EnvioFinal (preview): consulta de flota {puerto_id} no pudo realizarse: {http_exc.detail}")
-        return response_json(
-            status_code=http_exc.status_code,
-            message=http_exc.detail
-        )
-    except EntityNotFoundException as e:
-        raise e
-    except Exception as e:
-        log.error(f"EnvioFinal (preview): Error al consultar pesadas pendientes de flota {puerto_id}: {e}")
-        return response_json(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            message=str(e)
-        )
-
-@router.post("/envio-final/{puerto_id}/notify",
-             status_code=status.HTTP_200_OK,
-             summary="Notificar Envio Final a API externa",
-             description="Obtiene la lista de envio final y la notifica a la API externa. "
-                         "mode='auto' usa la configuración TG_API_ACCEPTS_LIST; "
-                         "'list' fuerza envío único con lista; "
-                         "'single' envía item-por-item."
-                         "Corresponde a EnvioFinal en el diagrama de flujo de proceso.",
-             responses={
-                 status.HTTP_400_BAD_REQUEST: {"model": ErrorResponse},
-                 status.HTTP_424_FAILED_DEPENDENCY: {"model": ErrorResponse},
-                 status.HTTP_500_INTERNAL_SERVER_ERROR: {"model": ErrorResponse},
-             })
-async def envio_final_notify(
-        puerto_id: str,
-        mode: str = 'last',
-        service: PesadasService = Depends(get_pesadas_service),
-        viajes_service: ViajesService = Depends(get_viajes_service)):
-    try:
-        # Obtener la lista a notificar usando el servicio de envío final para que éste centralice
-        # la creación de placeholders enriquecidos cuando no existan pesadas pendientes.
-        pesadas_to_send = await fetch_preview_for_puerto(puerto_id, service)
-        log.info(f"EnvioFinal notify: lista preparada para envío para {puerto_id} con {len(pesadas_to_send)} items (puede incluir placeholder)")
-
-        await notify_envio_final(puerto_id, pesadas_to_send, viajes_service, mode=mode)
-
-        return response_json(status_code=status.HTTP_200_OK, message="Notificación enviada")
-
-    except HTTPException as http_exc:
-        log.error(f"EnvioFinal notify: consulta de flota {puerto_id} no pudo realizarse: {http_exc.detail}")
-        return response_json(
-            status_code=http_exc.status_code,
-            message=http_exc.detail
-        )
-    except EntityNotFoundException as e:
-        raise e
-    except Exception as e:
-        log.error(f"EnvioFinal notify: Error al notificar pesadas de flota {puerto_id}: {e}")
-        return response_json(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            message=str(e)
-        )

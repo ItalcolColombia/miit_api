@@ -10,6 +10,7 @@ from core.exceptions.entity_exceptions import EntityNotFoundException
 from database.models import Materiales
 from schemas.pesadas_corte_schema import PesadaCorteRetrieve
 from utils.logger_util import LoggerUtil
+from utils.time_util import now_local
 
 log = LoggerUtil()
 
@@ -74,6 +75,8 @@ async def notify_envio_final(puerto_id: str, pesadas: List[Any], viajes_service:
             obj = item if isinstance(item, dict) else {}
 
         obj['voyage'] = puerto_id
+        obj['transaccion'] = 0
+        obj['fecha_hora'] = now_local()
         pesadas_converted.append(obj)
 
     try:
