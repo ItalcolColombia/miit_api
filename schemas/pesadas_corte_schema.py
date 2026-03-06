@@ -71,7 +71,7 @@ class PesadasCalculate (BaseSchema):
     consecutivo: Optional[float] = None
     transaccion: Optional[int] = None
     pit: Optional[int] = None
-    material: str
+    material: Optional[str] = None
     peso: Optional[Decimal] = None
     fecha_hora: Optional[datetime] = None
     primera: Optional[int] = None

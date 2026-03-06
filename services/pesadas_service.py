@@ -29,6 +29,12 @@ from utils.time_util import now_local
 log = LoggerUtil()
 
 
+def _safe_attr(obj, attr: str):
+    """Obtiene un atributo de un objeto (modelo o dict) sin confundir valores falsy (0, 0.0) con None."""
+    val = getattr(obj, attr, None) if not isinstance(obj, dict) else obj.get(attr)
+    return val
+
+
 async def _crear_snapshots_pesada(
     session: AsyncSession,
     pesada_id: int,
@@ -1039,15 +1045,15 @@ class PesadasService:
                 corte = pesadas_corte_records[0] if pesadas_corte_records else None
                 if corte:
                     try:
-                        # obtener atributos del corte
-                        ref = getattr(corte, 'ref', None) or (corte.get('ref') if isinstance(corte, dict) else None)
-                        trans = getattr(corte, 'transaccion', None) or (corte.get('transaccion') if isinstance(corte, dict) else None)
-                        pit = getattr(corte, 'pit', None) or (corte.get('pit') if isinstance(corte, dict) else None)
-                        material = getattr(corte, 'material', None) or (corte.get('material') if isinstance(corte, dict) else None) or ''
-                        peso_val = getattr(corte, 'peso', None) or (corte.get('peso') if isinstance(corte, dict) else None)
-                        puerto = getattr(corte, 'puerto_id', None) or (corte.get('puerto_id') if isinstance(corte, dict) else None) or puerto_id
-                        fecha_hora = getattr(corte, 'fecha_hora', None) or (corte.get('fecha_hora') if isinstance(corte, dict) else None) or now_local()
-                        usuario_id = getattr(corte, 'usuario_id', None) or (corte.get('usuario_id') if isinstance(corte, dict) else None) or 0
+                        # obtener atributos del corte usando _safe_attr para evitar falsos None con valores falsy (0, 0.0, etc.)
+                        ref = _safe_attr(corte, 'ref')
+                        trans = _safe_attr(corte, 'transaccion')
+                        pit = _safe_attr(corte, 'pit')
+                        material = _safe_attr(corte, 'material') or ''
+                        peso_val = _safe_attr(corte, 'peso')
+                        puerto = _safe_attr(corte, 'puerto_id') or puerto_id
+                        fecha_hora = _safe_attr(corte, 'fecha_hora') or now_local()
+                        usuario_id = _safe_attr(corte, 'usuario_id') or 0
 
                         # Mantener 'consecutivo' del acumulado (viaje)
                         viaje_consec = None
@@ -1064,7 +1070,7 @@ class PesadasService:
                             peso = Decimal('0')
 
                         resp = VPesadasAcumResponse(
-                            referencia=ref,
+                            referencia=ref or f"{puerto}-{trans or 0}",
                             consecutivo=int(viaje_consec),
                             transaccion=int(trans) if trans is not None else 0,
                             pit=int(pit) if pit is not None else 0,
@@ -1079,10 +1085,12 @@ class PesadasService:
                     except Exception as e_map:
                         log.error(f"Error mapeando pesadas_corte a VPesadasAcumResponse: {e_map} - corte: {corte}", exc_info=True)
 
-                log.info(f"Se ha procesado 1 pesada corte (de {len(pesadas_corte_records)} disponibles) para transacción priorizada.")
-                return response
+                if response:
+                    log.info(f"Se ha procesado 1 pesada corte (de {len(pesadas_corte_records)} disponibles) para transacción priorizada.")
+                    return response
+                log.warning(f"pesadas_corte_records presente pero mapeo a respuesta falló, cayendo a fallback desde acumulado")
 
-            # Si no se generaron registros en pesadas_corte, construir desde acumulado (solo el primero)
+            # Si no se generaron registros en pesadas_corte o el mapeo falló, construir desde acumulado (solo el primero)
             if acumulado:
                 acum = acumulado[0]  # Tomar solo el primer elemento
                 try:
@@ -1100,15 +1108,15 @@ class PesadasService:
                     usuario_id = int(getattr(acum, 'usuario_id', 0) or 0)
 
                     # generar referencia por transacción (serie 1,2,3...) usando gen_pesada_identificador
+                    ref_gen = None
                     try:
                         gen_req = PesadaCorteRetrieve(puerto_id=puerto, transaccion=transaccion)
                         ref_gen = await self.gen_pesada_identificador(gen_req)
                     except Exception as e_ref:
                         log.error(f"No fue posible generar referencia para transaccion {transaccion}: {e_ref}", exc_info=True)
-                        ref_gen = None
 
                     resp = VPesadasAcumResponse(
-                        referencia=ref_gen,
+                        referencia=ref_gen or f"{puerto}-{transaccion}",
                         consecutivo=viaje_consec,
                         transaccion=transaccion,
                         pit=pit,

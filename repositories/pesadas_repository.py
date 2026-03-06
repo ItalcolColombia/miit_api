@@ -198,10 +198,14 @@ class PesadasRepository(IRepository[Pesadas, PesadaResponse]):
             agg_res = await self.db.execute(agg_q)
             mappings = agg_res.mappings().all()
 
-            # Marcar pesadas como leidas
+            # Construir objetos PesadasCalculate ANTES de marcar como leídas,
+            # para que si la validación falla no se pierdan pesadas ya committed.
+            result = [PesadasCalculate(**row) for row in mappings]
+
+            # Solo marcar como leídas si la construcción de objetos fue exitosa
             await self.update_bulk(entity_ids=list(ids), update_data={'leido': True})
 
-            return [PesadasCalculate(**row) for row in mappings]
+            return result
 
         try:
             # Verificar si ya hay una transacción activa en la sesión
