@@ -8,7 +8,7 @@ import orjson
 from fastapi import status
 from httpx import Timeout
 
-from core.config.external_api import get_token
+from core.config.external_api import get_token, _resolve_ssl_verify
 from core.config.settings import get_settings
 from core.exceptions.base_exception import BasedException
 from utils.any_utils import AnyUtils
@@ -19,7 +19,7 @@ log = LoggerUtil()
 class ExtApiService:
     def __init__(self):
         settings = get_settings()
-        self._http_client = httpx.AsyncClient(verify=settings.TG_API_VERIFY_SSL)
+        self._http_client = httpx.AsyncClient(verify=_resolve_ssl_verify(settings.TG_API_VERIFY_SSL))
 
     async def _authenticate(self) -> str:
         """Obtiene un token JWT válido, convirtiendo errores de autenticación en BasedException controladas."""

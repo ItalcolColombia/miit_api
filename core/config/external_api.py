@@ -7,6 +7,22 @@ from core.config.settings import get_settings
 from utils.time_util import now_utc
 
 
+def _resolve_ssl_verify(value: str) -> bool | str:
+    """Resolve TG_API_VERIFY_SSL setting to a value compatible with httpx's verify parameter.
+
+    Args:
+        value: "True" for default SSL verification, "False" to disable, or a file path to a CA certificate (.crt/.pem).
+
+    Returns:
+        bool | str: True, False, or the certificate file path.
+    """
+    if value.lower() == "true":
+        return True
+    if value.lower() == "false":
+        return False
+    return value  # Certificate file path
+
+
 class ExternalAPI:
     """
         Manages authentication state and HTTP client for API interactions.
@@ -16,7 +32,7 @@ class ExternalAPI:
     """
     def __init__(self):
         settings = get_settings()
-        self._http_client = httpx.AsyncClient(verify=settings.TG_API_VERIFY_SSL)
+        self._http_client = httpx.AsyncClient(verify=_resolve_ssl_verify(settings.TG_API_VERIFY_SSL))
         self.token: Optional[str] = None
         self.expires_at: Optional[datetime] = None
 
