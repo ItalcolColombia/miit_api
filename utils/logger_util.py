@@ -4,7 +4,7 @@ import logging
 import os
 import sys
 from datetime import datetime, timezone
-from logging.handlers import RotatingFileHandler, TimedRotatingFileHandler
+from logging.handlers import TimedRotatingFileHandler
 
 from colorlog import ColoredFormatter
 from starlette import status
@@ -56,12 +56,8 @@ class LoggerUtil:
             _log_dir = self._get_log_directory()
             os.makedirs(_log_dir, exist_ok=True)
 
-            # Nombre base del archivo de log (sin fecha, ya que TimedRotatingFileHandler la añade)
+            # Nombre base del archivo de log
             _log_file_base = os.path.join(_log_dir, f"{self.__api_name}.log")
-
-            # También crear archivo con fecha actual para referencia inmediata
-            log_date = datetime.now(timezone.utc).strftime("%Y-%m-%d")
-            _log_file_dated = os.path.join(_log_dir, f"{self.__api_name}_{log_date}.log")
 
             # Console format and message format
             _date_format = "%d-%m-%Y | %H:%M:%S"
@@ -97,19 +93,9 @@ class LoggerUtil:
                     backupCount=30,  # Mantener logs de los últimos 30 días
                     encoding='utf-8'
                 )
-                _timed_handler.suffix = "_%Y-%m-%d.log"
+                _timed_handler.suffix = ".%Y-%m-%d"
                 _timed_handler.setFormatter(_file_formatter)
                 _timed_handler.setLevel(logging.DEBUG)
-
-                # RotatingFileHandler adicional para el archivo con fecha actual
-                _file_handler = RotatingFileHandler(
-                    _log_file_dated,
-                    maxBytes=50*1024*1024,  # 50 MB
-                    backupCount=5,
-                    encoding='utf-8'
-                )
-                _file_handler.setFormatter(_file_formatter)
-                _file_handler.setLevel(logging.DEBUG)
 
                 # Console handler
                 _stream_handler = logging.StreamHandler(sys.stdout)
@@ -118,14 +104,13 @@ class LoggerUtil:
 
                 self.__logger.setLevel(_level)
                 self.__logger.addHandler(_timed_handler)
-                self.__logger.addHandler(_file_handler)
                 self.__logger.addHandler(_stream_handler)
 
                 # Log inicial indicando dónde se guardan los logs
                 self.__logger.info(f"="*60)
                 self.__logger.info(f"Sistema de logging inicializado")
                 self.__logger.info(f"Directorio de logs: {_log_dir}")
-                self.__logger.info(f"Archivo de log actual: {_log_file_dated}")
+                self.__logger.info(f"Archivo de log base: {_log_file_base}")
                 self.__logger.info(f"Nivel de log: {_level}")
                 self.__logger.info(f"="*60)
 
