@@ -22,7 +22,7 @@ class Settings(BaseSettings):
     API_HOST: str = "0.0.0.0"
     API_PORT: int = 8000
     API_V1_STR: str = "v1"
-    API_VERSION_NUM: str = "0.0.57"
+    API_VERSION_NUM: str = "0.0.58"
     API_LOG_LEVEL: str = "DEBUG"
     APP_LOG_DIR: str = "/var/www/metalsoft/logs/miit_api/"
 
@@ -78,6 +78,7 @@ class Settings(BaseSettings):
     TG_API_USER: Optional[str] = None
     TG_API_PASS: Optional[SecretStr] = None
     TG_API_ACCEPTS_LIST: bool = False
+    TG_API_VERIFY_SSL: bool = True
 
     model_config = SettingsConfigDict(
         env_file=".env",

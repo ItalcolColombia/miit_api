@@ -15,7 +15,8 @@ class ExternalAPI:
 
     """
     def __init__(self):
-        self._http_client = httpx.AsyncClient()
+        settings = get_settings()
+        self._http_client = httpx.AsyncClient(verify=settings.TG_API_VERIFY_SSL)
         self.token: Optional[str] = None
         self.expires_at: Optional[datetime] = None
 
