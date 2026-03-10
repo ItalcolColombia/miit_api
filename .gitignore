@@ -30,6 +30,9 @@ build/
 .env
 *.env
 
+# Certificados SSL locales
+certs/
+
 # Archivos de datos o logs generados localmente
 *.log
 !.gitkeep

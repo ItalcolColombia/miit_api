@@ -1,3 +1,6 @@
+import base64
+import os
+import tempfile
 from datetime import timedelta, datetime
 from typing import Optional
 
@@ -6,16 +9,37 @@ import httpx
 from core.config.settings import get_settings
 from utils.time_util import now_utc
 
+_cert_temp_path: Optional[str] = None
 
-def _resolve_ssl_verify(value: str) -> bool | str:
+
+def _resolve_ssl_verify(value: str, cert_base64: Optional[str] = None) -> bool | str:
     """Resolve TG_API_VERIFY_SSL setting to a value compatible with httpx's verify parameter.
 
+    Priority:
+        1. If cert_base64 is provided, decode it, write to a temp file and use that path.
+        2. If value is "True"/"False", return the corresponding bool.
+        3. Otherwise, treat value as a file path to a CA certificate (.crt/.pem).
+
     Args:
-        value: "True" for default SSL verification, "False" to disable, or a file path to a CA certificate (.crt/.pem).
+        value: "True" for default SSL verification, "False" to disable, or a file path to a CA certificate.
+        cert_base64: Optional Base64-encoded PEM certificate content (e.g. from TG_API_SSL_CERT_BASE64).
 
     Returns:
         bool | str: True, False, or the certificate file path.
     """
+    global _cert_temp_path
+
+    if cert_base64:
+        if _cert_temp_path and os.path.exists(_cert_temp_path):
+            return _cert_temp_path
+
+        cert_pem = base64.b64decode(cert_base64).decode("utf-8")
+        fd, path = tempfile.mkstemp(suffix=".pem", prefix="tg_ssl_cert_")
+        with os.fdopen(fd, "w") as f:
+            f.write(cert_pem)
+        _cert_temp_path = path
+        return path
+
     if value.lower() == "true":
         return True
     if value.lower() == "false":
@@ -32,7 +56,9 @@ class ExternalAPI:
     """
     def __init__(self):
         settings = get_settings()
-        self._http_client = httpx.AsyncClient(verify=_resolve_ssl_verify(settings.TG_API_VERIFY_SSL))
+        self._http_client = httpx.AsyncClient(
+            verify=_resolve_ssl_verify(settings.TG_API_VERIFY_SSL, settings.TG_API_SSL_CERT_BASE64)
+        )
         self.token: Optional[str] = None
         self.expires_at: Optional[datetime] = None
 
