@@ -4,7 +4,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 
 from core.di.service_injection import get_user_service
 from core.enums.user_role_enum import UserRoleEnum
-from schemas.usuarios_schema import UsuarioCreate, UsuariosResponse, UsuarioUpdate, VUsuariosRolResponse
+from schemas.usuarios_schema import CambiarClave, UsuarioCreate, UsuariosResponse, UsuarioUpdate, VUsuariosRolResponse
 from services.auth_service import AuthService
 from services.usuarios_service import UsuariosService
 from utils.response_util import ResponseUtil
@@ -171,6 +171,28 @@ async def update_user(
     if not user:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
     return user
+
+
+@router.patch(
+    "/{user_id}/change-password",
+    response_model=UsuariosResponse,
+    summary="Cambiar contraseña de usuario",
+    description="Permite cambiar la contraseña de un usuario. Requiere la contraseña actual y la nueva contraseña.",
+    responses={
+        200: {"description": "Contraseña actualizada correctamente"},
+        400: {"description": "La nueva contraseña no cumple los requisitos de complejidad"},
+        401: {"description": "No autenticado o contraseña actual incorrecta"},
+        403: {"description": "Sin permisos"},
+        404: {"description": "Usuario no encontrado"}
+    },
+    operation_id="change_user_password"
+)
+async def change_user_password(
+    user_id: int,
+    password_data: CambiarClave,
+    user_service: UsuariosService = Depends(get_user_service)
+):
+    return await user_service.change_password(user_id, password_data.clave_actual, password_data.clave_nueva)
 
 
 @router.delete(

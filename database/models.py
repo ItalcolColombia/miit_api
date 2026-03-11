@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, Double, Numeric, Table, Text, String, DateTime, ForeignKey, Date, Boolean, TIMESTAMP
+from sqlalchemy import Column, Integer, BigInteger, Double, Numeric, Table, Text, String, DateTime, ForeignKey, Date, Boolean, TIMESTAMP
 from sqlalchemy import Identity
 from sqlalchemy.orm import relationship, declarative_base, backref
 from sqlalchemy.schema import UniqueConstraint
@@ -138,7 +138,7 @@ class Usuarios(Base):
     id = Column(Integer, Identity(), primary_key=True, index=True)
     nick_name = Column(String(10), nullable=False, unique=True)
     full_name = Column(String(100), nullable=False)
-    cedula = Column(Integer, nullable=False)
+    cedula = Column(BigInteger, nullable=False)
     email = Column(String(100), nullable=False, unique=True)
     clave = Column(String(200), nullable=False)
     rol_id = Column(Integer, ForeignKey('roles.id'), nullable=False)
@@ -262,7 +262,7 @@ class VUsuariosRoles(Base):
     id = Column(Integer,  primary_key=True, index=True)
     nick_name = Column(String(10))
     full_name = Column(String(100))
-    cedula = Column(Integer)
+    cedula = Column(BigInteger)
     email = Column(String(100))
     clave = Column(String(200))
     rol_id = Column(Integer)

@@ -1,8 +1,9 @@
 from datetime import datetime
 from typing import Optional
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
+from core.validators.password import password_complexity_validator
 from schemas.base_schema import BaseSchema
 
 
@@ -56,6 +57,24 @@ class UsuarioUpdate(BaseSchema):
     clave: str
     rol_id: int
     estado: bool = False
+
+
+class CambiarClave(BaseSchema):
+    clave_actual: str = Field(..., min_length=1)
+    clave_nueva: str = Field(..., min_length=8)
+
+    @field_validator("clave_nueva")
+    @classmethod
+    def validate_password_complexity(cls, v: str) -> str:
+        return password_complexity_validator(v)
+
+    class Config:
+        json_schema_extra = {
+            "example": {
+                "clave_actual": "MiClaveActual1!",
+                "clave_nueva": "NuevaClave123!"
+            }
+        }
 
 
 class UsuariosResponseWithPassword(UsuariosResponse):

@@ -1,7 +1,7 @@
 from typing import List, Optional
 
 from fastapi_pagination import Page, Params
-from sqlalchemy import func
+
 from starlette import status
 
 from core.exceptions.base_exception import BasedException
@@ -9,6 +9,7 @@ from core.exceptions.entity_exceptions import (
     EntityAlreadyRegisteredException,
 )
 from repositories.usuarios_repository import UsuariosRepository
+from core.exceptions.auth_exception import InvalidCredentialsException
 from schemas.usuarios_schema import UsuariosResponse, UsuarioCreate, UsuarioUpdate
 from utils.any_utils import AnyUtils
 from utils.logger_util import LoggerUtil
@@ -158,7 +159,6 @@ class UsuariosService:
 
             # Hashear la contraseña
             user.clave = AnyUtils.generate_password_hash(user.clave)
-            user.fecha_hora = func.now()
             user.usuario_id = user_id
 
 
@@ -173,6 +173,52 @@ class UsuariosService:
             log.error(f"Error creando usuario con nombre {user.nick_name}: {e}")
             raise BasedException(
                 message=f"Error al crear el usuario con nombre {user.nick_name}",
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
+
+    async def change_password(self, usr_id: int, clave_actual: str, clave_nueva: str) -> UsuariosResponse:
+        """
+        Cambiar la contraseña de un usuario verificando la contraseña actual.
+
+        Args:
+            usr_id (int): ID del usuario.
+            clave_actual (str): Contraseña actual en texto plano.
+            clave_nueva (str): Nueva contraseña en texto plano.
+
+        Returns:
+            UsuariosResponse: El usuario actualizado.
+
+        Raises:
+            InvalidCredentialsException: Si la contraseña actual no coincide.
+            BasedException: Si ocurre un error inesperado.
+        """
+        try:
+            user = await self._repo.get_by_id(usr_id)
+            if not user:
+                raise BasedException(
+                    message=f"Usuario con ID {usr_id} no encontrado",
+                    status_code=status.HTTP_404_NOT_FOUND
+                )
+
+            if not AnyUtils.check_password_hash(clave_actual, user.clave):
+                raise InvalidCredentialsException("La contraseña actual es incorrecta")
+
+            update_data = UsuarioUpdate(
+                nick_name=user.nick_name,
+                full_name=user.full_name,
+                cedula=user.cedula,
+                email=user.email,
+                clave=clave_nueva,
+                rol_id=user.rol_id,
+                estado=user.estado
+            )
+            return await self._repo.update(usr_id, update_data)
+        except (InvalidCredentialsException, BasedException) as e:
+            raise e
+        except Exception as e:
+            log.error(f"Error cambiando contraseña del usuario con ID {usr_id}: {e}")
+            raise BasedException(
+                message=f"Error al cambiar la contraseña del usuario con ID {usr_id}",
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
 
