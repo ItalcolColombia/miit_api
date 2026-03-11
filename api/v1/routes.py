@@ -1,6 +1,6 @@
 from fastapi import APIRouter
 
-from api.v1.endpoints import auth, etl, operador, reportes
+from api.v1.endpoints import auth, etl, operador, profile, reportes
 from api.v1.endpoints.admin.admin import router as admin_router
 from api.v1.endpoints.admin.admin_reportes import router as admin_reportes_router
 from api.v1.endpoints.admin.admin_roles import router as admin_roles_router
@@ -11,6 +11,7 @@ def include_main_routes():
     """Include the main application routes."""
     router_list: list[APIRouter] = [
         auth.router,
+        profile.router,
         etl.router,
         operador.router,
         reportes.router,

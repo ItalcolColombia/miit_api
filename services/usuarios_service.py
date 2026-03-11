@@ -10,7 +10,7 @@ from core.exceptions.entity_exceptions import (
 )
 from repositories.usuarios_repository import UsuariosRepository
 from core.exceptions.auth_exception import InvalidCredentialsException
-from schemas.usuarios_schema import UsuariosResponse, UsuarioCreate, UsuarioUpdate
+from schemas.usuarios_schema import UsuariosResponse, UsuarioCreate, UsuarioUpdate, ProfileUpdate
 from utils.any_utils import AnyUtils
 from utils.logger_util import LoggerUtil
 
@@ -219,6 +219,48 @@ class UsuariosService:
             log.error(f"Error cambiando contraseña del usuario con ID {usr_id}: {e}")
             raise BasedException(
                 message=f"Error al cambiar la contraseña del usuario con ID {usr_id}",
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
+
+    async def update_user_partial(self, usr_id: int, update_data: dict) -> Optional[UsuariosResponse]:
+        """
+        Actualización parcial de un usuario. Solo actualiza los campos proporcionados.
+
+        Args:
+            usr_id (int): ID del usuario a actualizar.
+            update_data (dict): Diccionario con los campos a actualizar.
+
+        Returns:
+            Optional[UsuariosResponse]: El usuario actualizado, o None si no se encontró.
+
+        Raises:
+            EntityAlreadyRegisteredException: Si el nick_name ya está registrado por otro usuario.
+            BasedException: Si ocurre un error inesperado.
+        """
+        try:
+            user = await self._repo.get_by_id(usr_id)
+            if not user:
+                return None
+
+            if "nick_name" in update_data and update_data["nick_name"] != user.nick_name:
+                await self.validate_username(update_data["nick_name"])
+
+            full_data = UsuarioUpdate(
+                nick_name=update_data.get("nick_name", user.nick_name),
+                full_name=update_data.get("full_name", user.full_name),
+                cedula=update_data.get("cedula", user.cedula),
+                email=update_data.get("email", user.email),
+                clave=user.clave,
+                rol_id=user.rol_id,
+                estado=user.estado
+            )
+            return await self._repo.update(usr_id, full_data)
+        except (EntityAlreadyRegisteredException, BasedException) as e:
+            raise e
+        except Exception as e:
+            log.error(f"Error actualizando parcialmente usuario con ID {usr_id}: {e}")
+            raise BasedException(
+                message=f"Error al actualizar el usuario con ID {usr_id}",
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
 

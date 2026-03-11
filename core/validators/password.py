@@ -9,12 +9,12 @@ def password_complexity_validator(value: str) -> str:
         - special character
     """
     if not re.findall(r"\d", value):
-        raise ValueError("The password must contain at least one number.")
+        raise ValueError("La contraseña debe contener al menos contener un número.")
 
     if not re.findall(r"[A-Z]", value):
-        raise ValueError("The password must contain at least one uppercase letter.")
+        raise ValueError("La contraseña debe contener al menos una mayúscula.")
 
     if not re.findall(r'[!@#$%^&*(),.?":{}|<>]', value):
-        raise ValueError("The password must contain at least one special character.")
+        raise ValueError("La contraseña debe contener al menos un carácter especial.")
 
     return value

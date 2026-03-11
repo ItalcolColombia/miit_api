@@ -59,6 +59,23 @@ class UsuarioUpdate(BaseSchema):
     estado: bool = False
 
 
+class ProfileUpdate(BaseSchema):
+    nick_name: Optional[str] = Field(None, min_length=5, max_length=10)
+    full_name: Optional[str] = Field(None, min_length=5, max_length=100)
+    cedula: Optional[int] = None
+    email: Optional[str] = Field(None, min_length=5, max_length=100)
+
+    class Config:
+        json_schema_extra = {
+            "example": {
+                "nick_name": "jdoe01",
+                "full_name": "John Doe Actualizado",
+                "cedula": 12345678,
+                "email": "jdoe.nuevo@mail.com"
+            }
+        }
+
+
 class CambiarClave(BaseSchema):
     clave_actual: str = Field(..., min_length=1)
     clave_nueva: str = Field(..., min_length=8)
