@@ -908,10 +908,19 @@ class TransaccionesService:
                             log.warning(f"No se encontró viaje de recibo con puerto_id '{viaje.viaje_origen}'")
 
             # 5. Verificar si ya existe una transacción similar que NO esté finalizada
-            existing = await self._repo.find_one(viaje_id=viaje_id, material_id=material_id, tipo=tran_ext.tipo)
-            if existing and existing.estado != 'Finalizada':
+            # Para Recibo: clave = viaje_id + material_id + tipo + destino_id
+            # Para Despacho: clave = viaje_id + material_id + tipo + origen_id
+            dup_filters = dict(viaje_id=viaje_id, material_id=material_id, tipo=tran_ext.tipo)
+            if tipo_lower == 'recibo' and destino_id is not None:
+                dup_filters['destino_id'] = destino_id
+            elif tipo_lower == 'despacho' and origen_id is not None:
+                dup_filters['origen_id'] = origen_id
+
+            existing = await self._repo.find_non_finalized(**dup_filters)
+            if existing:
                 raise EntityAlreadyRegisteredException(
-                    f"Ya existe transacción de tipo '{tran_ext.tipo}' para viaje '{viaje_id}' con material '{tran_ext.material}'. ID de transacción existente: {existing.id}"
+                    f"Ya existe transacción de tipo '{tran_ext.tipo}' para viaje '{viaje_id}' con material '{tran_ext.material}'. "
+                    f"ID de transacción existente: {existing.id} registrado en la base de datos."
                 )
 
             # 6. Crear el objeto TransaccionCreate

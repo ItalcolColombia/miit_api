@@ -16,6 +16,32 @@ class TransaccionesRepository(IRepository[Transacciones, TransaccionResponse]):
         self.db = db
         super().__init__(model, schema, db, auditor)
 
+    async def find_non_finalized(self, **kwargs) -> Optional[TransaccionResponse]:
+        """
+        Busca una transacción que NO esté en estado 'Finalizada' y que coincida
+        con todos los filtros proporcionados.
+
+        Args:
+            **kwargs: Filtros dinámicos (viaje_id, material_id, tipo, destino_id, origen_id, etc.)
+
+        Returns:
+            La transacción encontrada o None si no existe.
+        """
+        try:
+            query = select(self.model)
+            for attribute_name, attribute_value in kwargs.items():
+                if hasattr(self.model, attribute_name):
+                    attribute = getattr(self.model, attribute_name)
+                    query = query.where(attribute == attribute_value)
+            query = query.where(self.model.estado != 'Finalizada')
+            query = query.order_by(self.model.id.desc())
+            query = query.limit(1)
+            result = await self.db.execute(query)
+            item = result.scalar_one_or_none()
+            return self.schema.model_validate(item) if item else None
+        except AttributeError as e:
+            raise ValueError(f"Invalid attribute in filter: {e}")
+
     async def count_pending_by_viaje(self, viaje_id: int, exclude_tran_id: Optional[int] = None) -> int:
         """
         Cuenta las transacciones pendientes (estado='Proceso') para un viaje específico.
