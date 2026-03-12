@@ -48,14 +48,14 @@ class ExceptionHandler:
         if exc.status_code == status.HTTP_404_NOT_FOUND:
             return response_json(
                 status_code=status.HTTP_404_NOT_FOUND,
-                message= "El endpoint solicitado no exite o la URL es incorrecta",
+                message= "El endpoint solicitado no existe o la URL es incorrecta",
                 headers=headers,
             )
 
         # Otros HTTPException se devuelven tal cual o personalizados
         return response_json(
             status_code=exc.status_code,
-            message="El endpoint solicitado no exite o la URL es incorrecta",
+            message="El endpoint solicitado no existe o la URL es incorrecta",
             data=exc.detail,
             headers=headers,
         )
@@ -67,7 +67,7 @@ class ExceptionHandler:
 
         return response_json(
             status_code=exc.status_code,
-            message="El endpoint solicitado no exite o la URL es incorrecta",
+            message="El endpoint solicitado no existe o la URL es incorrecta",
             data=exc.detail,
             headers=headers,
         )

@@ -64,7 +64,7 @@ async def update_my_profile(
 
 @router.patch(
     "/me/change-password",
-    response_model=UsuariosResponse,
+    status_code=status.HTTP_200_OK,
     summary="Cambiar mi contraseña",
     description="Permite al usuario autenticado cambiar su propia contraseña.",
     responses={
@@ -79,8 +79,9 @@ async def change_my_password(
     current_user: VUsuariosRolResponse = Depends(AuthService.get_current_user),
     user_service: UsuariosService = Depends(get_user_service)
 ):
-    return await user_service.change_password(
+    await user_service.change_password(
         current_user.id,
         password_data.clave_actual,
         password_data.clave_nueva
     )
+    return {"message": "Contraseña actualizada correctamente"}

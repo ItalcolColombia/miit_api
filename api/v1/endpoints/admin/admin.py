@@ -175,7 +175,7 @@ async def update_user(
 
 @router.patch(
     "/{user_id}/change-password",
-    response_model=UsuariosResponse,
+    status_code=status.HTTP_200_OK,
     summary="Cambiar contraseña de usuario",
     description="Permite cambiar la contraseña de un usuario. Requiere la contraseña actual y la nueva contraseña.",
     responses={
@@ -192,7 +192,8 @@ async def change_user_password(
     password_data: CambiarClave,
     user_service: UsuariosService = Depends(get_user_service)
 ):
-    return await user_service.change_password(user_id, password_data.clave_actual, password_data.clave_nueva)
+    await user_service.change_password(user_id, password_data.clave_actual, password_data.clave_nueva)
+    return {"message": "Contraseña actualizada correctamente"}
 
 
 @router.delete(
