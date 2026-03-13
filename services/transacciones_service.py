@@ -687,7 +687,9 @@ class TransaccionesService:
     async def _verificar_y_ejecutar_envio_final(self, tran: TransaccionResponse, tipo_lower: str) -> Optional[dict]:
         """
         Verifica el tipo de transacción y ejecuta las acciones correspondientes:
-        - Despacho (camiones): Actualiza estado_operador de la flota y envía notificación CamionCargue
+        - Despacho (camiones): No ejecuta envío automático; la notificación CamionCargue
+          se envía manualmente desde el endpoint POST /integrador/camion-cargue/{viaje_id}
+          para permitir compilar múltiples transacciones por viaje.
         - Recibo (buques): No ejecuta envío final automático; este se realiza manualmente
           desde el endpoint POST /envio-final/{viaje_id}/notify
 
@@ -698,10 +700,6 @@ class TransaccionesService:
         Returns:
             dict: Resultado de la notificación con 'success' (bool) y 'message' (str), o None si no aplica
         """
-        # Manejar Despacho (camiones)
-        if tipo_lower == 'despacho':
-            return await self._ejecutar_finalizacion_camion(tran)
-
         return None
 
     async def _ejecutar_finalizacion_camion(self, tran: TransaccionResponse) -> Optional[dict]:
@@ -814,6 +812,117 @@ class TransaccionesService:
             log.error(f"Error al ejecutar finalización de camión para viaje {viaje_id}: {e}", exc_info=True)
             resultado['message'] = f"Error al ejecutar finalización de camión: {e}"
             return resultado
+
+    async def enviar_camion_cargue(self, viaje_id: int) -> dict:
+        """
+        Compila la información de todas las transacciones finalizadas de tipo Despacho
+        para un viaje, suma los pesos reales, actualiza el estado_operador de la flota
+        a False y envía la notificación CamionCargue a la API externa.
+
+        Args:
+            viaje_id: ID del viaje de camión
+
+        Returns:
+            dict: Resultado con 'success' (bool) y 'message' (str)
+        """
+        from core.config.settings import get_settings
+        from services.ext_api_service import ExtApiService
+        from schemas.ext_api_schema import NotificationCargue
+        import httpx
+
+        resultado = {
+            'success': False,
+            'message': '',
+            'flota_actualizada': False
+        }
+
+        # Obtener el viaje
+        viaje = await self.viajes_repo.get_by_id(viaje_id)
+        if not viaje:
+            raise EntityNotFoundException("Viajes", viaje_id)
+
+        # Obtener la flota
+        flota = await self.flotas_repo.get_by_id(viaje.flota_id)
+        if not flota:
+            raise EntityNotFoundException("Flotas", viaje.flota_id)
+
+        if flota.tipo != "camion":
+            raise BasedException(
+                message=f"Flota {flota.id} no es de tipo camion, es {flota.tipo}",
+                status_code=status.HTTP_400_BAD_REQUEST
+            )
+
+        # Obtener todas las transacciones finalizadas de despacho para este viaje
+        transacciones = await self.tran_repository.find_finalized_by_viaje(viaje_id, tipo='Despacho')
+        if not transacciones:
+            raise BasedException(
+                message=f"No se encontraron transacciones finalizadas de despacho para el viaje {viaje_id}",
+                status_code=status.HTTP_400_BAD_REQUEST
+            )
+
+        # Sumar peso_real de todas las transacciones
+        peso_total = sum(
+            (t.peso_real for t in transacciones if t.peso_real is not None),
+            Decimal(0)
+        )
+
+        # Tomar el pit de la primera transacción (todos deberían ser iguales)
+        pit = transacciones[0].pit
+
+        # Actualizar estado_operador de la flota a False
+        try:
+            from schemas.flotas_schema import FlotaUpdate
+            update_data = FlotaUpdate(estado_operador=False)
+            await self.flotas_repo.update(flota.id, update_data)
+            resultado['flota_actualizada'] = True
+            log.info(f"Estado operador de flota {flota.id} actualizado a False para viaje {viaje_id}")
+        except Exception as e_flota:
+            log.error(f"Error al actualizar estado de flota {flota.id}: {e_flota}")
+            resultado['message'] = f"Error al actualizar estado de flota: {e_flota}"
+
+        # Enviar notificación a API externa CamionCargue
+        settings = get_settings()
+        ext_service = ExtApiService()
+
+        notification = NotificationCargue(
+            truckPlate=flota.referencia,
+            truckTransaction=viaje.puerto_id,
+            weighingPitId=pit,
+            weight=peso_total,
+            despacho_directo=viaje.despacho_directo
+        ).model_dump()
+
+        endpoint = f"{settings.TG_API_URL}/api/v1/Metalsoft/CamionCargue"
+
+        try:
+            serialized = AnyUtils.serialize_data(notification)
+            log.info(f"Notificación CamionCargue compilada para flota {flota.referencia} "
+                     f"({len(transacciones)} transacciones, peso_total={peso_total}) con request: {serialized}")
+            await ext_service.post(serialized, endpoint)
+            log.info(f"Notificación CamionCargue enviada exitosamente para viaje {viaje_id} (puerto_id={viaje.puerto_id})")
+            resultado['success'] = True
+            resultado['message'] = (
+                f"Notificación CamionCargue enviada exitosamente. "
+                f"{len(transacciones)} transacciones compiladas, peso total: {peso_total}"
+            )
+        except httpx.HTTPStatusError as e:
+            try:
+                error_json = e.response.json()
+            except Exception:
+                error_json = None
+
+            if isinstance(error_json, dict):
+                msg = error_json.get('message') or error_json.get('error') or e.response.text
+            else:
+                msg = e.response.text
+
+            log.error(f"Notificación CamionCargue falló. API externa error: {e.response.status_code}: {e.response.text}")
+            resultado['message'] = f"Notificación CamionCargue falló. API externa error: {msg}"
+        except Exception as e_notify:
+            log.error(f"Error inesperado al enviar notificación CamionCargue para flota {flota.referencia}: {e_notify}", exc_info=True)
+            resultado['message'] = f"Error inesperado al enviar notificación: {e_notify}"
+
+        return resultado
 
     async def create_transaccion_ext(self, tran_ext: TransaccionCreateExt) -> TransaccionResponse:
         """

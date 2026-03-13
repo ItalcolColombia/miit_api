@@ -1,4 +1,4 @@
-from typing import Optional
+from typing import Optional, List
 
 from sqlalchemy import select, func
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -67,6 +67,31 @@ class TransaccionesRepository(IRepository[Transacciones, TransaccionResponse]):
             return count if count else 0
         except Exception:
             return 0
+
+    async def find_finalized_by_viaje(self, viaje_id: int, tipo: str = 'Despacho') -> List[TransaccionResponse]:
+        """
+        Busca todas las transacciones finalizadas de un tipo específico para un viaje.
+
+        Args:
+            viaje_id: ID del viaje
+            tipo: Tipo de transacción (default: 'Despacho')
+
+        Returns:
+            Lista de transacciones finalizadas.
+        """
+        try:
+            query = (
+                select(self.model)
+                .where(self.model.viaje_id == viaje_id)
+                .where(self.model.tipo == tipo)
+                .where(self.model.estado == 'Finalizada')
+                .order_by(self.model.id)
+            )
+            result = await self.db.execute(query)
+            items = result.scalars().all()
+            return [self.schema.model_validate(item) for item in items]
+        except Exception:
+            raise
 
     async def find_one_ordered(self, order_by: str = 'fecha_hora', desc: bool = True, **kwargs) -> Optional[TransaccionResponse]:
         """

@@ -71,6 +71,34 @@ class NotificationBlsPeso(BaseSchema):
         }
     )
 
+
+class EntradaParcialBuqueResponse(BaseSchema):
+    voyage: Optional[str] = None
+    status: Optional[str] = None
+    data: Optional[List[NotificationBlsPeso]] = None
+
+    model_config = ConfigDict(
+        extra='ignore',
+        json_schema_extra={
+            "example": {
+                "voyage": "PISD-0001",
+                "status": "InProgress",
+                "data": [
+                    {
+                        "noBL": "PISD0001-10",
+                        "voyage": "PISD-0001",
+                        "weightBl": 323653.46
+                    },
+                    {
+                        "noBL": "PISD0001-9",
+                        "voyage": "PISD-0001",
+                        "weightBl": 323653.46
+                    }
+                ]
+            }
+        }
+    )
+
 class NotificationEnvioFinal(BaseSchema):
     voyage: Optional[str] = None
     referencia: Optional[str] = None

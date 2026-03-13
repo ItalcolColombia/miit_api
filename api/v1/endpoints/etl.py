@@ -28,6 +28,7 @@ from services.transacciones_service import TransaccionesService
 from services.viajes_service import ViajesService
 from utils.logger_util import LoggerUtil
 from utils.response_util import ResponseUtil
+from core.exceptions.base_exception import BasedException
 
 log = LoggerUtil()
 
@@ -635,6 +636,55 @@ async def envio_final_notify(
         raise e
     except Exception as e:
         log.error(f"EnvioFinal notify: Error al notificar pesadas de viaje {viaje_id}: {e}")
+        return response_json(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            message=str(e)
+        )
+
+@router.post("/camion-cargue/{viaje_id}",
+             status_code=status.HTTP_200_OK,
+             summary="Enviar notificación CamionCargue compilada por viaje",
+             description="Compila todas las transacciones finalizadas de despacho para un viaje, "
+                         "suma los pesos reales y envía la notificación CamionCargue a la API externa. "
+                         "Actualiza el estado_operador de la flota a False.",
+             response_model=UpdateResponse,
+             responses={
+                 status.HTTP_400_BAD_REQUEST: {"model": ErrorResponse},
+                 status.HTTP_404_NOT_FOUND: {"model": ErrorResponse},
+                 status.HTTP_500_INTERNAL_SERVER_ERROR: {"model": ErrorResponse},
+             })
+async def camion_cargue(
+        viaje_id: int,
+        service: TransaccionesService = Depends(get_transacciones_service)):
+    log.info(f"Payload recibido: CamionCargue para viaje_id={viaje_id}")
+    try:
+        resultado = await service.enviar_camion_cargue(viaje_id)
+
+        if resultado.get('success', False):
+            log.info(f"CamionCargue para viaje {viaje_id} enviado exitosamente.")
+            return response_json(
+                status_code=status.HTTP_200_OK,
+                message=resultado['message'],
+            )
+        else:
+            log.warning(f"CamionCargue para viaje {viaje_id} con advertencia: {resultado['message']}")
+            return response_json(
+                status_code=status.HTTP_200_OK,
+                message=resultado['message'],
+            )
+
+    except EntityNotFoundException as e:
+        raise e
+
+    except BasedException as be:
+        log.error(f"CamionCargue para viaje {viaje_id} falló: {be}")
+        return response_json(
+            status_code=getattr(be, 'status_code', status.HTTP_400_BAD_REQUEST),
+            message=str(getattr(be, 'message', str(be)))
+        )
+
+    except Exception as e:
+        log.error(f"Error al procesar CamionCargue para viaje {viaje_id}: {e}")
         return response_json(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             message=str(e)

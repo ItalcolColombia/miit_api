@@ -67,6 +67,7 @@ app = FastAPI(
         {"name": "Admin - Reportes", "description": "Operaciones de administración relacionadas con los reportes."},
         {"name": "Admin - Roles", "description": "Operaciones de administración relacionadas con los roles."},
         {"name": "Administrador", "description": "Operaciones de administración del sistema."},
+        {"name": "Perfil", "description": "Operaciones relacionadas con la gestión del perfil del usuario autenticado."},
     ],
     docs_url="/docs",
     redoc_url="/redoc",

@@ -9,6 +9,7 @@ from core.enums.user_role_enum import UserRoleEnum
 from core.exceptions.base_exception import BasedException
 from core.exceptions.entity_exceptions import EntityNotFoundException
 from schemas.bls_schema import BlsExtCreate
+from schemas.ext_api_schema import EntradaParcialBuqueResponse
 from schemas.pesadas_schema import VPesadasAcumResponse
 from schemas.response_models import CreateResponse, ErrorResponse, ValidationErrorResponse, UpdateResponse, \
     CamionIngresoResponse, CamionRegistroResponse
@@ -217,7 +218,72 @@ async def end_buque(
                         "las transacciones de recibo. Cada consulta actualiza el acumulado enviado "
                         "(peso_enviado_api) para que la siguiente consulta retorne solo el incremento. "
                         "Corresponde a la notificación de despacho directo parcial.",
+            response_model=EntradaParcialBuqueResponse,
+            response_description="Detalle de pesos parciales por BL del buque en estado InProgress.",
             responses={
+                status.HTTP_200_OK: {
+                    "description": "Entrada parcial calculada exitosamente.",
+                    "content": {
+                        "application/json": {
+                            "example": {
+                                "voyage": "PISD-0001",
+                                "status": "InProgress",
+                                "data": [
+                                    {
+                                        "noBL": "PISD0001-10",
+                                        "voyage": "PISD-0001",
+                                        "weightBl": 323653.46
+                                    },
+                                    {
+                                        "noBL": "PISD0001-9",
+                                        "voyage": "PISD-0001",
+                                        "weightBl": 323653.46
+                                    },
+                                    {
+                                        "noBL": "PISD0001-8",
+                                        "voyage": "PISD-0001",
+                                        "weightBl": 517845.53
+                                    },
+                                    {
+                                        "noBL": "PISD0001-7",
+                                        "voyage": "PISD-0001",
+                                        "weightBl": 291288.11
+                                    },
+                                    {
+                                        "noBL": "PISD0001-6",
+                                        "voyage": "PISD-0001",
+                                        "weightBl": 582576.23
+                                    },
+                                    {
+                                        "noBL": "PISD0001-5",
+                                        "voyage": "PISD-0001",
+                                        "weightBl": 582576.23
+                                    },
+                                    {
+                                        "noBL": "PISD0001-4",
+                                        "voyage": "PISD-0001",
+                                        "weightBl": 582576.23
+                                    },
+                                    {
+                                        "noBL": "PISD0001-3",
+                                        "voyage": "PISD-0001",
+                                        "weightBl": 5356464.74
+                                    },
+                                    {
+                                        "noBL": "PISD0001-2",
+                                        "voyage": "PISD-0001",
+                                        "weightBl": 1374410.6
+                                    },
+                                    {
+                                        "noBL": "PISD0001-1",
+                                        "voyage": "PISD-0001",
+                                        "weightBl": 2219615.42
+                                    }
+                                ]
+                            }
+                        }
+                    }
+                },
                 status.HTTP_400_BAD_REQUEST: {"model": ErrorResponse},
                 status.HTTP_404_NOT_FOUND: {"model": ErrorResponse},
                 status.HTTP_500_INTERNAL_SERVER_ERROR: {"model": ErrorResponse},
@@ -511,4 +577,3 @@ async def get_acum_pesadas(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             message=str(e)
         )
-
