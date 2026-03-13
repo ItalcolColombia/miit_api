@@ -93,7 +93,7 @@ class LoggerUtil:
                     backupCount=30,  # Mantener logs de los últimos 30 días
                     encoding='utf-8'
                 )
-                _timed_handler.suffix = ".%Y-%m-%d"
+                _timed_handler.suffix = "%Y-%m-%d"
                 _timed_handler.setFormatter(_file_formatter)
                 _timed_handler.setLevel(logging.DEBUG)
 
