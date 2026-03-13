@@ -687,9 +687,9 @@ class TransaccionesService:
     async def _verificar_y_ejecutar_envio_final(self, tran: TransaccionResponse, tipo_lower: str) -> Optional[dict]:
         """
         Verifica el tipo de transacción y ejecuta las acciones correspondientes:
-        - Despacho (camiones): No ejecuta envío automático; la notificación CamionCargue
-          se envía manualmente desde el endpoint POST /integrador/camion-cargue/{viaje_id}
-          para permitir compilar múltiples transacciones por viaje.
+        - Despacho (camiones): Actualiza estado_operador de la flota y envía notificación CamionCargue
+                                Pendiente a comentar para el consumo
+                                manual mediante el endpoint POST /camion-cargue/{viaje_id}
         - Recibo (buques): No ejecuta envío final automático; este se realiza manualmente
           desde el endpoint POST /envio-final/{viaje_id}/notify
 
@@ -700,6 +700,11 @@ class TransaccionesService:
         Returns:
             dict: Resultado de la notificación con 'success' (bool) y 'message' (str), o None si no aplica
         """
+
+        # Manejar Despacho (camiones)
+        if tipo_lower == 'despacho':
+            return await self._ejecutar_finalizacion_camion(tran)
+
         return None
 
     async def _ejecutar_finalizacion_camion(self, tran: TransaccionResponse) -> Optional[dict]:
