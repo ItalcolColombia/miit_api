@@ -554,6 +554,7 @@ class ViajesService:
 
             update_fields = {
                 "fecha_llegada": fecha,
+                "fecha_salida": None,
                 "despacho_directo": es_despacho_directo,
             }
             update_data = ViajeUpdate(**update_fields)
