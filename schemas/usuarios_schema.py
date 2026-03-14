@@ -54,7 +54,6 @@ class UsuarioUpdate(BaseSchema):
     full_name: str = Field(..., min_length=5, max_length=100)
     cedula: int  # Required field
     email: str = Field(..., min_length=5, max_length=100)
-    clave: str
     rol_id: int
     estado: bool = False
 
