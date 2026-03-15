@@ -12,8 +12,10 @@ from core.exceptions.entity_exceptions import (
     EntityAlreadyRegisteredException,
     EntityNotFoundException,
 )
+from repositories.consumos_entrada_parcial_repository import ConsumosEntradaParcialRepository
 from repositories.viajes_repository import ViajesRepository
 from schemas.bls_schema import BlsCreate, BlsExtCreate, BlsResponse, BlsUpdate, VBlsResponse
+from schemas.consumos_entrada_parcial_schema import ConsumosEntradaParcialCreate
 from schemas.clientes_schema import ClienteCreate
 from schemas.ext_api_schema import NotificationCargue, NotificationBuque, NotificationPitCargue, NotificationBlsPeso
 from schemas.flotas_schema import FlotasResponse, FlotaCreate
@@ -38,7 +40,7 @@ _TZ = timezone
 
 class ViajesService:
 
-    def __init__(self, viajes_repository: ViajesRepository, mat_service : MaterialesService, flotas_service : FlotasService, feedback_service : ExtApiService, transacciones_service : TransaccionesService, bl_service : BlsService, client_service : ClientesService) -> None:
+    def __init__(self, viajes_repository: ViajesRepository, mat_service : MaterialesService, flotas_service : FlotasService, feedback_service : ExtApiService, transacciones_service : TransaccionesService, bl_service : BlsService, client_service : ClientesService, consumos_ep_repository: ConsumosEntradaParcialRepository = None) -> None:
         self._repo = viajes_repository
         self.mat_service = mat_service
         self.flotas_service = flotas_service
@@ -46,6 +48,7 @@ class ViajesService:
         self.clientes_service = client_service
         self.feedback_service = feedback_service
         self.transacciones_service= transacciones_service
+        self.consumos_ep_repository = consumos_ep_repository
 
     async def get_viaje_by_puerto_id(self, puerto_id: str) -> Optional[ViajesResponse]:
         """
@@ -1089,7 +1092,12 @@ class ViajesService:
 
                 bls_a_actualizar.append({
                     'bl_id': bl.id,
-                    'peso_enviado_api': peso_prorrateado_actual
+                    'no_bl': bl.no_bl,
+                    'material_id': bl.material_id,
+                    'peso_bl': peso_bl,
+                    'peso_enviado_api': peso_prorrateado_actual,
+                    'peso_enviado_anterior': peso_enviado_anterior,
+                    'delta_peso': delta_peso,
                 })
 
         # 7. Actualizar peso_enviado_api de cada BL
@@ -1100,6 +1108,33 @@ class ViajesService:
                 log.debug(f"EntradaParcialBuque - Actualizado peso_enviado_api del BL {bl_update_info['bl_id']} a {bl_update_info['peso_enviado_api']}")
             except Exception as e_bl_update:
                 log.error(f"EntradaParcialBuque - Error al actualizar peso_enviado_api del BL {bl_update_info['bl_id']}: {e_bl_update}")
+
+        # 8. Guardar trazabilidad de consumos
+        if self.consumos_ep_repository and bls_a_actualizar:
+            try:
+                consecutivo_actual = await self.consumos_ep_repository.get_max_consecutivo_by_puerto_id(puerto_id) + 1
+
+                consumos_a_crear = []
+                for bl_update_info in bls_a_actualizar:
+                    consumos_a_crear.append(
+                        ConsumosEntradaParcialCreate(
+                            puerto_id=puerto_id,
+                            bl_id=bl_update_info['bl_id'],
+                            no_bl=bl_update_info['no_bl'],
+                            material_id=bl_update_info['material_id'],
+                            consecutivo=consecutivo_actual,
+                            peso_bl=bl_update_info['peso_bl'],
+                            peso_prorrateado_acumulado=bl_update_info['peso_enviado_api'],
+                            peso_enviado_anterior=bl_update_info['peso_enviado_anterior'],
+                            delta_peso=bl_update_info['delta_peso'],
+                        )
+                    )
+
+                if consumos_a_crear:
+                    await self.consumos_ep_repository.create_bulk(consumos_a_crear)
+                    log.info(f"EntradaParcialBuque - Guardados {len(consumos_a_crear)} registros de trazabilidad, consecutivo={consecutivo_actual}")
+            except Exception as e_consumo:
+                log.error(f"EntradaParcialBuque - Error al guardar trazabilidad de consumos: {e_consumo}")
 
         resultado = NotificationBuque(
             voyage=puerto_id,

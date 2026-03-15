@@ -14,7 +14,8 @@ from database.models import (
     Pesadas,
     Transacciones,
     Viajes, PesadasCorte,
-    Ajustes
+    Ajustes,
+    ConsumosEntradaParcial
 )
 from repositories.ajustes_repository import AjustesRepository
 from repositories.almacenamientos_materiales_repository import AlmacenamientosMaterialesRepository
@@ -25,6 +26,7 @@ from repositories.clientes_repository import ClientesRepository
 from repositories.flotas_repository import FlotasRepository
 from repositories.materiales_repository import MaterialesRepository
 from repositories.movimientos_repository import MovimientosRepository
+from repositories.consumos_entrada_parcial_repository import ConsumosEntradaParcialRepository
 from repositories.pesadas_corte_repository import PesadasCorteRepository
 from repositories.pesadas_repository import PesadasRepository
 from repositories.reportes.reportes_repository import ReportesRepository
@@ -41,6 +43,7 @@ from schemas.clientes_schema import ClientesResponse
 from schemas.flotas_schema import FlotasResponse
 from schemas.materiales_schema import MaterialesResponse
 from schemas.movimientos_schema import MovimientosResponse
+from schemas.consumos_entrada_parcial_schema import ConsumosEntradaParcialResponse
 from schemas.pesadas_corte_schema import PesadasCorteResponse
 from schemas.pesadas_schema import PesadaResponse
 from schemas.transacciones_schema import TransaccionResponse
@@ -179,3 +182,10 @@ async def get_roles_repository(
         Instancia del repositorio de roles
     """
     return RolesRepository(db)
+
+
+async def get_consumos_entrada_parcial_repository(
+        session: AsyncSession = Depends(get_db),
+        auditor: Auditor = Depends(get_auditor_service)
+) -> ConsumosEntradaParcialRepository:
+    return ConsumosEntradaParcialRepository(ConsumosEntradaParcial, ConsumosEntradaParcialResponse, session, auditor)

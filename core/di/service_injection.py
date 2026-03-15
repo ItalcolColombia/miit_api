@@ -12,6 +12,7 @@ from repositories.clientes_repository import ClientesRepository
 from repositories.flotas_repository import FlotasRepository
 from repositories.materiales_repository import MaterialesRepository
 from repositories.movimientos_repository import MovimientosRepository
+from repositories.consumos_entrada_parcial_repository import ConsumosEntradaParcialRepository
 from repositories.pesadas_corte_repository import PesadasCorteRepository
 from repositories.pesadas_repository import PesadasRepository
 from repositories.reportes.reportes_repository import ReportesRepository
@@ -52,6 +53,7 @@ from .repository_injection import (
     get_ajustes_repository,
     get_auditor_service,
     get_reportes_repository,
+    get_consumos_entrada_parcial_repository,
 )
 
 
@@ -145,6 +147,7 @@ async def get_viajes_service(
         flotas_service: Annotated[FlotasService, Depends(get_flotas_service)],
         feedback_service: Annotated[ExtApiService, Depends(get_ext_api_service)],
         transacciones_service: Annotated[TransaccionesService, Depends(get_transacciones_service)],
+        consumos_ep_repository: Annotated[ConsumosEntradaParcialRepository, Depends(get_consumos_entrada_parcial_repository)],
 ) -> ViajesService:
     return ViajesService(
         viajes_repository=viajes_repository,
@@ -153,7 +156,8 @@ async def get_viajes_service(
         feedback_service=feedback_service,
         bl_service=bls_service,
         client_service=clientes_service,
-        transacciones_service=transacciones_service
+        transacciones_service=transacciones_service,
+        consumos_ep_repository=consumos_ep_repository,
     )
 
 

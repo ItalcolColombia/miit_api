@@ -213,6 +213,21 @@ class PesadasCorte(Base):
     usuario_id = Column(Integer, nullable=True)
     enviado = Column(Boolean, nullable=False, default=False)
 
+class ConsumosEntradaParcial(Base):
+    __tablename__ = "consumos_entrada_parcial"
+    id = Column(Integer, primary_key=True, index=True)
+    puerto_id = Column(String(50), nullable=False)
+    bl_id = Column(Integer, ForeignKey('bls.id'), nullable=False)
+    no_bl = Column(String(100), nullable=False)
+    material_id = Column(Integer, nullable=False)
+    consecutivo = Column(Integer, nullable=False)
+    peso_bl = Column(Numeric(10,2), nullable=False)
+    peso_prorrateado_acumulado = Column(Numeric(10,2), nullable=False)
+    peso_enviado_anterior = Column(Numeric(10,2), nullable=False)
+    delta_peso = Column(Numeric(10,2), nullable=False)
+    fecha_hora = Column(DateTime(timezone=True), server_default=func.timezone('America/Bogota', func.now()))
+
+
 class LogsAuditoria(Base):
     __tablename__ = 'logs_auditoria'
     id = Column(Integer, primary_key=True, index=True)
