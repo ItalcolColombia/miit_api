@@ -225,6 +225,8 @@ class ConsumosEntradaParcial(Base):
     peso_prorrateado_acumulado = Column(Numeric(10,2), nullable=False)
     peso_enviado_anterior = Column(Numeric(10,2), nullable=False)
     delta_peso = Column(Numeric(10,2), nullable=False)
+    delta_peso_exceso = Column(Numeric(10,2), nullable=False, server_default='0')
+    peso_prorrateado_acumulado_exceso = Column(Numeric(10,2), nullable=False, server_default='0')
     fecha_hora = Column(DateTime(timezone=True), server_default=func.timezone('America/Bogota', func.now()))
 
 

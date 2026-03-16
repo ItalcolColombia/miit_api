@@ -18,6 +18,8 @@ class ConsumosEntradaParcialResponse(BaseSchema):
     peso_prorrateado_acumulado: Decimal
     peso_enviado_anterior: Decimal
     delta_peso: Decimal
+    delta_peso_exceso: Decimal
+    peso_prorrateado_acumulado_exceso: Decimal
     fecha_hora: Optional[datetime] = None
 
     model_config = ConfigDict(from_attributes=True)
@@ -33,6 +35,8 @@ class ConsumosEntradaParcialCreate(BaseSchema):
     peso_prorrateado_acumulado: Decimal = Field(..., max_digits=10, decimal_places=2)
     peso_enviado_anterior: Decimal = Field(..., max_digits=10, decimal_places=2)
     delta_peso: Decimal = Field(..., max_digits=10, decimal_places=2)
+    delta_peso_exceso: Decimal = Field(Decimal('0'), max_digits=10, decimal_places=2)
+    peso_prorrateado_acumulado_exceso: Decimal = Field(Decimal('0'), max_digits=10, decimal_places=2)
 
     class Config:
         json_schema_extra = {
@@ -46,5 +50,7 @@ class ConsumosEntradaParcialCreate(BaseSchema):
                 "peso_prorrateado_acumulado": 25000.00,
                 "peso_enviado_anterior": 15000.00,
                 "delta_peso": 10000.00,
+                "delta_peso_exceso": 0.00,
+                "peso_prorrateado_acumulado_exceso": 0.00,
             }
         }
