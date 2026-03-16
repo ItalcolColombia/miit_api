@@ -73,9 +73,9 @@ class TransaccionCreate(TransaccionResponse):
                 raise ValueError("viaje_id es obligatorio para transacciones de tipo Despacho/Recibo")
             if self.pit is None:
                 raise ValueError("pit es obligatorio para transacciones de tipo Despacho/Recibo")
-            # Solo para Despacho: peso_meta debe ser positivo
-            if tipo_lower == 'despacho' and self.peso_meta is not None and self.peso_meta <= 0:
-                raise ValueError("peso_meta debe ser positivo para transacciones de tipo Despacho")
+            # Solo para Despacho: peso_meta no puede ser negativo
+            if tipo_lower == 'despacho' and self.peso_meta is not None and self.peso_meta < 0:
+                raise ValueError("peso_meta no puede ser negativo para transacciones de tipo Despacho")
 
         return self
 
