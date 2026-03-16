@@ -726,7 +726,7 @@ class ExportacionService:
 
     def _formatear_datetime_csv(self, valor: Any) -> str:
         """Formatea datetime para CSV."""
-        if valor is None:
+        if valor is None or (hasattr(valor, 'isnull') and valor.isnull()) or str(valor) == 'NaT':
             return ''
         if isinstance(valor, datetime):
             return valor.strftime('%Y-%m-%d %H:%M:%S')
@@ -740,7 +740,7 @@ class ExportacionService:
 
     def _formatear_date_csv(self, valor: Any) -> str:
         """Formatea date para CSV."""
-        if valor is None:
+        if valor is None or (hasattr(valor, 'isnull') and valor.isnull()) or str(valor) == 'NaT':
             return ''
         if isinstance(valor, datetime):
             return valor.strftime('%Y-%m-%d')
