@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import datetime, timezone
 from enum import Enum
 from typing import Optional, List, Dict, Any
 
@@ -193,7 +193,7 @@ class ReporteInfoResponse(BaseModel):
     """Información básica del reporte en la respuesta"""
     codigo: str
     nombre: str
-    fecha_generacion: datetime
+    fecha_generacion: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
     filtros_aplicados: Dict[str, Any]
 
 
