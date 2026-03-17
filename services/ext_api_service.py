@@ -153,7 +153,7 @@ class ExtApiService:
             # Retry policy
             max_retries = 3
             base_backoff = 0.5
-            timeout = Timeout(5.0)
+            timeout = Timeout(15.0)
             request_id = str(uuid.uuid4())
             headers.update({"X-Request-Id": request_id})
 
@@ -266,7 +266,7 @@ class ExtApiService:
 
             max_retries = 3
             base_backoff = 0.5
-            timeout = Timeout(5.0)
+            timeout = Timeout(15.0)
             request_id = str(uuid.uuid4())
             headers.update({"X-Request-Id": request_id})
 
@@ -362,7 +362,7 @@ class ExtApiService:
 
             max_retries = 3
             base_backoff = 0.5
-            timeout = Timeout(5.0)
+            timeout = Timeout(15.0)
             request_id = str(uuid.uuid4())
             headers.update({"X-Request-Id": request_id})
 

@@ -779,7 +779,7 @@ class TransaccionesService:
                 truckPlate=flota.referencia,
                 truckTransaction=viaje.puerto_id,
                 weighingPitId=tran.pit,
-                weight=tran.peso_real,
+                weight=float(tran.peso_real) if tran.peso_real is not None else None,
                 despacho_directo=viaje.despacho_directo
             ).model_dump()
 
@@ -858,7 +858,7 @@ class TransaccionesService:
             )
 
         # Obtener todas las transacciones finalizadas de despacho para este viaje
-        transacciones = await self.tran_repository.find_finalized_by_viaje(viaje_id, tipo='Despacho')
+        transacciones = await self._repo.find_finalized_by_viaje(viaje_id, tipo='Despacho')
         if not transacciones:
             raise BasedException(
                 message=f"No se encontraron transacciones finalizadas de despacho para el viaje {viaje_id}",
@@ -893,7 +893,7 @@ class TransaccionesService:
             truckPlate=flota.referencia,
             truckTransaction=viaje.puerto_id,
             weighingPitId=pit,
-            weight=peso_total,
+            weight=float(peso_total),
             despacho_directo=viaje.despacho_directo
         ).model_dump()
 
