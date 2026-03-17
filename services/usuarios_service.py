@@ -11,8 +11,13 @@ from core.exceptions.entity_exceptions import (
 from repositories.usuarios_repository import UsuariosRepository
 from core.exceptions.auth_exception import InvalidCredentialsException
 from schemas.usuarios_schema import UsuariosResponse, UsuarioCreate, UsuarioUpdate, ProfileUpdate
+from pydantic import BaseModel
 from utils.any_utils import AnyUtils
 from utils.logger_util import LoggerUtil
+
+
+class _PasswordUpdate(BaseModel):
+    clave: str
 
 log = LoggerUtil()
 
@@ -203,16 +208,7 @@ class UsuariosService:
             if not AnyUtils.check_password_hash(clave_actual, user.clave):
                 raise InvalidCredentialsException("La contraseña actual es incorrecta")
 
-            update_data = UsuarioUpdate(
-                nick_name=user.nick_name,
-                full_name=user.full_name,
-                cedula=user.cedula,
-                email=user.email,
-                clave=clave_nueva,
-                rol_id=user.rol_id,
-                estado=user.estado
-            )
-            return await self._repo.update(usr_id, update_data)
+            return await self._repo.update(usr_id, _PasswordUpdate(clave=clave_nueva))
         except (InvalidCredentialsException, BasedException) as e:
             raise e
         except Exception as e:
@@ -250,7 +246,6 @@ class UsuariosService:
                 full_name=update_data.get("full_name", user.full_name),
                 cedula=update_data.get("cedula", user.cedula),
                 email=update_data.get("email", user.email),
-                clave=user.clave,
                 rol_id=user.rol_id,
                 estado=user.estado
             )
