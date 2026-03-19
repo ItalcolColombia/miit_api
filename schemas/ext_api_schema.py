@@ -59,6 +59,7 @@ class NotificationBlsPeso(BaseSchema):
     noBL: Optional[str] = None
     voyage: Optional[str] = None
     weightBl: Optional[Decimal] = None
+    excessWeightBl: Optional[Decimal] = None
 
     model_config = ConfigDict(
         extra='ignore',
@@ -67,6 +68,7 @@ class NotificationBlsPeso(BaseSchema):
                 "noBL": 'SSPRUEBA001',
                 "voyage": "VOY2024049",
                 "weightBl": Decimal('125498'),
+                "excessWeightBl": Decimal('0'),
             }
         }
     )

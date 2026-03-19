@@ -868,26 +868,79 @@ class ViajesService:
             bl = await self.bls_service.get_bl_by_viaje(viaje.id)
 
             # Preparar datos de BLs para la notificación.
-            # Se calcula el delta (peso_real - peso_enviado_api) para cada BL:
+            # Se calcula el delta (peso_real - peso_enviado_api) para cada BL,
+            # separando peso normal (hasta peso_bl) y exceso (por encima de peso_bl):
             # - Despacho directo: peso_enviado_api > 0 (parciales ya enviados vía entrada-parcial-buque),
             #   por lo que se envía solo el restante.
             # - No despacho directo: peso_enviado_api = 0, por lo que el delta equivale al total.
             if bl:
+                from decimal import ROUND_HALF_UP
                 dt_bl = []
+                bls_cierre = []
                 for bl_item in bl:
                     peso_real = Decimal(str(bl_item.peso_real or 0)) if hasattr(bl_item, 'peso_real') and bl_item.peso_real else Decimal(str(bl_item.peso_bl or 0))
                     peso_enviado = Decimal(str(bl_item.peso_enviado_api or 0)) if hasattr(bl_item, 'peso_enviado_api') and bl_item.peso_enviado_api else Decimal('0')
-                    delta = peso_real - peso_enviado
+                    peso_bl = Decimal(str(bl_item.peso_bl or 0))
 
-                    log.info(f"FinalizaBuque - BL {bl_item.no_bl}: peso_real={peso_real}, peso_enviado_api={peso_enviado}, delta={delta}")
+                    # Split del delta en normal (hasta peso_bl) y exceso (por encima de peso_bl)
+                    acumulado_normal_anterior = min(peso_enviado, peso_bl)
+                    acumulado_normal_actual = min(peso_real, peso_bl)
+                    delta_peso = (acumulado_normal_actual - acumulado_normal_anterior).quantize(Decimal('0.01'), rounding=ROUND_HALF_UP)
+
+                    acumulado_exceso_anterior = max(peso_enviado - peso_bl, Decimal('0'))
+                    acumulado_exceso_actual = max(peso_real - peso_bl, Decimal('0'))
+                    delta_peso_exceso = (acumulado_exceso_actual - acumulado_exceso_anterior).quantize(Decimal('0.01'), rounding=ROUND_HALF_UP)
+
+                    log.info(f"FinalizaBuque - BL {bl_item.no_bl}: peso_real={peso_real}, peso_bl={peso_bl}, "
+                             f"peso_enviado_api={peso_enviado}, delta_peso={delta_peso}, delta_peso_exceso={delta_peso_exceso}")
 
                     dt_bl.append(
                         NotificationBlsPeso(
                             noBL=bl_item.no_bl,
                             voyage=viaje.puerto_id,
-                            weightBl=float(delta)
+                            weightBl=float(delta_peso),
+                            excessWeightBl=float(delta_peso_exceso)
                         ).model_dump()
                     )
+
+                    bls_cierre.append({
+                        'bl_id': bl_item.id,
+                        'no_bl': bl_item.no_bl,
+                        'material_id': bl_item.material_id,
+                        'peso_bl': peso_bl,
+                        'peso_enviado_api': peso_real,
+                        'peso_enviado_anterior': peso_enviado,
+                        'delta_peso': delta_peso,
+                        'delta_peso_exceso': delta_peso_exceso,
+                        'peso_prorrateado_acumulado_exceso': acumulado_exceso_actual,
+                    })
+
+                # Guardar trazabilidad del cierre
+                if self.consumos_ep_repository and bls_cierre:
+                    try:
+                        consecutivo_actual = await self.consumos_ep_repository.get_max_consecutivo_by_puerto_id(viaje.puerto_id) + 1
+                        consumos_cierre = []
+                        for bl_info in bls_cierre:
+                            consumos_cierre.append(
+                                ConsumosEntradaParcialCreate(
+                                    puerto_id=viaje.puerto_id,
+                                    bl_id=bl_info['bl_id'],
+                                    no_bl=bl_info['no_bl'],
+                                    material_id=bl_info['material_id'],
+                                    consecutivo=consecutivo_actual,
+                                    peso_bl=bl_info['peso_bl'],
+                                    peso_prorrateado_acumulado=min(bl_info['peso_enviado_api'], bl_info['peso_bl']),
+                                    peso_enviado_anterior=bl_info['peso_enviado_anterior'],
+                                    delta_peso=bl_info['delta_peso'],
+                                    delta_peso_exceso=bl_info['delta_peso_exceso'],
+                                    peso_prorrateado_acumulado_exceso=bl_info['peso_prorrateado_acumulado_exceso'],
+                                )
+                            )
+                        if consumos_cierre:
+                            await self.consumos_ep_repository.create_bulk(consumos_cierre)
+                            log.info(f"FinalizaBuque - Guardados {len(consumos_cierre)} registros de trazabilidad de cierre, consecutivo={consecutivo_actual}")
+                    except Exception as e_consumo:
+                        log.error(f"FinalizaBuque - Error al guardar trazabilidad de cierre: {e_consumo}")
             else:
                 dt_bl = None
 
@@ -1057,7 +1110,7 @@ class ViajesService:
             bls_por_material[material_id].append(bl)
             suma_peso_bl_por_material[material_id] += peso_bl
 
-        # 6. Calcular peso prorrateado actual y delta para cada BL
+        # 6. Calcular peso prorrateado actual y delta (normal + exceso) para cada BL
         dt_bl = []
         bls_a_actualizar = []
 
@@ -1076,17 +1129,29 @@ class ViajesService:
                 proporcion = peso_bl / suma_peso_bl
                 peso_prorrateado_actual = (proporcion * peso_real_total).quantize(Decimal('0.01'), rounding=ROUND_HALF_UP)
 
-                delta_peso = (peso_prorrateado_actual - peso_enviado_anterior).quantize(Decimal('0.01'), rounding=ROUND_HALF_UP)
+                delta_total = (peso_prorrateado_actual - peso_enviado_anterior).quantize(Decimal('0.01'), rounding=ROUND_HALF_UP)
+
+                # Split del delta en normal (hasta peso_bl) y exceso (por encima de peso_bl)
+                # peso_enviado_anterior ya incluye lo normal + exceso enviado antes,
+                # pero el tope de lo "normal" es peso_bl
+                acumulado_normal_anterior = min(peso_enviado_anterior, peso_bl)
+                acumulado_normal_actual = min(peso_prorrateado_actual, peso_bl)
+                delta_peso = (acumulado_normal_actual - acumulado_normal_anterior).quantize(Decimal('0.01'), rounding=ROUND_HALF_UP)
+
+                acumulado_exceso_anterior = max(peso_enviado_anterior - peso_bl, Decimal('0'))
+                acumulado_exceso_actual = max(peso_prorrateado_actual - peso_bl, Decimal('0'))
+                delta_peso_exceso = (acumulado_exceso_actual - acumulado_exceso_anterior).quantize(Decimal('0.01'), rounding=ROUND_HALF_UP)
 
                 log.info(f"EntradaParcialBuque - BL {bl.no_bl}: peso_bl={peso_bl}, proporción={proporcion:.4f}, "
                          f"peso_prorrateado_actual={peso_prorrateado_actual}, peso_enviado_anterior={peso_enviado_anterior}, "
-                         f"delta_peso={delta_peso}")
+                         f"delta_total={delta_total}, delta_peso={delta_peso}, delta_peso_exceso={delta_peso_exceso}")
 
                 dt_bl.append(
                     NotificationBlsPeso(
                         noBL=bl.no_bl,
                         voyage=puerto_id,
-                        weightBl=float(delta_peso)
+                        weightBl=float(delta_peso),
+                        excessWeightBl=float(delta_peso_exceso)
                     ).model_dump()
                 )
 
@@ -1098,6 +1163,8 @@ class ViajesService:
                     'peso_enviado_api': peso_prorrateado_actual,
                     'peso_enviado_anterior': peso_enviado_anterior,
                     'delta_peso': delta_peso,
+                    'delta_peso_exceso': delta_peso_exceso,
+                    'peso_prorrateado_acumulado_exceso': acumulado_exceso_actual,
                 })
 
         # 7. Actualizar peso_enviado_api de cada BL
@@ -1124,9 +1191,11 @@ class ViajesService:
                             material_id=bl_update_info['material_id'],
                             consecutivo=consecutivo_actual,
                             peso_bl=bl_update_info['peso_bl'],
-                            peso_prorrateado_acumulado=bl_update_info['peso_enviado_api'],
+                            peso_prorrateado_acumulado=min(bl_update_info['peso_enviado_api'], bl_update_info['peso_bl']),
                             peso_enviado_anterior=bl_update_info['peso_enviado_anterior'],
                             delta_peso=bl_update_info['delta_peso'],
+                            delta_peso_exceso=bl_update_info['delta_peso_exceso'],
+                            peso_prorrateado_acumulado_exceso=bl_update_info['peso_prorrateado_acumulado_exceso'],
                         )
                     )
 
