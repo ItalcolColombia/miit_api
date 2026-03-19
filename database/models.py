@@ -86,6 +86,7 @@ class Viajes(Base):
     puerto_id = Column(String(300), unique=True, index=True)
     peso_meta = Column(Numeric(10,2), nullable=False, default=0)
     peso_real = Column(Numeric(10,2), nullable=True, default=0)
+    peso_tara = Column(Numeric(10,2), nullable=True, default=0)
     fecha_llegada = Column(DateTime(timezone=True), nullable=True)
     fecha_salida = Column(DateTime(timezone=True), nullable=True)
     material_id = Column(Integer,nullable=True)

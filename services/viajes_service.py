@@ -506,13 +506,15 @@ class ViajesService:
                 status_code=status.HTTP_424_FAILED_DEPENDENCY
             )
 
-    async def chg_camion_ingreso(self, puerto_id: str, fecha: datetime) -> NotificationPitCargue:
+    async def chg_camion_ingreso(self, puerto_id: str, fecha: datetime, peso_vacio: Decimal, peso_maximo: Decimal) -> NotificationPitCargue:
         """
         Update the arrival date of a camion viaje.
 
         Args:
             puerto_id (str): The puerto_id of the viaje.
             fecha (datetime): The arrival date to set.
+            peso_vacio (Decimal): Empty truck weight.
+            peso_maximo (Decimal): Maximum truck weight.
 
         Returns:
             ViajesResponse: The updated viaje object.
@@ -522,6 +524,19 @@ class ViajesService:
             BasedException: If update fails due to database or other errors.
         """
         try:
+            if peso_vacio < 0 or peso_maximo < 0:
+                raise BasedException(
+                    message="peso_vacio y peso_maximo deben ser mayores o iguales a 0",
+                    status_code=status.HTTP_400_BAD_REQUEST
+                )
+            if peso_maximo < peso_vacio:
+                raise BasedException(
+                    message="peso_maximo debe ser mayor o igual a peso_vacio",
+                    status_code=status.HTTP_400_BAD_REQUEST
+                )
+
+            peso_tara = peso_maximo - peso_vacio
+
             viaje = await self.get_viaje_by_puerto_id(puerto_id)
             if not viaje:
                 raise EntityNotFoundException(f"Viaje con puerto_id: '{puerto_id}' no existe")
@@ -559,6 +574,7 @@ class ViajesService:
                 "fecha_llegada": fecha,
                 "fecha_salida": None,
                 "despacho_directo": es_despacho_directo,
+                "peso_tara": peso_tara,
             }
             update_data = ViajeUpdate(**update_fields)
             await self._repo.update(viaje.id, update_data)
@@ -570,6 +586,8 @@ class ViajesService:
 
             return notification
         except EntityNotFoundException as e:
+            raise e
+        except BasedException as e:
             raise e
         except Exception as e:
             log.error(f"Error al actualizar ingreso de camión con puerto_id {puerto_id}: {e}")

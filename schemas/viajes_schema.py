@@ -13,6 +13,7 @@ class ViajesResponse(BaseSchema):
     puerto_id: str
     peso_meta: Decimal
     peso_real: Decimal
+    peso_tara: Optional[Decimal] = None
     fecha_llegada: Optional[datetime] = None
     fecha_salida: Optional[datetime] = None
     material_id: Optional[int] = None
@@ -37,6 +38,7 @@ class ViajeCreate(BaseSchema):
     puerto_id: str = Field(..., max_length=300)
     peso_meta: Decimal = Field(..., max_digits=10, decimal_places=2)
     peso_real: Optional[Decimal] = Field(None, max_digits=10, decimal_places=2)
+    peso_tara: Optional[Decimal] = Field(None, max_digits=10, decimal_places=2)
     fecha_llegada: Optional[datetime] = None
     fecha_salida: Optional[datetime] = None
     material_id: Optional[int] = None
@@ -205,6 +207,7 @@ class ViajeUpdate(BaseSchema):
     puerto_id: Optional[str] = Field(None, max_length=300)
     peso_meta: Optional[Decimal] = Field(None, max_digits=10, decimal_places=2)
     peso_real: Optional[Decimal] = Field(None, max_digits=10, decimal_places=2)
+    peso_tara: Optional[Decimal] = Field(None, max_digits=10, decimal_places=2)
     fecha_llegada: Optional[datetime] = None
     fecha_salida: Optional[datetime] = None
     material_id: Optional[int] = None
