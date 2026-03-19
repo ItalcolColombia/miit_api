@@ -71,6 +71,15 @@ FILTROS_POR_REPORTE: Dict[str, List[FiltroConfig]] = {
         FiltroConfig("almacenamiento_destino", "Almacenamiento Destino", "select"),
     ],
 
+    "RPT_PERMANENCIA": [
+        FiltroConfig("en_puerto", "En Puerto", "select"),
+        FiltroConfig("almacenamiento_origen", "Almacenamiento", "select"),
+        FiltroConfig("material", "Material", "search", "Buscar por nombre de material..."),
+        FiltroConfig("placa", "Placa", "search", "Buscar por placa..."),
+        FiltroConfig("buque_origen", "Buque", "select"),
+        FiltroConfig("no_bl", "No. BL", "search", "Buscar por número de BL..."),
+    ],
+
     "RPT_PESADAS": [
         FiltroConfig("tipo_transaccion", "Tipo Transacción", "select"),
         FiltroConfig("flota", "Flota", "search", "Buscar por flota..."),
