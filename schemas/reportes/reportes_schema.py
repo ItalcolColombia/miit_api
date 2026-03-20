@@ -111,6 +111,9 @@ class ReporteResponse(BaseModel):
     orden: int
     color: str
     categoria: str
+    categoria_descripcion: Optional[str] = None
+    categoria_icono: Optional[str] = None
+    categoria_orden: Optional[int] = None
     permite_exportar_pdf: bool
     permite_exportar_excel: bool
     permite_exportar_csv: bool

@@ -452,6 +452,8 @@ async def create_camion(
             })
 async def in_camion(
         puerto_id: str,
+        peso_vacio: Decimal,
+        peso_maximo: Decimal,
         fecha_ingreso: Optional[datetime] = None,
         service: ViajesService = Depends(get_viajes_service)):
     log.info(f"Payload recibido: Flota {puerto_id} - Ingreso ")
@@ -463,7 +465,12 @@ async def in_camion(
         fecha_ingreso_actual = now_local()
         log.info(f"[DEBUG endpoint in_camion] fecha_ingreso del servidor={fecha_ingreso_actual} (tzinfo={fecha_ingreso_actual.tzinfo})")
 
-        service_data = await service.chg_camion_ingreso(puerto_id, fecha_ingreso_actual)
+        service_data = await service.chg_camion_ingreso(
+            puerto_id,
+            fecha_ingreso_actual,
+            peso_vacio,
+            peso_maximo
+        )
 
         try:
             await service.chg_estado_flota(puerto_id, estado_puerto=True, estado_operador=True)
