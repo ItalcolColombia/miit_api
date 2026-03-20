@@ -131,7 +131,10 @@ class ViajesRepository(IRepository[Viajes, ViajesResponse]):
                         Flotas.referencia.label('nombre'),
                         Materiales.nombre.label('material'),
                         Flotas.puntos.label('puntos_cargue'),
-                        func.max(Viajes.peso_meta).label('peso'),
+                        func.coalesce(
+                            func.nullif(func.max(Viajes.peso_tara), 0),
+                            func.max(Viajes.peso_meta)
+                        ).label('peso'),
                         func.max(Viajes.fecha_hora).label('fecha_hora_orden')
                     )
                     .join(Flotas, Viajes.flota_id == Flotas.id)
