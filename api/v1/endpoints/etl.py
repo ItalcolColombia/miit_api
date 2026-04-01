@@ -70,7 +70,8 @@ async def get_almacenamientos_paginado(
 @router.get("/viajes-activos",
             summary="Obtener viajes activos agrupados por material",
             description="Retorna los viajes activos (estado_operador=true en flota) agrupados por material. "
-                        "Para buques agrupa por materiales de BLs, para camiones usa el material del viaje.",
+                        "Para buques agrupa por materiales de BLs, para camiones usa el material del viaje e incluye "
+                        "los campos buque_origen y despacho_directo.",
             response_model=List[ViajesActivosPorMaterialResponse],
             responses={
                 status.HTTP_404_NOT_FOUND: {"model": ErrorResponse},
