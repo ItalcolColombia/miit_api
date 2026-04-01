@@ -553,11 +553,17 @@ class ExportacionService:
         # Calcular pesos según tipo de columna
         pesos = []
         for col in columnas:
+            campo = col.get('campo', '').lower()
             nombre = col.get('nombre_mostrar', col.get('campo', '')).lower()
             tipo_dato = col.get('tipo_dato', 'string')
 
+            # Ajustes específicos solicitados para mejorar legibilidad en reporte de ajustes.
+            if campo == 'codigo_material':
+                pesos.append(0.9)
+            elif campo == 'motivo':
+                pesos.append(3.8)
             # Columnas de texto largo: más peso
-            if any(x in nombre for x in ['material', 'descripcion', 'descripción', 'nombre', 'observacion', 'observación', 'almacenamiento', 'detalle']):
+            elif any(x in nombre for x in ['material', 'descripcion', 'descripción', 'nombre', 'observacion', 'observación', 'almacenamiento', 'detalle']):
                 pesos.append(3.0)
             # Columnas de fecha
             elif tipo_dato in ('date', 'datetime') or 'fecha' in nombre:
