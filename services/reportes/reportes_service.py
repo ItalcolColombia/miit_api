@@ -163,26 +163,33 @@ class ReportesService:
             # Agregar codigo_reporte a filtros para que el repositorio pueda determinar tipos de filtro
             filtros_normalizados['codigo_reporte'] = codigo_reporte
 
+            # Obtener columnas totalizables (antes de get_reporte_data)
+            columnas_totalizables = await self.reportes_repo.get_columnas_totalizables(codigo_reporte)
+
             # Obtener datos
             datos, total_registros = await self.reportes_repo.get_reporte_data(
                 vista_nombre=reporte.vista_nombre,
                 campo_fecha=reporte.campo_fecha,
                 filtros=filtros_normalizados,
                 page=page,
-                page_size=page_size
+                page_size=page_size,
+                campos_agrupacion=reporte.campos_agrupacion,
+                columnas_totalizables=columnas_totalizables if reporte.campos_agrupacion else None,
+                tipo_consulta=reporte.tipo_consulta or 'normal'
             )
             logger.debug(f"Datos obtenidos: {total_registros} registros")
 
             # Calcular totales si hay columnas totalizables
             totales = None
-            columnas_totalizables = await self.reportes_repo.get_columnas_totalizables(codigo_reporte)
 
             if columnas_totalizables:
                 totales = await self.reportes_repo.get_totales_reporte(
                     vista_nombre=reporte.vista_nombre,
                     campo_fecha=reporte.campo_fecha,
                     columnas_totalizables=columnas_totalizables,
-                    filtros=filtros_normalizados
+                    filtros=filtros_normalizados,
+                    tipo_consulta=reporte.tipo_consulta or 'normal',
+                    campos_agrupacion=reporte.campos_agrupacion
                 )
 
             # Calcular paginación
@@ -550,25 +557,31 @@ class ReportesService:
         # Agregar codigo_reporte a filtros para determinar tipos de filtro dinámico
         filtros_normalizados['codigo_reporte'] = codigo_reporte
 
+        columnas_totalizables = await self.reportes_repo.get_columnas_totalizables(codigo_reporte)
+
         # Obtener TODOS los datos (sin límite práctico)
         datos, total = await self.reportes_repo.get_reporte_data(
             vista_nombre=reporte.vista_nombre,
             campo_fecha=reporte.campo_fecha,
             filtros=filtros_normalizados,
             page=1,
-            page_size=1000000  # Sin límite práctico
+            page_size=1000000,  # Sin límite práctico
+            campos_agrupacion=reporte.campos_agrupacion,
+            columnas_totalizables=columnas_totalizables if reporte.campos_agrupacion else None,
+            tipo_consulta=reporte.tipo_consulta or 'normal'
         )
 
         # Obtener totales
         totales = None
-        columnas_totalizables = await self.reportes_repo.get_columnas_totalizables(codigo_reporte)
 
         if columnas_totalizables:
             totales = await self.reportes_repo.get_totales_reporte(
                 vista_nombre=reporte.vista_nombre,
                 campo_fecha=reporte.campo_fecha,
                 columnas_totalizables=columnas_totalizables,
-                filtros=filtros_normalizados
+                filtros=filtros_normalizados,
+                tipo_consulta=reporte.tipo_consulta or 'normal',
+                campos_agrupacion=reporte.campos_agrupacion
             )
 
         return {
