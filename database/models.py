@@ -365,6 +365,8 @@ class Reporte(Base):
     # Configuración de vista
     vista_nombre = Column(String(100), nullable=False)
     campo_fecha = Column(String(50), default='fecha')
+    campos_agrupacion = Column(String(500), nullable=True)  # Campos para GROUP BY (separados por coma)
+    tipo_consulta = Column(String(20), default='normal')  # 'normal', 'agrupado', 'corte_saldo'
 
     # UI/UX
     icono = Column(String(50), default='assessment')
