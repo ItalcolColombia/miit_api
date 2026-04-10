@@ -53,6 +53,16 @@ class ExportacionService:
     # EXPORTACIÓN A EXCEL
     # ========================================================
 
+    @staticmethod
+    def _filtrar_columnas_visibles(
+            columnas: List[Dict[str, Any]]
+    ) -> List[Dict[str, Any]]:
+        """
+        Filtra columnas para incluir solo las marcadas como visibles.
+        Si una columna no tiene el campo 'visible', se asume visible por compatibilidad.
+        """
+        return [col for col in columnas if col.get('visible', True)]
+
     def exportar_excel(
             self,
             datos: List[Dict[str, Any]],
@@ -72,6 +82,7 @@ class ExportacionService:
         Returns:
             Contenido del archivo Excel en bytes
         """
+        columnas = self._filtrar_columnas_visibles(columnas)
         wb = Workbook()
         ws = wb.active
         ws.title = nombre_reporte[:31]  # Límite de Excel para nombre de hoja
@@ -283,6 +294,7 @@ class ExportacionService:
         Returns:
             Contenido del archivo PDF en bytes
         """
+        columnas = self._filtrar_columnas_visibles(columnas)
         buffer = io.BytesIO()
 
         num_columnas = len(columnas)
@@ -684,6 +696,7 @@ class ExportacionService:
         Returns:
             Contenido del archivo CSV como string
         """
+        columnas = self._filtrar_columnas_visibles(columnas)
         # Crear DataFrame con las columnas en el orden correcto
         campos = [col['campo'] for col in columnas]
         nombres = {col['campo']: col['nombre_mostrar'] for col in columnas}
