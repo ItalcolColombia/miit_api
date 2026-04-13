@@ -1,4 +1,6 @@
 from datetime import datetime
+
+from utils.time_util import now_local
 from typing import Optional
 
 from fastapi import APIRouter, Depends, Query, Response, status, Request
@@ -301,7 +303,7 @@ async def exportar_reporte(
     )
 
     # Generar nombre de archivo
-    fecha_actual = datetime.now().strftime("%Y-%m-%d_%H%M%S")
+    fecha_actual = now_local().strftime("%Y-%m-%d_%H%M%S")
     nombre_base = f"{codigo_reporte}_{fecha_actual}"
 
     # Exportar según formato
@@ -378,7 +380,7 @@ async def refrescar_vistas(
 
     return {
         "message": "Todas las vistas de reportes han sido refrescadas",
-        "timestamp": datetime.now().isoformat()
+        "timestamp": now_local().isoformat()
     }
 
 
@@ -407,5 +409,5 @@ async def refrescar_vista_reporte(
 
     return {
         "message": f"Vista del reporte '{codigo_reporte}' ha sido refrescada",
-        "timestamp": datetime.now().isoformat()
+        "timestamp": now_local().isoformat()
     }

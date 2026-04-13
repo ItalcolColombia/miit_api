@@ -1,5 +1,7 @@
 import io
 from datetime import datetime
+
+from utils.time_util import now_local
 from typing import List, Dict, Any, Optional
 
 import pandas as pd
@@ -127,7 +129,7 @@ class ExportacionService:
         date_cell = ws.cell(
             row=2,
             column=1,
-            value=f"Generado: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}"
+            value=f"Generado: {now_local().strftime('%Y-%m-%d %H:%M:%S')}"
         )
         date_cell.font = Font(italic=True, size=10)
         date_cell.alignment = Alignment(horizontal="center")
@@ -418,7 +420,7 @@ class ExportacionService:
         elements.append(Paragraph(f"Informe de {nombre_reporte}", title_style))
 
         # Fecha de generación
-        fecha_generacion = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+        fecha_generacion = now_local().strftime('%Y-%m-%d %H:%M:%S')
         elements.append(Paragraph(f"Generado: {fecha_generacion}", date_style))
 
         # Todas las columnas visibles

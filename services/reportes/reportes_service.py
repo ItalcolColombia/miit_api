@@ -1,5 +1,7 @@
 import logging
 from datetime import datetime
+
+from utils.time_util import now_local
 from typing import List, Dict, Any
 
 from fastapi import status
@@ -207,7 +209,7 @@ class ReportesService:
                 reporte=ReporteInfoResponse(
                     codigo=reporte.codigo,
                     nombre=reporte.nombre,
-                    fecha_generacion=datetime.now(),
+                    fecha_generacion=now_local(),
                     filtros_aplicados=filtros
                 ),
                 columnas=columnas,
