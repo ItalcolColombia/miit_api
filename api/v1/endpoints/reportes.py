@@ -1,6 +1,4 @@
 from datetime import datetime
-
-from utils.time_util import now_local
 from typing import Optional
 
 from fastapi import APIRouter, Depends, Query, Response, status, Request
@@ -19,6 +17,7 @@ from schemas.usuarios_schema import VUsuariosRolResponse
 from services.auth_service import AuthService
 from services.reportes.exportacion_service import ExportacionService
 from services.reportes.reportes_service import ReportesService
+from utils.time_util import now_local
 
 router = APIRouter(prefix="/reportes", tags=["Reportes"])
 

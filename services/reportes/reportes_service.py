@@ -1,7 +1,5 @@
 import logging
 from datetime import datetime
-
-from utils.time_util import now_local
 from typing import List, Dict, Any
 
 from fastapi import status
@@ -24,6 +22,7 @@ from schemas.reportes.reportes_schema import (
     OpcionFiltro,
     TipoFiltro
 )
+from utils.time_util import now_local
 
 logger = logging.getLogger(__name__)
 

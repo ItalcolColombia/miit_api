@@ -15,8 +15,8 @@ from core.exceptions.entity_exceptions import (
 from repositories.consumos_entrada_parcial_repository import ConsumosEntradaParcialRepository
 from repositories.viajes_repository import ViajesRepository
 from schemas.bls_schema import BlsCreate, BlsExtCreate, BlsResponse, BlsUpdate, VBlsResponse
-from schemas.consumos_entrada_parcial_schema import ConsumosEntradaParcialCreate
 from schemas.clientes_schema import ClienteCreate
+from schemas.consumos_entrada_parcial_schema import ConsumosEntradaParcialCreate
 from schemas.ext_api_schema import NotificationCargue, NotificationBuque, NotificationPitCargue, NotificationBlsPeso
 from schemas.flotas_schema import FlotasResponse, FlotaCreate
 from schemas.transacciones_schema import TransaccionResponse

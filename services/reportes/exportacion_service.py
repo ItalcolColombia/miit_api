@@ -1,7 +1,5 @@
 import io
 from datetime import datetime
-
-from utils.time_util import now_local
 from typing import List, Dict, Any, Optional
 
 import pandas as pd
@@ -16,6 +14,8 @@ from reportlab.platypus import (
     SimpleDocTemplate, Table, TableStyle, Paragraph,
     Spacer
 )
+
+from utils.time_util import now_local
 
 
 class ExportacionService:

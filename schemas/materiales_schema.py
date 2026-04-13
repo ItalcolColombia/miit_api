@@ -5,6 +5,7 @@ from pydantic import Field
 
 from schemas.base_schema import BaseSchema
 
+
 class MaterialesResponse(BaseSchema):
     id: int
     codigo : str
