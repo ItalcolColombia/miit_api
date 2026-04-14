@@ -1,10 +1,14 @@
 import logging
-from datetime import datetime
+from datetime import datetime, timezone, timedelta
 from typing import List, Dict, Any
 
 from fastapi import status
 
-from core.config.filtros_reportes_config import get_filtros_reporte
+from core.config.filtros_reportes_config import (
+    get_filtros_reporte,
+    get_campos_filtro_validos,
+    get_operadores_permitidos_por_campo,
+)
 from core.exceptions.base_exception import BasedException
 from repositories.reportes.reportes_repository import ReportesRepository
 from schemas.reportes.reportes_schema import (
@@ -26,6 +30,8 @@ from utils.time_util import now_local
 
 logger = logging.getLogger(__name__)
 
+OPERADORES_VALIDOS = {"eq", "ne", "gte", "lte", "in", "contains", "is_null", "is_not_null"}
+
 
 class ReportesService:
     """
@@ -35,6 +41,255 @@ class ReportesService:
 
     def __init__(self, reportes_repo: ReportesRepository):
         self.reportes_repo = reportes_repo
+
+    @staticmethod
+    def _build_filter_error(code: str, message: str, detail: Dict[str, Any]) -> Dict[str, Any]:
+        return {
+            "code": code,
+            "message": message,
+            "detail": detail,
+        }
+
+    @staticmethod
+    def _parse_bool_value(value: Any) -> bool:
+        if isinstance(value, bool):
+            return value
+
+        if isinstance(value, str):
+            lower = value.strip().lower()
+            if lower == "true":
+                return True
+            if lower == "false":
+                return False
+
+        raise ValueError("boolean inválido")
+
+    @staticmethod
+    def _try_parse_datetime_value(value: Any) -> Any:
+        if isinstance(value, datetime):
+            if value.tzinfo is not None:
+                return value.replace(tzinfo=None)
+            return value
+
+        if isinstance(value, str):
+            try:
+                dt = datetime.fromisoformat(value.replace('Z', '+00:00'))
+                if dt.tzinfo is not None:
+                    dt = dt.replace(tzinfo=None)
+                return dt
+            except ValueError:
+                return value
+
+        return value
+
+    def _parse_filter_value(self, operador: str, valor: Any) -> Any:
+        if operador == "in":
+            if isinstance(valor, str):
+                parts = [part.strip() for part in valor.split(",") if part.strip()]
+            elif isinstance(valor, list):
+                parts = valor
+            else:
+                raise ValueError("valor inválido para operador in")
+
+            if not parts:
+                raise ValueError("lista vacía para operador in")
+
+            parsed = []
+            for part in parts:
+                try:
+                    parsed.append(self._parse_bool_value(part))
+                except ValueError:
+                    parsed.append(part)
+            return parsed
+
+        if operador in {"is_null", "is_not_null"}:
+            parsed_bool = self._parse_bool_value(valor)
+            if parsed_bool is not True:
+                raise ValueError("is_null/is_not_null requiere valor true")
+            return True
+
+        if operador in {"eq", "ne"}:
+            try:
+                return self._parse_bool_value(valor)
+            except ValueError:
+                return valor
+
+        if operador in {"gte", "lte"}:
+            return self._try_parse_datetime_value(valor)
+
+        return valor
+
+    def _normalizar_filtros_dinamicos(
+            self,
+            codigo_reporte: str,
+            filtros: Dict[str, Any]
+    ) -> Dict[str, Any]:
+        """
+        Normaliza filtros dinámicos legacy y explícitos hacia una estructura
+        única basada en operadores.
+        """
+        filtros_norm = filtros.copy()
+
+        filtros_legacy = filtros_norm.get('filtros_columna', {}) or {}
+        filtros_explicitos = filtros_norm.get('filtros_explicitos', {}) or {}
+
+        campos_validos = get_campos_filtro_validos(codigo_reporte)
+        operadores_por_campo = get_operadores_permitidos_por_campo(codigo_reporte)
+        filtros_config = get_filtros_reporte(codigo_reporte)
+        tipo_por_campo = {f.campo: f.tipo_filtro for f in filtros_config}
+
+        filtros_operadores: List[Dict[str, Any]] = []
+
+        for campo, valor in filtros_legacy.items():
+            if campo not in campos_validos:
+                raise BasedException(
+                    message=self._build_filter_error(
+                        code="INVALID_FILTER_VALUE",
+                        message="Campo de filtro no permitido para este reporte",
+                        detail={"campo": campo, "valor": valor}
+                    ),
+                    status_code=status.HTTP_400_BAD_REQUEST
+                )
+
+            operador_default = "contains" if tipo_por_campo.get(campo) == "search" else "eq"
+            if operador_default not in operadores_por_campo.get(campo, []):
+                operador_default = "eq"
+
+            try:
+                parsed_value = self._parse_filter_value(operador_default, valor)
+            except ValueError as exc:
+                raise BasedException(
+                    message=self._build_filter_error(
+                        code="INVALID_FILTER_VALUE",
+                        message="Valor de filtro inválido",
+                        detail={"campo": campo, "operador": operador_default, "valor": valor, "error": str(exc)}
+                    ),
+                    status_code=status.HTTP_400_BAD_REQUEST
+                )
+
+            filtros_operadores.append({
+                "campo": campo,
+                "operador": operador_default,
+                "valor": parsed_value
+            })
+
+        for campo, operadores in filtros_explicitos.items():
+            if campo not in campos_validos:
+                raise BasedException(
+                    message=self._build_filter_error(
+                        code="INVALID_FILTER_VALUE",
+                        message="Campo de filtro no permitido para este reporte",
+                        detail={"campo": campo, "valor": operadores}
+                    ),
+                    status_code=status.HTTP_400_BAD_REQUEST
+                )
+
+            for operador, valor in (operadores or {}).items():
+                operador_norm = str(operador).strip().lower()
+                if operador_norm not in OPERADORES_VALIDOS:
+                    raise BasedException(
+                        message=self._build_filter_error(
+                            code="INVALID_FILTER_OPERATOR",
+                            message="Operador de filtro inválido",
+                            detail={"campo": campo, "operador": operador}
+                        ),
+                        status_code=status.HTTP_400_BAD_REQUEST
+                    )
+
+                permitidos = operadores_por_campo.get(campo, [])
+                if operador_norm not in permitidos:
+                    raise BasedException(
+                        message=self._build_filter_error(
+                            code="INVALID_FILTER_OPERATOR",
+                            message="Operador no permitido para el campo",
+                            detail={"campo": campo, "operador": operador_norm, "permitidos": permitidos}
+                        ),
+                        status_code=status.HTTP_400_BAD_REQUEST
+                    )
+
+                try:
+                    parsed_value = self._parse_filter_value(operador_norm, valor)
+                except ValueError as exc:
+                    raise BasedException(
+                        message=self._build_filter_error(
+                            code="INVALID_FILTER_VALUE",
+                            message="Valor de filtro inválido",
+                            detail={"campo": campo, "operador": operador_norm, "valor": valor, "error": str(exc)}
+                        ),
+                        status_code=status.HTTP_400_BAD_REQUEST
+                    )
+
+                filtros_operadores.append({
+                    "campo": campo,
+                    "operador": operador_norm,
+                    "valor": parsed_value
+                })
+
+        filtros_norm['filtros_operadores'] = filtros_operadores
+        return filtros_norm
+
+    def _aplicar_regla_permanencia_activa(
+            self,
+            codigo_reporte: str,
+            filtros: Dict[str, Any]
+    ) -> Dict[str, Any]:
+        """
+        Para RPT_PERMANENCIA + en_puerto=true fuerza filtros de activos del día UTC.
+        """
+        if codigo_reporte != "RPT_PERMANENCIA":
+            return filtros
+
+        filtros_actualizados = filtros.copy()
+        filtros_operadores = list(filtros_actualizados.get('filtros_operadores', []))
+
+        en_puerto_activo = any(
+            f.get('campo') == 'en_puerto' and f.get('operador') == 'eq' and f.get('valor') is True
+            for f in filtros_operadores
+        )
+
+        if not en_puerto_activo:
+            return filtros_actualizados
+
+        filtros_salida = [
+            f for f in filtros_operadores if f.get('campo') == 'fecha_salida_puerto'
+        ]
+        for filtro in filtros_salida:
+            if not (filtro.get('operador') == 'is_null' and filtro.get('valor') is True):
+                raise BasedException(
+                    message=self._build_filter_error(
+                        code="CONFLICTING_FILTERS",
+                        message="Conflicto con regla de permanencia activa",
+                        detail={
+                            "campo": "fecha_salida_puerto",
+                            "filtro_conflictivo": filtro,
+                            "regla": "en_puerto=true requiere fecha_salida_puerto IS NULL"
+                        }
+                    ),
+                    status_code=status.HTTP_400_BAD_REQUEST
+                )
+
+        ahora_utc = datetime.now(timezone.utc)
+        inicio_dia_utc = datetime(
+            year=ahora_utc.year,
+            month=ahora_utc.month,
+            day=ahora_utc.day,
+            tzinfo=timezone.utc
+        ).replace(tzinfo=None)
+        fin_dia_utc = (inicio_dia_utc + timedelta(days=1)) - timedelta(milliseconds=1)
+
+        filtros_operadores = [
+            f for f in filtros_operadores
+            if f.get('campo') not in {'fecha_llegada_puerto', 'fecha_salida_puerto'}
+        ]
+
+        filtros_operadores.extend([
+            {"campo": "fecha_llegada_puerto", "operador": "gte", "valor": inicio_dia_utc},
+            {"campo": "fecha_llegada_puerto", "operador": "lte", "valor": fin_dia_utc},
+            {"campo": "fecha_salida_puerto", "operador": "is_null", "valor": True},
+        ])
+
+        filtros_actualizados['filtros_operadores'] = filtros_operadores
+        return filtros_actualizados
 
     # ========================================================
     # LISTADO DE REPORTES
@@ -127,6 +382,8 @@ class ReportesService:
 
         # Normalizar fechas en filtros (convertir datetime con timezone a naive datetime)
         filtros_normalizados = self._normalizar_filtros_fecha(filtros)
+        filtros_normalizados = self._normalizar_filtros_dinamicos(codigo_reporte, filtros_normalizados)
+        filtros_normalizados = self._aplicar_regla_permanencia_activa(codigo_reporte, filtros_normalizados)
         logger.debug(f"Filtros normalizados: {filtros_normalizados}")
 
         try:
@@ -160,6 +417,18 @@ class ReportesService:
             # Obtener columnas
             columnas_data = await self.reportes_repo.get_columnas_reporte(codigo_reporte)
             columnas = [ReporteColumnaResponse(**col) for col in columnas_data]
+
+            if filtros_normalizados.get('orden_campo'):
+                campos_ordenables = {col.campo for col in columnas if col.ordenable}
+                if filtros_normalizados['orden_campo'] not in campos_ordenables:
+                    raise BasedException(
+                        message=self._build_filter_error(
+                            code="INVALID_FILTER_VALUE",
+                            message="Campo de ordenamiento no permitido",
+                            detail={"campo": filtros_normalizados['orden_campo']}
+                        ),
+                        status_code=status.HTTP_400_BAD_REQUEST
+                    )
 
             # Agregar codigo_reporte a filtros para que el repositorio pueda determinar tipos de filtro
             filtros_normalizados['codigo_reporte'] = codigo_reporte
@@ -425,7 +694,9 @@ class ReportesService:
             filtro = FiltroColumna(
                 campo=config.campo,
                 nombre_mostrar=config.nombre_mostrar,
-                tipo_filtro=TipoFiltro(config.tipo_filtro)
+                tipo_filtro=TipoFiltro(config.tipo_filtro),
+                operadores_permitidos=config.operadores_permitidos,
+                tipo_dato_filtro=config.tipo_dato_filtro
             )
 
             if config.tipo_filtro == "select":
@@ -532,6 +803,8 @@ class ReportesService:
 
         # Normalizar fechas en filtros
         filtros_normalizados = self._normalizar_filtros_fecha(filtros)
+        filtros_normalizados = self._normalizar_filtros_dinamicos(codigo_reporte, filtros_normalizados)
+        filtros_normalizados = self._aplicar_regla_permanencia_activa(codigo_reporte, filtros_normalizados)
         logger.debug(f"Filtros normalizados para exportación: {filtros_normalizados}")
 
         # Verificar permiso de exportación

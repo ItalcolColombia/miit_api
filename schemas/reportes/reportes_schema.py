@@ -85,6 +85,14 @@ class FiltroColumna(BaseModel):
     campo: str = Field(..., description="Nombre del campo en la vista")
     nombre_mostrar: str = Field(..., description="Etiqueta a mostrar en el UI")
     tipo_filtro: TipoFiltro = Field(..., description="Tipo de filtro: select o search")
+    operadores_permitidos: Optional[List[str]] = Field(
+        None,
+        description="Operadores de filtro soportados por el backend"
+    )
+    tipo_dato_filtro: Optional[TipoDato] = Field(
+        None,
+        description="Tipo de dato esperado para validar y serializar filtros"
+    )
     opciones: Optional[List[OpcionFiltro]] = Field(
         None,
         description="Opciones para filtros tipo select"

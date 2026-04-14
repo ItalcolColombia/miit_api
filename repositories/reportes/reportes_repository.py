@@ -4,6 +4,7 @@ from typing import List, Dict, Any, Optional, Tuple
 from sqlalchemy import text, select, and_
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from core.config.filtros_reportes_config import get_filtros_reporte
 from database.models import Reporte, ReporteColumna, PermisoReporte
 
 
@@ -15,6 +16,85 @@ class ReportesRepository:
 
     def __init__(self, db: AsyncSession):
         self.db = db
+
+    def _build_dynamic_filter_clauses(
+            self,
+            filtros: Dict[str, Any],
+            param_prefix: str = "filtro"
+    ) -> Tuple[List[str], Dict[str, Any]]:
+        """
+        Construye cláusulas SQL y parámetros para filtros dinámicos.
+        Soporta la estructura filtros_operadores y mantiene fallback legacy.
+        """
+        clauses: List[str] = []
+        params: Dict[str, Any] = {}
+
+        filtros_operadores = filtros.get('filtros_operadores') or []
+
+        if filtros_operadores:
+            for idx, filtro in enumerate(filtros_operadores):
+                campo = filtro.get('campo')
+                operador = str(filtro.get('operador', '')).lower()
+                valor = filtro.get('valor')
+                param_base = f"{param_prefix}_{idx}_{campo}"
+
+                if operador == 'eq':
+                    param_name = f"{param_base}_eq"
+                    clauses.append(f"{campo} = :{param_name}")
+                    params[param_name] = valor
+                elif operador == 'ne':
+                    param_name = f"{param_base}_ne"
+                    clauses.append(f"{campo} <> :{param_name}")
+                    params[param_name] = valor
+                elif operador == 'gte':
+                    param_name = f"{param_base}_gte"
+                    clauses.append(f"{campo} >= :{param_name}")
+                    params[param_name] = valor
+                elif operador == 'lte':
+                    param_name = f"{param_base}_lte"
+                    clauses.append(f"{campo} <= :{param_name}")
+                    params[param_name] = valor
+                elif operador == 'contains':
+                    param_name = f"{param_base}_contains"
+                    clauses.append(f"{campo} ILIKE :{param_name}")
+                    params[param_name] = f"%{valor}%"
+                elif operador == 'in':
+                    valores = valor if isinstance(valor, list) else []
+                    if not valores:
+                        continue
+
+                    placeholders = []
+                    for sub_idx, item in enumerate(valores):
+                        item_param = f"{param_base}_in_{sub_idx}"
+                        placeholders.append(f":{item_param}")
+                        params[item_param] = item
+
+                    clauses.append(f"{campo} IN ({', '.join(placeholders)})")
+                elif operador == 'is_null':
+                    clauses.append(f"{campo} IS NULL")
+                elif operador == 'is_not_null':
+                    clauses.append(f"{campo} IS NOT NULL")
+
+            return clauses, params
+
+        # Fallback legacy para compatibilidad con integraciones antiguas.
+        filtros_columna = filtros.get('filtros_columna', {})
+        for campo, valor in filtros_columna.items():
+            if not valor:
+                continue
+
+            filtros_config = get_filtros_reporte(filtros.get('codigo_reporte', ''))
+            filtro_info = next((f for f in filtros_config if f.campo == campo), None)
+
+            param_name = f"{param_prefix}_{campo}"
+            if filtro_info and filtro_info.tipo_filtro == "search":
+                clauses.append(f"{campo} ILIKE :{param_name}")
+                params[param_name] = f"%{valor}%"
+            else:
+                clauses.append(f"{campo} = :{param_name}")
+                params[param_name] = valor
+
+        return clauses, params
 
     # ========================================================
     # CATÁLOGO DE REPORTES
@@ -213,23 +293,12 @@ class ReportesRepository:
             where_clauses.append(f"{campo_fecha} <= CAST(:fecha_fin AS timestamp)")
             params['fecha_fin'] = filtros['fecha_fin']
 
-        # Filtros dinámicos de columna
-        filtros_columna = filtros.get('filtros_columna', {})
-        for campo, valor in filtros_columna.items():
-            if valor:
-                # Determinar tipo de filtro basado en configuración
-                from core.config.filtros_reportes_config import get_filtros_reporte
-                filtros_config = get_filtros_reporte(filtros.get('codigo_reporte', ''))
-                filtro_info = next((f for f in filtros_config if f.campo == campo), None)
-
-                if filtro_info and filtro_info.tipo_filtro == "search":
-                    # Búsqueda parcial case-insensitive (ILIKE)
-                    where_clauses.append(f"{campo} ILIKE :filtro_{campo}")
-                    params[f'filtro_{campo}'] = f"%{valor}%"
-                else:
-                    # Coincidencia exacta para filtros tipo select
-                    where_clauses.append(f"{campo} = :filtro_{campo}")
-                    params[f'filtro_{campo}'] = valor
+        dynamic_clauses, dynamic_params = self._build_dynamic_filter_clauses(
+            filtros,
+            param_prefix="filtro"
+        )
+        where_clauses.extend(dynamic_clauses)
+        params.update(dynamic_params)
 
         # Construir WHERE
         where_sql = ""
@@ -273,20 +342,12 @@ class ReportesRepository:
                     corte_where.append("codigo_material = :codigo_material")
                     corte_params['codigo_material'] = codigo_material
 
-            # Filtros dinámicos de columna
-            filtros_columna = filtros.get('filtros_columna', {})
-            for campo, valor in filtros_columna.items():
-                if valor:
-                    from core.config.filtros_reportes_config import get_filtros_reporte
-                    filtros_config = get_filtros_reporte(filtros.get('codigo_reporte', ''))
-                    filtro_info = next((f for f in filtros_config if f.campo == campo), None)
-
-                    if filtro_info and filtro_info.tipo_filtro == "search":
-                        corte_where.append(f"{campo} ILIKE :filtro_{campo}")
-                        corte_params[f'filtro_{campo}'] = f"%{valor}%"
-                    else:
-                        corte_where.append(f"{campo} = :filtro_{campo}")
-                        corte_params[f'filtro_{campo}'] = valor
+            dynamic_clauses, dynamic_params = self._build_dynamic_filter_clauses(
+                filtros,
+                param_prefix="corte_filtro"
+            )
+            corte_where.extend(dynamic_clauses)
+            corte_params.update(dynamic_params)
 
             corte_where_sql = ""
             if corte_where:
@@ -492,18 +553,12 @@ class ReportesRepository:
                     corte_where.append("codigo_material = :codigo_material")
                     corte_params['codigo_material'] = codigo_material
 
-            filtros_columna = filtros.get('filtros_columna', {})
-            for campo, valor in filtros_columna.items():
-                if valor:
-                    from core.config.filtros_reportes_config import get_filtros_reporte
-                    filtros_config = get_filtros_reporte(filtros.get('codigo_reporte', ''))
-                    filtro_info = next((f for f in filtros_config if f.campo == campo), None)
-                    if filtro_info and filtro_info.tipo_filtro == "search":
-                        corte_where.append(f"{campo} ILIKE :filtro_{campo}")
-                        corte_params[f'filtro_{campo}'] = f"%{valor}%"
-                    else:
-                        corte_where.append(f"{campo} = :filtro_{campo}")
-                        corte_params[f'filtro_{campo}'] = valor
+            dynamic_clauses, dynamic_params = self._build_dynamic_filter_clauses(
+                filtros,
+                param_prefix="totales_corte_filtro"
+            )
+            corte_where.extend(dynamic_clauses)
+            corte_params.update(dynamic_params)
 
             corte_where_sql = ""
             if corte_where:
@@ -577,20 +632,12 @@ class ReportesRepository:
             where_clauses.append(f"{campo_fecha} <= CAST(:fecha_fin AS timestamp)")
             params['fecha_fin'] = filtros['fecha_fin']
 
-        # Filtros dinámicos de columna
-        filtros_columna = filtros.get('filtros_columna', {})
-        for campo, valor in filtros_columna.items():
-            if valor:
-                from core.config.filtros_reportes_config import get_filtros_reporte
-                filtros_config = get_filtros_reporte(filtros.get('codigo_reporte', ''))
-                filtro_info = next((f for f in filtros_config if f.campo == campo), None)
-
-                if filtro_info and filtro_info.tipo_filtro == "search":
-                    where_clauses.append(f"{campo} ILIKE :filtro_{campo}")
-                    params[f'filtro_{campo}'] = f"%{valor}%"
-                else:
-                    where_clauses.append(f"{campo} = :filtro_{campo}")
-                    params[f'filtro_{campo}'] = valor
+        dynamic_clauses, dynamic_params = self._build_dynamic_filter_clauses(
+            filtros,
+            param_prefix="totales_filtro"
+        )
+        where_clauses.extend(dynamic_clauses)
+        params.update(dynamic_params)
 
         where_sql = ""
         if where_clauses:
