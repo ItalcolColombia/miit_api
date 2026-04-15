@@ -268,25 +268,17 @@ class ReportesService:
                     status_code=status.HTTP_400_BAD_REQUEST
                 )
 
-        ahora_utc = datetime.now(timezone.utc)
-        inicio_dia_utc = datetime(
-            year=ahora_utc.year,
-            month=ahora_utc.month,
-            day=ahora_utc.day,
-            tzinfo=timezone.utc
-        ).replace(tzinfo=None)
-        fin_dia_utc = (inicio_dia_utc + timedelta(days=1)) - timedelta(milliseconds=1)
-
+        # Una cita "activa" es cualquiera sin fecha_salida_puerto, sin importar el
+        # día de llegada: un camión que llegó ayer y aún no ha salido sigue activo.
+        # Se respeta fecha_inicio/fecha_fin que envíe el cliente sobre fecha_llegada_puerto.
         filtros_operadores = [
             f for f in filtros_operadores
-            if f.get('campo') not in {'fecha_llegada_puerto', 'fecha_salida_puerto'}
+            if f.get('campo') != 'fecha_salida_puerto'
         ]
 
-        filtros_operadores.extend([
-            {"campo": "fecha_llegada_puerto", "operador": "gte", "valor": inicio_dia_utc},
-            {"campo": "fecha_llegada_puerto", "operador": "lte", "valor": fin_dia_utc},
-            {"campo": "fecha_salida_puerto", "operador": "is_null", "valor": True},
-        ])
+        filtros_operadores.append(
+            {"campo": "fecha_salida_puerto", "operador": "is_null", "valor": True}
+        )
 
         filtros_actualizados['filtros_operadores'] = filtros_operadores
         return filtros_actualizados

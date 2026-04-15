@@ -709,10 +709,7 @@ class ExportacionService:
             fila_filtrada = {campo: fila.get(campo, '') for campo in campos}
             datos_filtrados.append(fila_filtrada)
 
-        df = pd.DataFrame(datos_filtrados)
-
-        # Reordenar columnas
-        df = df[campos]
+        df = pd.DataFrame(datos_filtrados, columns=campos)
 
         # Renombrar columnas
         df.rename(columns=nombres, inplace=True)

@@ -54,9 +54,10 @@ class TestReportesFiltrosOperadores(unittest.TestCase):
         filtros_operadores = aplicados["filtros_operadores"]
         campos_operadores = {(f["campo"], f["operador"]) for f in filtros_operadores}
 
-        self.assertIn(("fecha_llegada_puerto", "gte"), campos_operadores)
-        self.assertIn(("fecha_llegada_puerto", "lte"), campos_operadores)
+        # Una cita activa es cualquiera sin fecha_salida_puerto, sin importar la llegada
         self.assertIn(("fecha_salida_puerto", "is_null"), campos_operadores)
+        self.assertNotIn(("fecha_llegada_puerto", "gte"), campos_operadores)
+        self.assertNotIn(("fecha_llegada_puerto", "lte"), campos_operadores)
 
 
 if __name__ == "__main__":
