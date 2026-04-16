@@ -18,6 +18,10 @@ from core.middleware.auth_middleware import AuthMiddleware
 from core.middleware.error_middleware import ErrorMiddleware
 from core.middleware.logger_middleware import LoggerMiddleware
 from core.middleware.time_middleware import TimeMiddleware
+from services.camioncargue_scheduler import (
+    shutdown_camioncargue_scheduler,
+    start_camioncargue_scheduler,
+)
 from utils.database_util import DatabaseUtil
 from utils.logger_util import LoggerUtil
 from utils.message_util import MessageUtil
@@ -51,9 +55,17 @@ async def lifespan(app: FastAPI):
         except Exception as e:
             log.warning(f"No se pudo leer APP_TIMEZONE en startup: {e}")
         await startup_event()
+        try:
+            start_camioncargue_scheduler()
+        except Exception as e:
+            log.error(f"No se pudo iniciar el worker CamionCargue: {e}", exc_info=True)
         yield
     finally:
         # Shutdown
+        try:
+            shutdown_camioncargue_scheduler()
+        except Exception as e:
+            log.warning(f"Error al detener el worker CamionCargue: {e}")
         log.info("Application shutdown")
 app = FastAPI(
     title="Servicio Interconsulta MIIT",

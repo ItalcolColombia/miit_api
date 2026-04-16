@@ -709,21 +709,28 @@ class TransaccionesService:
 
     async def _ejecutar_finalizacion_camion(self, tran: TransaccionResponse) -> Optional[dict]:
         """
-        Ejecuta la lógica de finalización de camión (despacho):
-        - Actualiza el estado_operador de la flota a False
-        - Envía notificación a la API externa CamionCargue
-        - Si es despacho directo, envía notificación adicional a la API externa (similar a FinalizaBuque)
+        Ejecuta la logica de finalizacion de camion (despacho):
+        - Actualiza el estado_operador de la flota a False.
+        - Para despacho directo: programa (o reprograma) el envio diferido
+          a CamionCargue via debounce, para permitir agrupar multiples
+          transacciones del mismo viaje en un unico payload. El envio real
+          lo ejecuta el worker periodico (services.camioncargue_scheduler).
+        - Para despacho no-directo: envia inmediatamente la notificacion
+          CamionCargue (comportamiento historico).
 
         Args:
-            tran: La transacción de despacho que se acaba de finalizar
+            tran: La transaccion de despacho que se acaba de finalizar
 
         Returns:
             dict: Resultado con 'success' (bool), 'message' (str), y opcionalmente 'flota_actualizada' (bool)
         """
+        from datetime import timedelta
+
         from core.config.settings import get_settings
         from services.ext_api_service import ExtApiService
         from schemas.ext_api_schema import NotificationCargue
         from utils.any_utils import AnyUtils
+        from utils.time_util import now_local
         import httpx
 
         resultado = {
@@ -771,8 +778,46 @@ class TransaccionesService:
                 resultado['message'] = f"Error al actualizar estado de flota: {e_flota}"
                 # Continuar con la notificación aunque falle la actualización de estado
 
-            # Enviar notificación a API externa CamionCargue
             settings = get_settings()
+
+            # Despacho directo: diferir y consolidar via worker.
+            # La API externa solo acepta un envio por camion y el puerto se queda
+            # con el primero, por lo que enviar al finalizar cada transaccion
+            # ocasionaria que las transacciones adicionales se pierdan.
+            if viaje.despacho_directo:
+                debounce_minutes = settings.CAMIONCARGUE_DEBOUNCE_MINUTES
+                notify_at = now_local() + timedelta(minutes=debounce_minutes)
+                try:
+                    scheduled = await self.viajes_repo.schedule_camioncargue_notification(viaje_id, notify_at)
+                    if scheduled:
+                        log.info(
+                            f"CamionCargue diferido para viaje {viaje_id} (despacho directo). "
+                            f"notify_at={notify_at.isoformat()} (debounce={debounce_minutes}min)"
+                        )
+                        resultado['success'] = True
+                        resultado['message'] = (
+                            f"Notificación CamionCargue programada para envío consolidado "
+                            f"en {debounce_minutes} minutos"
+                        )
+                    else:
+                        log.info(
+                            f"Viaje {viaje_id} ya fue notificado a CamionCargue previamente; "
+                            f"transacción {tran.id} se registra pero no dispara reenvío."
+                        )
+                        resultado['success'] = True
+                        resultado['message'] = (
+                            "Viaje ya notificado previamente a CamionCargue; "
+                            "transacción registrada sin reenvío."
+                        )
+                except Exception as e_sched:
+                    log.error(
+                        f"Error al programar envío diferido CamionCargue para viaje {viaje_id}: {e_sched}",
+                        exc_info=True,
+                    )
+                    resultado['message'] = f"Error al programar envío diferido CamionCargue: {e_sched}"
+                return resultado
+
+            # Despacho no-directo: envio inmediato (comportamiento historico).
             ext_service = ExtApiService()
 
             notification = NotificationCargue(
@@ -846,6 +891,17 @@ class TransaccionesService:
         if not viaje:
             raise EntityNotFoundException("Viajes", viaje_id)
 
+        # Idempotencia: si ya fue notificado, no re-enviar (la API externa solo
+        # acepta un envio por camion y el puerto se queda con el primero).
+        if getattr(viaje, 'camioncargue_notified_at', None) is not None:
+            resultado['success'] = True
+            resultado['message'] = (
+                f"Viaje {viaje_id} ya fue notificado a CamionCargue en "
+                f"{viaje.camioncargue_notified_at.isoformat()}; no se re-envia."
+            )
+            log.info(resultado['message'])
+            return resultado
+
         # Obtener la flota
         flota = await self.flotas_repo.get_by_id(viaje.flota_id)
         if not flota:
@@ -905,6 +961,16 @@ class TransaccionesService:
                      f"({len(transacciones)} transacciones, peso_total={peso_total}) con request: {serialized}")
             await ext_service.post(serialized, endpoint)
             log.info(f"Notificación CamionCargue enviada exitosamente para viaje {viaje_id} (puerto_id={viaje.puerto_id})")
+            # Marcar el viaje como notificado para evitar reenvios por el worker
+            # o por llamadas manuales posteriores.
+            try:
+                await self.viajes_repo.mark_camioncargue_notified(viaje_id)
+            except Exception as e_mark:
+                log.error(
+                    f"Notificacion CamionCargue enviada pero fallo marcar notified_at "
+                    f"en viaje {viaje_id}: {e_mark}",
+                    exc_info=True,
+                )
             resultado['success'] = True
             resultado['message'] = (
                 f"Notificación CamionCargue enviada exitosamente. "

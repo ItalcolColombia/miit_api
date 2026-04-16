@@ -92,6 +92,8 @@ class Viajes(Base):
     material_id = Column(Integer,nullable=True)
     viaje_origen = Column(String(300),nullable=True)
     despacho_directo = Column(Boolean, nullable=True)
+    camioncargue_notify_at = Column(DateTime(timezone=True), nullable=True)
+    camioncargue_notified_at = Column(DateTime(timezone=True), nullable=True)
     fecha_hora = Column(DateTime(timezone=True), server_default=func.timezone('America/Bogota', func.now()), onupdate=func.timezone('America/Bogota', func.now()))
     usuario_id = Column(Integer, nullable=True)
     bl_id = Column(Integer, nullable=True)

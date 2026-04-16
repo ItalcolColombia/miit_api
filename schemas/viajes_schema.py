@@ -19,6 +19,8 @@ class ViajesResponse(BaseSchema):
     material_id: Optional[int] = None
     viaje_origen: Optional[str] = None
     despacho_directo: Optional[bool] = None
+    camioncargue_notify_at: Optional[datetime] = None
+    camioncargue_notified_at: Optional[datetime] = None
     fecha_hora: Optional[datetime] = None
     usuario_id: Optional[int] = None
     bl_id: Optional[int] = None

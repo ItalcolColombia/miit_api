@@ -81,6 +81,14 @@ class Settings(BaseSettings):
     TG_API_VERIFY_SSL: str = "True"
     TG_API_SSL_CERT_BASE64: Optional[str] = None
 
+    # ==================== CamionCargue Debounce ====================
+    # Ventana de espera (minutos) tras finalizar una transaccion de despacho directo
+    # antes de enviar la notificacion consolidada a CamionCargue. Una nueva
+    # transaccion dentro de la ventana reinicia el contador.
+    CAMIONCARGUE_DEBOUNCE_MINUTES: int = 30
+    # Frecuencia (segundos) con que el worker revisa viajes pendientes de notificar.
+    CAMIONCARGUE_WORKER_INTERVAL_SECONDS: int = 60
+
     model_config = SettingsConfigDict(
         env_file=".env",
         case_sensitive=True,

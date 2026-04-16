@@ -1,6 +1,7 @@
+from datetime import datetime
 from typing import List, Optional
 
-from sqlalchemy import select, func, and_, or_, literal
+from sqlalchemy import select, update as sa_update, func, and_, or_, literal
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import aliased
 
@@ -20,6 +21,54 @@ class ViajesRepository(IRepository[Viajes, ViajesResponse]):
     def __init__(self, model: type[Viajes], schema: type[ViajesResponse], db: AsyncSession, auditor:Auditor) -> None:
         self.db = db
         super().__init__(model, schema, db, auditor)
+
+    async def schedule_camioncargue_notification(self, viaje_id: int, notify_at: datetime) -> bool:
+        """
+        Programa (o reprograma) el envio diferido de CamionCargue para un viaje.
+        Solo actualiza si la notificacion aun no fue enviada (camioncargue_notified_at IS NULL).
+        No genera log de auditoria: es una marca de sistema, no una accion de usuario.
+
+        Returns:
+            True si se actualizo la fila, False si el viaje ya fue notificado.
+        """
+        stmt = (
+            sa_update(Viajes)
+            .where(Viajes.id == viaje_id)
+            .where(Viajes.camioncargue_notified_at.is_(None))
+            .values(camioncargue_notify_at=notify_at)
+        )
+        result = await self.db.execute(stmt)
+        await self.db.commit()
+        return (result.rowcount or 0) > 0
+
+    async def mark_camioncargue_notified(self, viaje_id: int, notified_at: Optional[datetime] = None) -> bool:
+        """
+        Marca el viaje como notificado a CamionCargue (envio consolidado exitoso).
+        """
+        stmt = (
+            sa_update(Viajes)
+            .where(Viajes.id == viaje_id)
+            .values(camioncargue_notified_at=notified_at or now_local())
+        )
+        result = await self.db.execute(stmt)
+        await self.db.commit()
+        return (result.rowcount or 0) > 0
+
+    async def find_pending_camioncargue_viaje_ids(self, limit: int = 50) -> List[int]:
+        """
+        Devuelve ids de viajes cuya ventana de debounce ya expiro y aun no se
+        ha enviado la notificacion consolidada a CamionCargue.
+        """
+        stmt = (
+            select(Viajes.id)
+            .where(Viajes.camioncargue_notify_at.is_not(None))
+            .where(Viajes.camioncargue_notified_at.is_(None))
+            .where(Viajes.camioncargue_notify_at <= now_local())
+            .order_by(Viajes.camioncargue_notify_at.asc())
+            .limit(limit)
+        )
+        result = await self.db.execute(stmt)
+        return [row[0] for row in result.all()]
 
     async def get_buques_disponibles(self) -> List[ViajesActResponse] | None:
         """
