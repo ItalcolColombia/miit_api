@@ -373,7 +373,7 @@ class ViajesService:
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
 
-    async def chg_estado_flota(self, puerto_id: Optional[str] = None, estado_puerto: Optional[bool] = None, estado_operador: Optional[bool] = None, viaje_id: Optional[int] = None, fecha_llegada: Optional[datetime] = None, fecha_salida: Optional[datetime] = None) -> FlotasResponse:
+    async def chg_estado_flota(self, puerto_id: Optional[str] = None, estado_puerto: Optional[bool] = None, estado_operador: Optional[bool] = None, viaje_id: Optional[int] = None, fecha_llegada: Optional[datetime] = None, fecha_salida: Optional[datetime] = None, reset_fecha_salida: bool = False) -> FlotasResponse:
         """
         Change the status of a flota associated with a viaje.
 
@@ -410,7 +410,7 @@ class ViajesService:
                 raise EntityNotFoundException(f"Flota con id '{viaje.flota_id}' no existe")
 
             # Actualizar fechas del viaje si se proporcionan
-            if fecha_llegada is not None or fecha_salida is not None:
+            if fecha_llegada is not None or fecha_salida is not None or reset_fecha_salida:
                 from utils.time_util import normalize_to_app_tz
                 update_fields = {}
                 if fecha_llegada is not None:
@@ -421,6 +421,9 @@ class ViajesService:
                     fecha_salida_norm = normalize_to_app_tz(fecha_salida)
                     log.info(f"[DEBUG chg_estado_flota] fecha_salida original={fecha_salida} (tzinfo={getattr(fecha_salida, 'tzinfo', None)}), normalizada={fecha_salida_norm} (tzinfo={getattr(fecha_salida_norm, 'tzinfo', None)})")
                     update_fields["fecha_salida"] = fecha_salida_norm
+                elif reset_fecha_salida:
+                    update_fields["fecha_salida"] = None
+                    log.info(f"[DEBUG chg_estado_flota] fecha_salida reseteada a None")
                 update_data = ViajeUpdate(**update_fields)
                 await self._repo.update(viaje.id, update_data)
                 log.info(f"Fechas actualizadas para viaje {viaje.id}: {update_fields}")
