@@ -709,14 +709,18 @@ class TransaccionesService:
 
     async def _ejecutar_finalizacion_camion(self, tran: TransaccionResponse) -> Optional[dict]:
         """
-        Ejecuta la logica de finalizacion de camion (despacho):
+        Ejecuta la logica de finalizacion de camion (despacho). Aplica a todo
+        despacho de camion (directo o no), ya que CamionCargue debe recibir un
+        unico payload consolidado por viaje (el puerto se queda con el primero).
+
+        Flujo:
         - Actualiza el estado_operador de la flota a False.
-        - Para despacho directo: programa (o reprograma) el envio diferido
-          a CamionCargue via debounce, para permitir agrupar multiples
-          transacciones del mismo viaje en un unico payload. El envio real
-          lo ejecuta el worker periodico (services.camioncargue_scheduler).
-        - Para despacho no-directo: envia inmediatamente la notificacion
-          CamionCargue (comportamiento historico).
+        - Siempre (re)programa el debounce en viajes.camioncargue_notify_at
+          para agrupar multiples transacciones del mismo viaje. El worker
+          periodico (services.camioncargue_scheduler) envia cuando vence.
+        - Si peso_tara > 0 y (peso_tara - peso_acumulado) < threshold, dispara
+          envio inmediato: asume que la transaccion recien finalizada completa
+          el cargue. El debounce queda como respaldo si el envio inmediato falla.
 
         Args:
             tran: La transaccion de despacho que se acaba de finalizar
@@ -727,11 +731,7 @@ class TransaccionesService:
         from datetime import timedelta
 
         from core.config.settings import get_settings
-        from services.ext_api_service import ExtApiService
-        from schemas.ext_api_schema import NotificationCargue
-        from utils.any_utils import AnyUtils
         from utils.time_util import now_local
-        import httpx
 
         resultado = {
             'success': False,
@@ -746,27 +746,24 @@ class TransaccionesService:
             return resultado
 
         try:
-            # Obtener el viaje
             viaje = await self.viajes_repo.get_by_id(viaje_id)
             if not viaje:
                 log.error(f"No se encontró viaje con ID {viaje_id} para finalización de camión")
                 resultado['message'] = f"No se encontró viaje con ID {viaje_id}"
                 return resultado
 
-            # Obtener la flota
             flota = await self.flotas_repo.get_by_id(viaje.flota_id)
             if not flota:
                 log.error(f"No se encontró flota con ID {viaje.flota_id} para finalización de camión")
                 resultado['message'] = f"No se encontró flota con ID {viaje.flota_id}"
                 return resultado
 
-            # Verificar que sea un camión
             if flota.tipo != "camion":
                 log.warning(f"Flota {flota.id} no es de tipo camion, es {flota.tipo}. No se ejecuta finalización de camión")
                 resultado['message'] = f"Flota no es de tipo camion, es {flota.tipo}"
                 return resultado
 
-            # Actualizar estado_operador de la flota a False
+            # Liberar operador para que pueda recibir otra cita
             try:
                 from schemas.flotas_schema import FlotaUpdate
                 update_data = FlotaUpdate(estado_operador=False)
@@ -776,84 +773,93 @@ class TransaccionesService:
             except Exception as e_flota:
                 log.error(f"Error al actualizar estado de flota {flota.id}: {e_flota}")
                 resultado['message'] = f"Error al actualizar estado de flota: {e_flota}"
-                # Continuar con la notificación aunque falle la actualización de estado
+                # Continuar aunque falle el update de flota
 
             settings = get_settings()
+            debounce_minutes = settings.CAMIONCARGUE_DEBOUNCE_MINUTES
 
-            # Despacho directo: diferir y consolidar via worker.
-            # La API externa solo acepta un envio por camion y el puerto se queda
-            # con el primero, por lo que enviar al finalizar cada transaccion
-            # ocasionaria que las transacciones adicionales se pierdan.
-            if viaje.despacho_directo:
-                debounce_minutes = settings.CAMIONCARGUE_DEBOUNCE_MINUTES
+            # 1) Siempre programar/reprogramar el debounce. Si ya fue notificado,
+            # schedule_camioncargue_notification devuelve False y salimos.
+            try:
                 notify_at = now_local() + timedelta(minutes=debounce_minutes)
-                try:
-                    scheduled = await self.viajes_repo.schedule_camioncargue_notification(viaje_id, notify_at)
-                    if scheduled:
-                        log.info(
-                            f"CamionCargue diferido para viaje {viaje_id} (despacho directo). "
-                            f"notify_at={notify_at.isoformat()} (debounce={debounce_minutes}min)"
-                        )
-                        resultado['success'] = True
-                        resultado['message'] = (
-                            f"Notificación CamionCargue programada para envío consolidado "
-                            f"en {debounce_minutes} minutos"
-                        )
-                    else:
-                        log.info(
-                            f"Viaje {viaje_id} ya fue notificado a CamionCargue previamente; "
-                            f"transacción {tran.id} se registra pero no dispara reenvío."
-                        )
-                        resultado['success'] = True
-                        resultado['message'] = (
-                            "Viaje ya notificado previamente a CamionCargue; "
-                            "transacción registrada sin reenvío."
-                        )
-                except Exception as e_sched:
-                    log.error(
-                        f"Error al programar envío diferido CamionCargue para viaje {viaje_id}: {e_sched}",
-                        exc_info=True,
+                scheduled = await self.viajes_repo.schedule_camioncargue_notification(viaje_id, notify_at)
+                if not scheduled:
+                    log.info(
+                        f"Viaje {viaje_id} ya fue notificado a CamionCargue previamente; "
+                        f"transacción {tran.id} se registra sin reenvío."
                     )
-                    resultado['message'] = f"Error al programar envío diferido CamionCargue: {e_sched}"
+                    resultado['success'] = True
+                    resultado['message'] = (
+                        "Viaje ya notificado previamente a CamionCargue; "
+                        "transacción registrada sin reenvío."
+                    )
+                    return resultado
+                log.info(
+                    f"CamionCargue debounce programado para viaje {viaje_id}. "
+                    f"notify_at={notify_at.isoformat()} (debounce={debounce_minutes}min)"
+                )
+            except Exception as e_sched:
+                log.error(
+                    f"Error al programar debounce CamionCargue para viaje {viaje_id}: {e_sched}",
+                    exc_info=True,
+                )
+                resultado['message'] = f"Error al programar debounce CamionCargue: {e_sched}"
                 return resultado
 
-            # Despacho no-directo: envio inmediato (comportamiento historico).
-            ext_service = ExtApiService()
-
-            notification = NotificationCargue(
-                truckPlate=flota.referencia,
-                truckTransaction=viaje.puerto_id,
-                weighingPitId=tran.pit,
-                weight=float(tran.peso_real) if tran.peso_real is not None else None,
-                despacho_directo=viaje.despacho_directo
-            ).model_dump()
-
-            endpoint = f"{settings.TG_API_URL}/api/v1/Metalsoft/CamionCargue"
-
+            # 2) Disparador por peso: si peso_tara > 0 y el acumulado cubre
+            # (o excede) peso_tara menos el umbral, enviamos de inmediato.
+            should_send_now = False
             try:
-                serialized = AnyUtils.serialize_data(notification)
-                log.info(f"Notificación CamionCargue para flota {flota.referencia} con request: {serialized}")
-                await ext_service.post(serialized, endpoint)
-                log.info(f"Notificación CamionCargue enviada exitosamente para viaje {viaje_id} (puerto_id={viaje.puerto_id})")
-                resultado['success'] = True
-                resultado['message'] = "Notificación CamionCargue enviada exitosamente"
-            except httpx.HTTPStatusError as e:
-                # Intentar extraer un JSON de la respuesta; si no es JSON usar el texto
+                peso_tara = Decimal(str(viaje.peso_tara)) if viaje.peso_tara is not None else Decimal(0)
+            except Exception:
+                peso_tara = Decimal(0)
+
+            if peso_tara > 0:
                 try:
-                    error_json = e.response.json()
-                except Exception:
-                    error_json = None
+                    trans_finalizadas = await self._repo.find_finalized_by_viaje(viaje_id, tipo='Despacho')
+                    peso_acumulado = sum(
+                        (t.peso_real for t in trans_finalizadas if t.peso_real is not None),
+                        Decimal(0),
+                    )
+                    restante = peso_tara - peso_acumulado
+                    threshold = Decimal(settings.CAMIONCARGUE_PESO_THRESHOLD_KG)
+                    if restante < threshold:
+                        should_send_now = True
+                        log.info(
+                            f"Viaje {viaje_id}: peso_acumulado={peso_acumulado} vs peso_tara={peso_tara} "
+                            f"(restante={restante}, umbral={threshold}). Disparando envío inmediato."
+                        )
+                except Exception as e_calc:
+                    log.error(
+                        f"Error calculando peso acumulado para viaje {viaje_id}: {e_calc}. "
+                        f"Se mantiene el debounce como fallback.",
+                        exc_info=True,
+                    )
 
-                if isinstance(error_json, dict):
-                    msg = error_json.get('message') or error_json.get('error') or e.response.text
-                else:
-                    msg = e.response.text
+            if not should_send_now:
+                resultado['success'] = True
+                resultado['message'] = (
+                    f"Notificación CamionCargue programada para envío consolidado en "
+                    f"{debounce_minutes} minutos"
+                )
+                return resultado
 
-                log.error(f"Notificación CamionCargue falló. API externa error: {e.response.status_code}: {e.response.text}")
-                resultado['message'] = f"Notificación CamionCargue falló. API externa error: {msg}"
-            except Exception as e_notify:
-                log.error(f"Error inesperado al enviar notificación CamionCargue para flota {flota.referencia}: {e_notify}", exc_info=True)
-                resultado['message'] = f"Error inesperado al enviar notificación: {e_notify}"
+            # 3) Envío inmediato. enviar_camion_cargue es idempotente
+            # (camioncargue_notified_at) y al marcarlo, el worker ignora el viaje.
+            try:
+                envio = await self.enviar_camion_cargue(viaje_id)
+                resultado['success'] = bool(envio.get('success', False))
+                resultado['message'] = envio.get('message') or "Envío inmediato CamionCargue por umbral de peso"
+            except Exception as e_send:
+                log.error(
+                    f"Envío inmediato CamionCargue falló para viaje {viaje_id}; "
+                    f"el debounce queda como respaldo: {e_send}",
+                    exc_info=True,
+                )
+                resultado['success'] = True
+                resultado['message'] = (
+                    f"Envío inmediato falló; debounce de {debounce_minutes} min programado como respaldo"
+                )
 
             return resultado
 

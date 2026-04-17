@@ -82,12 +82,17 @@ class Settings(BaseSettings):
     TG_API_SSL_CERT_BASE64: Optional[str] = None
 
     # ==================== CamionCargue Debounce ====================
-    # Ventana de espera (minutos) tras finalizar una transaccion de despacho directo
+    # Ventana de espera (minutos) tras finalizar una transaccion de despacho
     # antes de enviar la notificacion consolidada a CamionCargue. Una nueva
     # transaccion dentro de la ventana reinicia el contador.
     CAMIONCARGUE_DEBOUNCE_MINUTES: int = 30
     # Frecuencia (segundos) con que el worker revisa viajes pendientes de notificar.
     CAMIONCARGUE_WORKER_INTERVAL_SECONDS: int = 60
+    # Umbral (kg) para disparar envio inmediato sin esperar el debounce.
+    # Si (peso_tara - peso_acumulado) < umbral, se asume que la transaccion
+    # recien finalizada completa el cargue y se envia ya. Tambien dispara si
+    # el acumulado excede el peso_tara (restante negativo).
+    CAMIONCARGUE_PESO_THRESHOLD_KG: int = 500
 
     model_config = SettingsConfigDict(
         env_file=".env",
