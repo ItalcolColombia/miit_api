@@ -143,6 +143,7 @@ class ViajesService:
             # 4. Ajustar el schema al requerido
             viaje_data = viaje_create.model_dump(exclude={"referencia", "estado"})
             viaje_data["flota_id"] = flota.id
+            viaje_data["estado"] = "Programada"
 
             # Salvaguarda: asegurar que las fechas estén en UTC (aceptar casos donde el validador no se ejecutó)
             for f in ("fecha_llegada", "fecha_salida", "fecha_hora"):
@@ -334,6 +335,7 @@ class ViajesService:
             viaje_data["flota_id"] = flota.id
             viaje_data["material_id"] = material_id
             viaje_data["bl_id"] = bl_id
+            viaje_data["estado"] = "Programada"
 
             # La normalización de las fechas se delega al repositorio base (_normalize_datetimes).
             # El schema ViajeCamionExtCreate ya normaliza vía @field_validator.
@@ -359,6 +361,12 @@ class ViajesService:
             created_viaje = await self.get_viaje_by_puerto_id(viaje_create.puerto_id)
             if not created_viaje:
                 raise EntityNotFoundException("Error al recuperar la cita recién creada")
+
+            # 10. Auto-cancelar citas Programadas previas de la misma flota dentro de la ventana
+            # de 24h (mitigacion del ruido de citas zombi: la plataforma externa no notifica
+            # cuando una cita se anula, asi que asumimos que la cita mas reciente reemplaza a
+            # las anteriores no consumidas).
+            await self._cancelar_citas_reemplazadas(flota.id, created_viaje.id)
 
             return ViajesResponse(**created_viaje.__dict__)
         except (EntityAlreadyRegisteredException, EntityNotFoundException) as e:
@@ -409,24 +417,33 @@ class ViajesService:
             if not flota:
                 raise EntityNotFoundException(f"Flota con id '{viaje.flota_id}' no existe")
 
-            # Actualizar fechas del viaje si se proporcionan
-            if fecha_llegada is not None or fecha_salida is not None or reset_fecha_salida:
-                from utils.time_util import normalize_to_app_tz
-                update_fields = {}
-                if fecha_llegada is not None:
-                    fecha_llegada_norm = normalize_to_app_tz(fecha_llegada)
-                    log.info(f"[DEBUG chg_estado_flota] fecha_llegada original={fecha_llegada} (tzinfo={getattr(fecha_llegada, 'tzinfo', None)}), normalizada={fecha_llegada_norm} (tzinfo={getattr(fecha_llegada_norm, 'tzinfo', None)})")
-                    update_fields["fecha_llegada"] = fecha_llegada_norm
-                if fecha_salida is not None:
-                    fecha_salida_norm = normalize_to_app_tz(fecha_salida)
-                    log.info(f"[DEBUG chg_estado_flota] fecha_salida original={fecha_salida} (tzinfo={getattr(fecha_salida, 'tzinfo', None)}), normalizada={fecha_salida_norm} (tzinfo={getattr(fecha_salida_norm, 'tzinfo', None)})")
-                    update_fields["fecha_salida"] = fecha_salida_norm
-                elif reset_fecha_salida:
-                    update_fields["fecha_salida"] = None
-                    log.info(f"[DEBUG chg_estado_flota] fecha_salida reseteada a None")
+            # Construir update_fields combinando fechas y transicion de estado del viaje.
+            # Transiciones aplicadas:
+            #   * estado_puerto=True  -> viaje pasa a 'Activa'  (gate in / arribo del buque)
+            #   * estado_operador=False -> viaje pasa a 'Finalizada' (cierre del operador)
+            from utils.time_util import normalize_to_app_tz
+            update_fields = {}
+            if fecha_llegada is not None:
+                fecha_llegada_norm = normalize_to_app_tz(fecha_llegada)
+                log.info(f"[DEBUG chg_estado_flota] fecha_llegada original={fecha_llegada} (tzinfo={getattr(fecha_llegada, 'tzinfo', None)}), normalizada={fecha_llegada_norm} (tzinfo={getattr(fecha_llegada_norm, 'tzinfo', None)})")
+                update_fields["fecha_llegada"] = fecha_llegada_norm
+            if fecha_salida is not None:
+                fecha_salida_norm = normalize_to_app_tz(fecha_salida)
+                log.info(f"[DEBUG chg_estado_flota] fecha_salida original={fecha_salida} (tzinfo={getattr(fecha_salida, 'tzinfo', None)}), normalizada={fecha_salida_norm} (tzinfo={getattr(fecha_salida_norm, 'tzinfo', None)})")
+                update_fields["fecha_salida"] = fecha_salida_norm
+            elif reset_fecha_salida:
+                update_fields["fecha_salida"] = None
+                log.info(f"[DEBUG chg_estado_flota] fecha_salida reseteada a None")
+
+            if estado_operador is False:
+                update_fields["estado"] = "Finalizada"
+            elif estado_puerto is True:
+                update_fields["estado"] = "Activa"
+
+            if update_fields:
                 update_data = ViajeUpdate(**update_fields)
                 await self._repo.update(viaje.id, update_data)
-                log.info(f"Fechas actualizadas para viaje {viaje.id}: {update_fields}")
+                log.info(f"Viaje {viaje.id} actualizado: {update_fields}")
 
             updated_flota = await self.flotas_service.update_status(flota, estado_puerto, estado_operador)
 
@@ -578,6 +595,7 @@ class ViajesService:
                 "fecha_salida": None,
                 "despacho_directo": es_despacho_directo,
                 "peso_tara": peso_tara,
+                "estado": "Activa",
             }
             update_data = ViajeUpdate(**update_fields)
             await self._repo.update(viaje.id, update_data)
@@ -632,7 +650,8 @@ class ViajesService:
             log.info(f"[DEBUG chg_camion_salida] fecha={fecha} (tzinfo={getattr(fecha, 'tzinfo', None)}) peso={peso}")
             update_fields = {
                 "fecha_salida": fecha,
-                "peso_real": peso
+                "peso_real": peso,
+                "estado": "Finalizada",
             }
             update_data = ViajeUpdate(**update_fields)
             updated = await self._repo.update(viaje.id, update_data)
@@ -646,6 +665,41 @@ class ViajesService:
                 message=f"Error al actualizar salida de camion con puerto_id {puerto_id}",
                 status_code=status.HTTP_409_CONFLICT
             )
+
+    async def _cancelar_citas_reemplazadas(self, flota_id: int, nueva_cita_id: int, ventana_horas: int = 24) -> int:
+        """
+        Cancela las citas en estado 'Programada' de la misma flota creadas dentro de la
+        ventana rolling indicada, excluyendo la cita recien creada. Se usa al recibir
+        una nueva cita para asumir que reemplaza las anteriores no consumidas (la
+        plataforma externa no notifica anulaciones).
+
+        Returns:
+            int: cantidad de citas canceladas.
+        """
+        try:
+            previas = await self._repo.find_programadas_by_flota_in_window(
+                flota_id=flota_id,
+                hours=ventana_horas,
+                exclude_viaje_id=nueva_cita_id,
+            )
+            if not previas:
+                return 0
+
+            motivo = f"reemplazada_por_cita_{nueva_cita_id}"
+            update_payload = ViajeUpdate(estado="Cancelada", motivo_cancelacion=motivo)
+            for cita in previas:
+                try:
+                    await self._repo.update(cita.id, update_payload)
+                    log.info(
+                        f"Cita {cita.id} (puerto_id={cita.puerto_id}) cancelada automaticamente: "
+                        f"reemplazada por nueva cita {nueva_cita_id} de la misma flota {flota_id}."
+                    )
+                except Exception as e_upd:
+                    log.error(f"No se pudo cancelar cita previa {cita.id} de flota {flota_id}: {e_upd}")
+            return len(previas)
+        except Exception as e:
+            log.error(f"Error al ejecutar auto-cancelacion de citas previas para flota {flota_id}: {e}", exc_info=True)
+            return 0
 
     async def send_notification(self, flota : FlotasResponse, viaje : ViajesResponse, tran: Optional[TransaccionResponse], bl: Optional[List[VBlsResponse]]) -> None:
         """
@@ -912,14 +966,18 @@ class ViajesService:
             else:
                 dt_bl = None
 
-            # Actualizar fecha_salida del viaje si se proporciona
+            # Actualizar fecha_salida y estado del viaje (estado pasa a Finalizada).
+            # Aun cuando no llegue fecha_salida explicita marcamos la cita como Finalizada
+            # para alinearla con la finalizacion del buque.
+            from utils.time_util import normalize_to_app_tz
+            update_viaje_fields = {"estado": "Finalizada"}
             if fecha_salida is not None:
-                from utils.time_util import normalize_to_app_tz
                 fecha_salida_norm = normalize_to_app_tz(fecha_salida)
                 log.info(f"FinalizaBuque - fecha_salida original={fecha_salida} (tzinfo={getattr(fecha_salida, 'tzinfo', None)}), normalizada={fecha_salida_norm} (tzinfo={getattr(fecha_salida_norm, 'tzinfo', None)})")
-                update_viaje_data = ViajeUpdate(fecha_salida=fecha_salida_norm)
-                await self._repo.update(viaje.id, update_viaje_data)
-                log.info(f"FinalizaBuque - Fecha de salida actualizada para viaje {viaje.id}: {fecha_salida_norm}")
+                update_viaje_fields["fecha_salida"] = fecha_salida_norm
+            update_viaje_data = ViajeUpdate(**update_viaje_fields)
+            await self._repo.update(viaje.id, update_viaje_data)
+            log.info(f"FinalizaBuque - Viaje {viaje.id} actualizado: {update_viaje_fields}")
 
             # Actualizar estados de la flota
             try:

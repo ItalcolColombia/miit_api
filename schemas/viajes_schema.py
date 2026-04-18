@@ -22,6 +22,8 @@ class ViajesResponse(BaseSchema):
     fecha_hora: Optional[datetime] = None
     usuario_id: Optional[int] = None
     bl_id: Optional[int] = None
+    estado: Optional[str] = None
+    motivo_cancelacion: Optional[str] = None
 
     model_config = ConfigDict(from_attributes=True)
 
@@ -47,6 +49,8 @@ class ViajeCreate(BaseSchema):
     fecha_hora: Optional[datetime] = None
     usuario_id: Optional[int] = None
     bl_id: Optional[int] = None
+    estado: Optional[str] = Field('Programada', max_length=20)
+    motivo_cancelacion: Optional[str] = Field(None, max_length=100)
 
 
     class Config:
@@ -216,6 +220,8 @@ class ViajeUpdate(BaseSchema):
     fecha_hora: Optional[datetime] = None
     usuario_id: Optional[int] = None
     bl_id: Optional[int] = None
+    estado: Optional[str] = Field(None, max_length=20)
+    motivo_cancelacion: Optional[str] = Field(None, max_length=100)
 
     # Normalizar datetimes aware/naive a APP_TIMEZONE antes de persistir.
     # Esto asegura que el datetime ya esté en la zona correcta antes de

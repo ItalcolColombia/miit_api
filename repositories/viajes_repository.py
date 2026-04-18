@@ -1,3 +1,4 @@
+from datetime import timedelta
 from typing import List, Optional
 
 from sqlalchemy import select, func, and_, or_, literal
@@ -5,7 +6,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import aliased
 
 from core.contracts.auditor import Auditor
-from database.models import Viajes, VViajes, Flotas, Bls, Materiales
+from database.models import Viajes, VViajes, Flotas, Bls, Materiales, Transacciones
 from repositories.base_repository import IRepository
 from schemas.viajes_schema import ViajesResponse, ViajesActResponse
 from utils.logger_util import LoggerUtil
@@ -42,6 +43,41 @@ class ViajesRepository(IRepository[Viajes, ViajesResponse]):
         return [ViajesActResponse.model_validate(viaje) for viaje in viajes]
 
 
+
+    async def find_programadas_by_flota_in_window(
+        self, flota_id: int, hours: int = 24, exclude_viaje_id: Optional[int] = None
+    ) -> List[ViajesResponse]:
+        """
+        Find viajes in 'Programada' state for a given flota whose creation timestamp
+        falls within the last `hours`. Used to auto-cancel duplicate citas when a new
+        cita arrives for the same truck within the rolling window.
+
+        Args:
+            flota_id: ID de la flota (placa) sobre la que buscar citas.
+            hours: Tamano de la ventana rolling (defecto 24h).
+            exclude_viaje_id: Si se proporciona, excluye este viaje de los resultados
+                (tipicamente la cita recien creada).
+
+        Returns:
+            Lista de viajes Programadas dentro de la ventana.
+        """
+        try:
+            cutoff = now_local() - timedelta(hours=hours)
+            query = (
+                select(self.model)
+                .where(self.model.flota_id == flota_id)
+                .where(self.model.estado == 'Programada')
+                .where(self.model.fecha_hora >= cutoff)
+            )
+            if exclude_viaje_id is not None:
+                query = query.where(self.model.id != exclude_viaje_id)
+
+            result = await self.db.execute(query)
+            items = result.scalars().all()
+            return [self.schema.model_validate(item) for item in items]
+        except Exception as e:
+            log.error(f"Error buscando citas Programadas para flota {flota_id} en ventana {hours}h: {e}")
+            raise
 
     async def check_puerto_id(self, puerto_id: str) -> Optional[ViajesResponse]:
         """

@@ -95,6 +95,8 @@ class Viajes(Base):
     fecha_hora = Column(DateTime(timezone=True), server_default=func.timezone('America/Bogota', func.now()), onupdate=func.timezone('America/Bogota', func.now()))
     usuario_id = Column(Integer, nullable=True)
     bl_id = Column(Integer, nullable=True)
+    estado = Column(String(20), nullable=False, default='Programada')
+    motivo_cancelacion = Column(String(100), nullable=True)
     transacciones = relationship("Transacciones", backref="Viajes")
 
 class Materiales(Base):
