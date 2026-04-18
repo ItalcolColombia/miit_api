@@ -227,7 +227,7 @@ curl -X POST http://localhost:8000/api/v1/reportes/refresh \
   -H "Authorization: Bearer $TOKEN"
 
 # Vista específica
-curl -X POST http://localhost:8000/api/v1/reportes/RPT_VIAJES/refresh \
+curl -X POST http://localhost:8000/api/v1/reportes/RPT_PERMANENCIA/refresh \
   -H "Authorization: Bearer $TOKEN"
 ```
 
@@ -744,7 +744,7 @@ FROM roles r WHERE r.nombre IN ('ADMINISTRADOR', 'SUPERVISOR');
 ```sql
 INSERT INTO reportes_columnas (reporte_id, campo, nombre_mostrar, tipo_dato, visible, orden,
                                 ordenable, es_totalizable, tipo_totalizacion)
-VALUES ((SELECT id FROM reportes WHERE codigo = 'RPT_VIAJES'),
+VALUES ((SELECT id FROM reportes WHERE codigo = 'RPT_PERMANENCIA'),
         'nuevo_campo', 'Nuevo Campo', 'string', true, 99, true, false, null);
 ```
 
@@ -753,7 +753,7 @@ VALUES ((SELECT id FROM reportes WHERE codigo = 'RPT_VIAJES'),
 ```sql
 UPDATE reportes_columnas
 SET visible = false
-WHERE reporte_id = (SELECT id FROM reportes WHERE codigo = 'RPT_VIAJES')
+WHERE reporte_id = (SELECT id FROM reportes WHERE codigo = 'RPT_PERMANENCIA')
   AND campo = 'campo_a_ocultar';
 ```
 
@@ -762,8 +762,8 @@ WHERE reporte_id = (SELECT id FROM reportes WHERE codigo = 'RPT_VIAJES')
 ```sql
 UPDATE reportes_columnas
 SET es_totalizable = true, tipo_totalizacion = 'avg'
-WHERE reporte_id = (SELECT id FROM reportes WHERE codigo = 'RPT_VIAJES')
-  AND campo = 'peso_real';
+WHERE reporte_id = (SELECT id FROM reportes WHERE codigo = 'RPT_PERMANENCIA')
+  AND campo = 'peso_meta';
 ```
 
 ### 9.4 Refrescar Vistas Materializadas
@@ -776,7 +776,7 @@ curl -X POST https://<DOMAIN>/api/v1/reportes/refresh \
   -H "Authorization: Bearer $TOKEN"
 
 # Vista específica
-curl -X POST https://<DOMAIN>/api/v1/reportes/RPT_VIAJES/refresh \
+curl -X POST https://<DOMAIN>/api/v1/reportes/RPT_PERMANENCIA/refresh \
   -H "Authorization: Bearer $TOKEN"
 ```
 

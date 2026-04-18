@@ -852,20 +852,22 @@ Authorization: Bearer <token>
 {
   "reportes": [
     {
-      "codigo": "RPT_VIAJES",
-      "nombre": "Reporte de Viajes",
-      "descripcion": "Viajes registrados con detalle de flota y material",
-      "icono": "ship",
-      "categoria": "Operaciones",
+      "codigo": "RPT_PERMANENCIA",
+      "nombre": "Informe de Tiempos de Permanencia en Puerto",
+      "descripcion": "Tiempos de permanencia de camiones en el puerto. Incluye tiempo total, tiempo de espera antes del cargue y tiempo de cargue.",
+      "icono": "schedule",
+      "categoria": "operacional",
       "puede_ver": true,
       "puede_exportar": true
     },
     {
-      "codigo": "RPT_PERMANENCIA",
-      "nombre": "Permanencia en Puerto",
-      "descripcion": "Tiempos de permanencia de vehículos",
+      "codigo": "RPT_RECIBIDO_DESPACHADO",
+      "nombre": "Recibido vs Despachado",
+      "descripcion": "Comparativo de carga recibida (buques) vs carga despachada (camiones) agrupado por buque y material.",
+      "icono": "compare_arrows",
+      "categoria": "operacional",
       "puede_ver": true,
-      "puede_exportar": false
+      "puede_exportar": true
     }
   ]
 }
@@ -876,7 +878,7 @@ Authorization: Bearer <token>
 Obtiene la estructura del reporte: columnas disponibles, filtros y campos totalizables.
 
 ```http
-GET /api/v1/reportes/RPT_VIAJES/metadata
+GET /api/v1/reportes/RPT_PERMANENCIA/metadata
 Authorization: Bearer <token>
 ```
 
@@ -886,17 +888,17 @@ Authorization: Bearer <token>
 {
   "columnas": [
     {
-      "campo": "puerto_id",
-      "nombre_mostrar": "ID Puerto",
-      "tipo_dato": "number",
+      "campo": "placa",
+      "nombre_mostrar": "Placa",
+      "tipo_dato": "string",
       "visible": true,
       "ordenable": true,
-      "filtrable": false,
+      "filtrable": true,
       "es_totalizable": false
     },
     {
-      "campo": "peso_real",
-      "nombre_mostrar": "Peso Real (Ton)",
+      "campo": "peso_meta",
+      "nombre_mostrar": "Peso Meta",
       "tipo_dato": "number",
       "visible": true,
       "ordenable": true,
@@ -904,19 +906,40 @@ Authorization: Bearer <token>
       "es_totalizable": true,
       "tipo_totalizacion": "sum",
       "decimales": 2,
-      "sufijo": " Ton"
+      "sufijo": "kg"
+    },
+    {
+      "campo": "tiempo_permanencia_min",
+      "nombre_mostrar": "Tiempo Permanencia",
+      "tipo_dato": "number",
+      "visible": true,
+      "ordenable": true,
+      "filtrable": false,
+      "es_totalizable": true,
+      "tipo_totalizacion": "avg",
+      "decimales": 1,
+      "sufijo": "min"
+    },
+    {
+      "campo": "cita_estado",
+      "nombre_mostrar": "Estado Cita",
+      "tipo_dato": "string",
+      "visible": true,
+      "ordenable": true,
+      "filtrable": true,
+      "es_totalizable": false
     }
   ],
   "filtros_disponibles": {
     "materiales": true,
     "rango_fechas": true
   },
-  "totalizables": ["peso_real", "peso_meta"],
+  "totalizables": ["peso_meta", "tiempo_permanencia_min"],
   "filtros_columnas": [
     {
-      "campo": "estado",
+      "campo": "cita_estado",
       "tipo": "select",
-      "opciones": ["En Proceso", "Finalizado", "Cancelado"]
+      "opciones": ["Programada", "Activa", "Finalizada", "Cancelada"]
     }
   ]
 }
@@ -925,7 +948,7 @@ Authorization: Bearer <token>
 ### 10.3 Consultar Datos del Reporte
 
 ```http
-GET /api/v1/reportes/RPT_VIAJES?material_id=5&fecha_inicio=2026-03-01&fecha_fin=2026-03-26&page=1&page_size=50&orden_campo=fecha_hora&orden_direccion=desc
+GET /api/v1/reportes/RPT_PERMANENCIA?material_id=5&fecha_inicio=2026-03-01&fecha_fin=2026-03-26&page=1&page_size=50&orden_campo=fecha_entrada_puerto&orden_direccion=desc
 Authorization: Bearer <token>
 ```
 
@@ -936,17 +959,20 @@ Authorization: Bearer <token>
   "columnas": [...],
   "datos": [
     {
-      "puerto_id": 1001,
-      "flota": "MV ATLANTIC PIONEER",
-      "material": "Carbón",
-      "peso_meta": 45000.00,
-      "peso_real": 44850.30,
-      "fecha_hora": "2026-03-20T14:30:00-05:00"
+      "viaje_id": 1001,
+      "placa": "XVZ479",
+      "trucktransaction": "24128",
+      "material": "MAIZ USA",
+      "peso_meta": 30000.50,
+      "fecha_entrada_puerto": "2026-03-20T14:30:00-05:00",
+      "fecha_salida_puerto": "2026-03-20T16:45:00-05:00",
+      "tiempo_permanencia_min": 135.0,
+      "cita_estado": "Finalizada"
     }
   ],
   "totales": {
     "peso_meta": 145000.00,
-    "peso_real": 143200.80
+    "tiempo_permanencia_min": 128.4
   },
   "paginacion": {
     "page": 1,
@@ -962,7 +988,7 @@ Authorization: Bearer <token>
 **Exportar a PDF:**
 
 ```http
-GET /api/v1/reportes/RPT_VIAJES/exportar?formato=PDF&material_id=5&fecha_inicio=2026-03-01&fecha_fin=2026-03-26
+GET /api/v1/reportes/RPT_PERMANENCIA/exportar?formato=PDF&material_id=5&fecha_inicio=2026-03-01&fecha_fin=2026-03-26
 Authorization: Bearer <token>
 ```
 
@@ -971,7 +997,7 @@ Respuesta: Archivo binario PDF con header `Content-Type: application/pdf`.
 **Exportar a CSV:**
 
 ```http
-GET /api/v1/reportes/RPT_VIAJES/exportar?formato=CSV&material_id=5
+GET /api/v1/reportes/RPT_PERMANENCIA/exportar?formato=CSV&material_id=5
 Authorization: Bearer <token>
 ```
 
@@ -995,7 +1021,7 @@ POST /api/v1/reportes/refresh
 Authorization: Bearer <token_admin>
 
 # Refrescar una vista específica
-POST /api/v1/reportes/RPT_VIAJES/refresh
+POST /api/v1/reportes/RPT_PERMANENCIA/refresh
 Authorization: Bearer <token_admin>
 ```
 

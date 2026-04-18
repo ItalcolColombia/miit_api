@@ -186,6 +186,7 @@ class ViajesRepository(IRepository[Viajes, ViajesResponse]):
                     .join(Materiales, Bls.material_id == Materiales.id)
                     .where(Flotas.tipo == 'buque')
                     .where(Flotas.estado_operador == True)
+                    .where(Viajes.estado != 'Cancelada')
                     .where(
                         and_(
                             Viajes.fecha_llegada <= fecha_actual,
@@ -232,6 +233,7 @@ class ViajesRepository(IRepository[Viajes, ViajesResponse]):
                     .where(Flotas.tipo == 'camion')
                     .where(Flotas.estado_puerto == True)
                     .where(Viajes.material_id.isnot(None))
+                    .where(Viajes.estado != 'Cancelada')
                     .where(
                         and_(
                             Viajes.fecha_llegada <= fecha_actual,
