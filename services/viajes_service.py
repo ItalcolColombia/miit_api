@@ -561,6 +561,15 @@ class ViajesService:
             if not viaje:
                 raise EntityNotFoundException(f"Viaje con puerto_id: '{puerto_id}' no existe")
 
+            if viaje.estado == "Cancelada":
+                raise BasedException(
+                    message=(
+                        f"Cita {puerto_id} esta Cancelada (motivo: {viaje.motivo_cancelacion}). "
+                        f"No se acepta gate in sobre una cita cancelada."
+                    ),
+                    status_code=status.HTTP_409_CONFLICT,
+                )
+
             flota = await self.flotas_service.get_flota(viaje.flota_id)
             if not flota:
                 raise EntityNotFoundException(f"Flota con id '{viaje.flota_id}' no existe")
@@ -589,6 +598,44 @@ class ViajesService:
                         if es_buque and estado_puerto and estado_operador:
                             es_despacho_directo = True
                             log.info(f"Viaje camión {puerto_id}: marcado como despacho directo en ingreso (buque activo viaje_origen={viaje.viaje_origen})")
+
+            # Reconciliacion gate in: si la flota ya tiene una cita Activa distinta,
+            # decidir si conservarla (cuando ya tiene cargue iniciado) o cancelarla
+            # (cuando esta vacia y la nueva cita la reemplaza).
+            activa_previa = await self._repo.find_activa_by_flota(
+                flota_id=flota.id, exclude_viaje_id=viaje.id
+            )
+            if activa_previa is not None:
+                tiene_tx = await self._repo.has_transacciones(activa_previa.id)
+                if tiene_tx:
+                    motivo = f"gate_in_duplicado_camion_cargando_{activa_previa.id}"
+                    await self._repo.update(
+                        viaje.id,
+                        ViajeUpdate(estado="Cancelada", motivo_cancelacion=motivo),
+                    )
+                    log.info(
+                        f"Gate in ignorado: cita {viaje.id} (puerto_id={puerto_id}) cancelada porque "
+                        f"flota {flota.id} ya tiene cita Activa {activa_previa.id} con cargue iniciado."
+                    )
+                    raise BasedException(
+                        message=(
+                            f"Flota {flota.id} ya tiene una cita activa con cargue iniciado "
+                            f"(cita {activa_previa.id}, puerto_id={activa_previa.puerto_id}). "
+                            f"La nueva cita {puerto_id} fue cancelada."
+                        ),
+                        status_code=status.HTTP_409_CONFLICT,
+                    )
+                else:
+                    motivo = f"gate_in_huerfano_sin_carga_reemplazada_por_{viaje.id}"
+                    await self._repo.update(
+                        activa_previa.id,
+                        ViajeUpdate(estado="Cancelada", motivo_cancelacion=motivo),
+                    )
+                    log.info(
+                        f"Cita Activa previa {activa_previa.id} (puerto_id={activa_previa.puerto_id}) "
+                        f"cancelada: gate in huerfano sin transacciones, reemplazada por cita {viaje.id} "
+                        f"de flota {flota.id}."
+                    )
 
             update_fields = {
                 "fecha_llegada": fecha,
@@ -638,6 +685,15 @@ class ViajesService:
             if not viaje:
                 raise EntityNotFoundException(f"Viaje con puerto_id: '{puerto_id}' no existe")
 
+            if viaje.estado == "Cancelada":
+                raise BasedException(
+                    message=(
+                        f"Cita {puerto_id} esta Cancelada (motivo: {viaje.motivo_cancelacion}). "
+                        f"No se acepta gate out sobre una cita cancelada."
+                    ),
+                    status_code=status.HTTP_409_CONFLICT,
+                )
+
             flota = await self.flotas_service.get_flota(viaje.flota_id)
             if not flota:
                 raise EntityNotFoundException(f"Flota con id '{viaje.flota_id}' no existe")
@@ -648,6 +704,31 @@ class ViajesService:
             # La fecha ya viene como timestamp del servidor (now_local) desde el
             # endpoint, así que no necesita normalización adicional.
             log.info(f"[DEBUG chg_camion_salida] fecha={fecha} (tzinfo={getattr(fecha, 'tzinfo', None)}) peso={peso}")
+
+            # Reconciliacion gate out: si la cita del puerto_id nunca recibio gate in,
+            # buscar la Activa real de la misma flota y finalizarla; marcar la cita
+            # del evento como huerfana. Si ya tiene fecha_llegada (estado Activa o
+            # Finalizada por replay), seguir el flujo normal.
+            if viaje.fecha_llegada is None:
+                activa_real = await self._repo.find_activa_by_flota(
+                    flota_id=flota.id, exclude_viaje_id=viaje.id
+                )
+                if activa_real is not None:
+                    await self._repo.update(
+                        activa_real.id,
+                        ViajeUpdate(fecha_salida=fecha, peso_real=peso, estado="Finalizada"),
+                    )
+                    motivo = f"gate_out_huerfano_finalizada_en_{activa_real.id}"
+                    cancelled = await self._repo.update(
+                        viaje.id,
+                        ViajeUpdate(estado="Cancelada", motivo_cancelacion=motivo),
+                    )
+                    log.info(
+                        f"Gate out reconciliado: cita activa real {activa_real.id} (puerto_id={activa_real.puerto_id}) "
+                        f"finalizada con peso {peso}; cita del evento {viaje.id} (puerto_id={puerto_id}) cancelada como huerfana."
+                    )
+                    return cancelled
+
             update_fields = {
                 "fecha_salida": fecha,
                 "peso_real": peso,

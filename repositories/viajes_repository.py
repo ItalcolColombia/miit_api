@@ -79,6 +79,45 @@ class ViajesRepository(IRepository[Viajes, ViajesResponse]):
             log.error(f"Error buscando citas Programadas para flota {flota_id} en ventana {hours}h: {e}")
             raise
 
+    async def find_activa_by_flota(
+        self, flota_id: int, exclude_viaje_id: Optional[int] = None
+    ) -> Optional[ViajesResponse]:
+        """
+        Busca una cita en estado 'Activa' (gate in hecho, sin gate out) para la flota dada.
+        Util en reconciliacion gate in/out cuando el puerto_id del evento no coincide
+        con la cita actualmente activa del camion.
+        """
+        try:
+            query = (
+                select(self.model)
+                .where(self.model.flota_id == flota_id)
+                .where(self.model.estado == 'Activa')
+                .where(self.model.fecha_salida.is_(None))
+            )
+            if exclude_viaje_id is not None:
+                query = query.where(self.model.id != exclude_viaje_id)
+            query = query.order_by(self.model.fecha_llegada.desc()).limit(1)
+            result = await self.db.execute(query)
+            item = result.scalar_one_or_none()
+            return self.schema.model_validate(item) if item else None
+        except Exception as e:
+            log.error(f"Error buscando cita Activa para flota {flota_id}: {e}")
+            raise
+
+    async def has_transacciones(self, viaje_id: int) -> bool:
+        """
+        Devuelve True si el viaje tiene al menos una transaccion asociada
+        (interpretado como 'el cargue ya inicio').
+        """
+        try:
+            query = select(func.count(Transacciones.id)).where(Transacciones.viaje_id == viaje_id)
+            result = await self.db.execute(query)
+            count = result.scalar_one() or 0
+            return count > 0
+        except Exception as e:
+            log.error(f"Error verificando transacciones de viaje {viaje_id}: {e}")
+            raise
+
     async def check_puerto_id(self, puerto_id: str) -> Optional[ViajesResponse]:
         """
         Find an existing viaje by 'puerto_id' value
