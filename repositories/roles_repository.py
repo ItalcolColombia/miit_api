@@ -34,11 +34,12 @@ class RolesRepository:
                 r.estado,
                 (SELECT COUNT(*) FROM usuarios u WHERE u.rol_id = r.id) as cantidad_usuarios,
                 COALESCE(
-                    ARRAY_AGG(pr.codigo_reporte) FILTER (WHERE pr.puede_ver = true),
+                    ARRAY_AGG(rep.codigo) FILTER (WHERE pr.puede_ver = true),
                     '{}'::varchar[]
                 ) as permisos_reportes
             FROM roles r
             LEFT JOIN permisos_reportes pr ON pr.rol_id = r.id
+            LEFT JOIN reportes rep ON rep.id = pr.reporte_id
             GROUP BY r.id, r.nombre, r.estado
             ORDER BY r.id
         """)
@@ -65,11 +66,12 @@ class RolesRepository:
                 r.estado,
                 (SELECT COUNT(*) FROM usuarios u WHERE u.rol_id = r.id) as cantidad_usuarios,
                 COALESCE(
-                    ARRAY_AGG(pr.codigo_reporte) FILTER (WHERE pr.puede_ver = true),
+                    ARRAY_AGG(rep.codigo) FILTER (WHERE pr.puede_ver = true),
                     '{}'::varchar[]
                 ) as permisos_reportes
             FROM roles r
             LEFT JOIN permisos_reportes pr ON pr.rol_id = r.id
+            LEFT JOIN reportes rep ON rep.id = pr.reporte_id
             WHERE r.id = :rol_id
             GROUP BY r.id, r.nombre, r.estado
         """)
@@ -225,13 +227,15 @@ class RolesRepository:
             SELECT
                 pr.id,
                 pr.rol_id,
-                pr.codigo_reporte,
+                pr.reporte_id,
+                rep.codigo AS codigo_reporte,
                 pr.puede_ver,
                 pr.puede_exportar,
                 pr.fecha_hora
             FROM permisos_reportes pr
+            JOIN reportes rep ON rep.id = pr.reporte_id
             WHERE pr.rol_id = :rol_id
-            ORDER BY pr.codigo_reporte
+            ORDER BY rep.codigo
         """)
 
         result = await self.db.execute(query, {"rol_id": rol_id})
@@ -264,12 +268,22 @@ class RolesRepository:
         )
 
         # Insertar nuevos permisos
+        # Resolvemos reporte_id dentro del mismo INSERT con un subselect.
+        # Si el codigo no existe en reportes, reporte_id queda NULL y la
+        # restriccion NOT NULL de la tabla falla explicitamente.
         permisos_insertados = 0
         for permiso in permisos:
             query = text("""
-                INSERT INTO permisos_reportes 
-                (rol_id, codigo_reporte, puede_ver, puede_exportar, fecha_hora, usuario_id)
-                VALUES (:rol_id, :codigo_reporte, :puede_ver, :puede_exportar, NOW(), :usuario_id)
+                INSERT INTO permisos_reportes
+                (rol_id, reporte_id, puede_ver, puede_exportar, fecha_hora, usuario_id)
+                VALUES (
+                    :rol_id,
+                    (SELECT id FROM reportes WHERE codigo = :codigo_reporte),
+                    :puede_ver,
+                    :puede_exportar,
+                    NOW(),
+                    :usuario_id
+                )
             """)
 
             await self.db.execute(query, {

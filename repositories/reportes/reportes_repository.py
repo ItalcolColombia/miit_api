@@ -691,9 +691,13 @@ class ReportesRepository:
         Returns:
             True si tiene acceso
         """
+        reporte = await self.get_reporte_by_codigo(codigo_reporte)
+        if not reporte:
+            return False
+
         conditions = [
             PermisoReporte.rol_id == rol_id,
-            PermisoReporte.codigo_reporte == codigo_reporte,
+            PermisoReporte.reporte_id == reporte.id,
             PermisoReporte.puede_ver == True
         ]
 
@@ -726,11 +730,15 @@ class ReportesRepository:
         Returns:
             Permiso creado/actualizado
         """
-        # Buscar permiso existente
+        # Resolver reporte_id una sola vez y filtrar por el FK.
+        reporte = await self.get_reporte_by_codigo(codigo_reporte)
+        if not reporte:
+            raise ValueError(f"Reporte '{codigo_reporte}' no existe")
+
         query = select(PermisoReporte).where(
             and_(
                 PermisoReporte.rol_id == rol_id,
-                PermisoReporte.codigo_reporte == codigo_reporte
+                PermisoReporte.reporte_id == reporte.id
             )
         )
         result = await self.db.execute(query)
@@ -743,15 +751,9 @@ class ReportesRepository:
             permiso.usuario_id = usuario_id
             permiso.fecha_hora = datetime.now()
         else:
-            # Crear nuevo
-            # Obtener reporte_id
-            reporte = await self.get_reporte_by_codigo(codigo_reporte)
-            reporte_id = reporte.id if reporte else None
-
             permiso = PermisoReporte(
                 rol_id=rol_id,
-                codigo_reporte=codigo_reporte,
-                reporte_id=reporte_id,
+                reporte_id=reporte.id,
                 puede_ver=puede_ver,
                 puede_exportar=puede_exportar,
                 usuario_id=usuario_id
@@ -773,10 +775,14 @@ class ReportesRepository:
         Returns:
             True si se eliminó
         """
+        reporte = await self.get_reporte_by_codigo(codigo_reporte)
+        if not reporte:
+            return False
+
         query = select(PermisoReporte).where(
             and_(
                 PermisoReporte.rol_id == rol_id,
-                PermisoReporte.codigo_reporte == codigo_reporte
+                PermisoReporte.reporte_id == reporte.id
             )
         )
         result = await self.db.execute(query)

@@ -1,3 +1,5 @@
+from typing import Optional
+
 from sqlalchemy import Column, Integer, BigInteger, Double, Numeric, Table, Text, String, DateTime, ForeignKey, Date, Boolean, TIMESTAMP
 from sqlalchemy import Identity
 from sqlalchemy.orm import relationship, declarative_base, backref
@@ -349,6 +351,22 @@ class Ajustes(Base):
 
 ### REPORTERIA
 
+class CategoriaReporte(Base):
+    """
+    Catálogo de categorías de reportes.
+    """
+    __tablename__ = "categorias_reportes"
+
+    id = Column(Integer, primary_key=True, index=True)
+    nombre = Column(String(100), unique=True, nullable=False)
+    descripcion = Column(String(255), nullable=True)
+    icono = Column(String(50), nullable=True)
+    orden = Column(Integer, default=0)
+
+    def __repr__(self):
+        return f"<CategoriaReporte(id={self.id}, nombre='{self.nombre}')>"
+
+
 class Reporte(Base):
     """
     Modelo para el catálogo de reportes.
@@ -372,7 +390,7 @@ class Reporte(Base):
     icono = Column(String(50), default='assessment')
     orden = Column(Integer, default=0)
     color = Column(String(20), default='#1976d2')
-    categoria = Column(String(50), default='operacional')
+    categoria_id = Column(Integer, ForeignKey('categorias_reportes.id'), nullable=True)
 
     # Configuración de exportación
     permite_exportar_pdf = Column(Boolean, default=True)
@@ -393,8 +411,27 @@ class Reporte(Base):
     usuario_actualizacion = Column(Integer, ForeignKey('usuarios.id'), nullable=True)
 
     # Relaciones
+    # Eager-load para evitar lazy loading en contexto async y para hidratar
+    # los campos aplanados categoria/categoria_* del ReporteResponse.
+    categoria_rel = relationship("CategoriaReporte", lazy="joined")
     columnas = relationship("ReporteColumna", back_populates="reporte", cascade="all, delete-orphan")
     permisos = relationship("PermisoReporte", back_populates="reporte")
+
+    @property
+    def categoria(self) -> Optional[str]:
+        return self.categoria_rel.nombre if self.categoria_rel else None
+
+    @property
+    def categoria_descripcion(self) -> Optional[str]:
+        return self.categoria_rel.descripcion if self.categoria_rel else None
+
+    @property
+    def categoria_icono(self) -> Optional[str]:
+        return self.categoria_rel.icono if self.categoria_rel else None
+
+    @property
+    def categoria_orden(self) -> Optional[int]:
+        return self.categoria_rel.orden if self.categoria_rel else None
 
     def __repr__(self):
         return f"<Reporte(codigo='{self.codigo}', nombre='{self.nombre}')>"
@@ -461,8 +498,7 @@ class PermisoReporte(Base):
 
     # Relaciones
     rol_id = Column(Integer, ForeignKey('roles.id', ondelete='CASCADE'), nullable=False)
-    codigo_reporte = Column(String(50), nullable=False)
-    reporte_id = Column(Integer, ForeignKey('reportes.id'), nullable=True)
+    reporte_id = Column(Integer, ForeignKey('reportes.id'), nullable=False)
 
     # Permisos
     puede_ver = Column(Boolean, default=True)
@@ -477,8 +513,8 @@ class PermisoReporte(Base):
 
     # Restricciones
     __table_args__ = (
-        UniqueConstraint('rol_id', 'codigo_reporte', name='uk_rol_reporte'),
+        UniqueConstraint('rol_id', 'reporte_id', name='uk_rol_reporte'),
     )
 
     def __repr__(self):
-        return f"<PermisoReporte(rol_id={self.rol_id}, codigo='{self.codigo_reporte}')>"
+        return f"<PermisoReporte(rol_id={self.rol_id}, reporte_id={self.reporte_id})>"

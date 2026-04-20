@@ -40,12 +40,6 @@ class TipoTotalizacion(str, Enum):
     MAX = "max"
 
 
-class CategoriaReporte(str, Enum):
-    """Categorías de reportes"""
-    OPERACIONAL = "operacional"
-    INVENTARIO = "inventario"
-
-
 class TipoFiltro(str, Enum):
     """Tipos de filtro para columnas"""
     SELECT = "select"
@@ -118,7 +112,8 @@ class ReporteResponse(BaseModel):
     icono: str
     orden: int
     color: str
-    categoria: str
+    categoria_id: Optional[int] = None
+    categoria: Optional[str] = None
     categoria_descripcion: Optional[str] = None
     categoria_icono: Optional[str] = None
     categoria_orden: Optional[int] = None
@@ -331,7 +326,7 @@ class ReporteCreate(ReporteBase):
     icono: str = Field("assessment", max_length=50)
     orden: int = Field(0)
     color: str = Field("#1976d2", max_length=20)
-    categoria: CategoriaReporte = CategoriaReporte.OPERACIONAL
+    categoria_id: Optional[int] = Field(None, description="ID de la categoría del reporte")
     permite_exportar_pdf: bool = True
     permite_exportar_excel: bool = True
     permite_exportar_csv: bool = True
@@ -346,7 +341,7 @@ class ReporteUpdate(BaseModel):
     icono: Optional[str] = Field(None, max_length=50)
     orden: Optional[int] = None
     color: Optional[str] = Field(None, max_length=20)
-    categoria: Optional[CategoriaReporte] = None
+    categoria_id: Optional[int] = Field(None, description="ID de la categoría del reporte")
     permite_exportar_pdf: Optional[bool] = None
     permite_exportar_excel: Optional[bool] = None
     permite_exportar_csv: Optional[bool] = None
