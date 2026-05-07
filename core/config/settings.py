@@ -22,18 +22,21 @@ class Settings(BaseSettings):
     API_HOST: str = "0.0.0.0"
     API_PORT: int = 8000
     API_V1_STR: str = "v1"
-    API_VERSION_NUM: str = "1.1.4"
+    API_VERSION_NUM: str = "1.1.5"
     API_LOG_LEVEL: str = "DEBUG"
     APP_LOG_DIR: str = "/var/www/metalsoft/logs/miit_api/"
 
     ALLOWED_HOSTS: list[str] = [
         "integrador.turbograneles.com",
+        "integradorqa.turbograneles.com",
         "informes.turbograneles.com",
+        "informesqa.turbograneles.com",
         "localhost:8000",
         "localhost:5173",
     ]
     CORS_ORIGINS: list[str] = [
         "https://informes.turbograneles.com",
+        "https://informesqa.turbograneles.com",
         "http://localhost:5173",
         "http://localhost:3000",
     ]
