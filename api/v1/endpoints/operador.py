@@ -458,12 +458,11 @@ async def in_camion(
         service: ViajesService = Depends(get_viajes_service)):
     log.info(f"Payload recibido: Flota {puerto_id} - Ingreso ")
     try:
-        # Ignorar la fecha del cliente y usar timestamp del servidor,
-        # igual que en buque_in / end_buque.  Esto evita problemas de
-        # offset cuando el cliente .NET envía la hora con zona horaria
-        # que se pierde en la codificación de la URL.
-        fecha_ingreso_actual = now_local()
-        log.info(f"[DEBUG endpoint in_camion] fecha_ingreso del servidor={fecha_ingreso_actual} (tzinfo={fecha_ingreso_actual.tzinfo})")
+        fecha_ingreso_actual = fecha_ingreso if fecha_ingreso is not None else now_local()
+        if fecha_ingreso is None:
+            log.warning(f"[DEBUG endpoint in_camion] fecha_ingreso no enviada; se usa hora del servidor={fecha_ingreso_actual} (tzinfo={fecha_ingreso_actual.tzinfo})")
+        else:
+            log.info(f"[DEBUG endpoint in_camion] fecha_ingreso recibida por parámetro={fecha_ingreso_actual} (tzinfo={getattr(fecha_ingreso_actual, 'tzinfo', None)})")
 
         service_data = await service.chg_camion_ingreso(
             puerto_id,
@@ -517,12 +516,11 @@ async def out_camion(
         service: ViajesService = Depends(get_viajes_service)):
     log.info(f"Payload recibido: Camion {puerto_id} - Salida")
     try:
-        # Ignorar la fecha del cliente y usar timestamp del servidor,
-        # igual que en buque_in / end_buque.  Esto evita problemas de
-        # offset cuando el cliente .NET envía la hora con zona horaria
-        # que se pierde en la codificación de la URL.
-        fecha_salida_actual = now_local()
-        log.info(f"[DEBUG endpoint out_camion] fecha_salida del servidor={fecha_salida_actual} (tzinfo={fecha_salida_actual.tzinfo}) peso_real={peso_real}")
+        fecha_salida_actual = fecha_salida if fecha_salida is not None else now_local()
+        if fecha_salida is None:
+            log.warning(f"[DEBUG endpoint out_camion] fecha_salida no enviada; se usa hora del servidor={fecha_salida_actual} (tzinfo={fecha_salida_actual.tzinfo}) peso_real={peso_real}")
+        else:
+            log.info(f"[DEBUG endpoint out_camion] fecha_salida recibida por parámetro={fecha_salida_actual} (tzinfo={getattr(fecha_salida_actual, 'tzinfo', None)}) peso_real={peso_real}")
 
         await service.chg_camion_salida(puerto_id, fecha_salida_actual, peso_real)
         try:

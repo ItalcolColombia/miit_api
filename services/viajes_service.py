@@ -554,9 +554,7 @@ class ViajesService:
             # Pit por defecto establecido en 1
             pit = 1
 
-            # La fecha ya viene como timestamp del servidor (now_local) desde el
-            # endpoint, así que no necesita normalización adicional.
-            log.info(f"[DEBUG chg_camion_ingreso] fecha={fecha} (tzinfo={getattr(fecha, 'tzinfo', None)})")
+            log.info(f"[DEBUG chg_camion_ingreso] fecha recibida={fecha} (tzinfo={getattr(fecha, 'tzinfo', None)})")
 
             # Determinar si es despacho directo
             # Regla: Si hay un viaje_origen que apunta a un buque activo (estado_puerto=True y estado_operador=True)
@@ -573,12 +571,20 @@ class ViajesService:
                             es_despacho_directo = True
                             log.info(f"Viaje camión {puerto_id}: marcado como despacho directo en ingreso (buque activo viaje_origen={viaje.viaje_origen})")
 
+            tiene_peso_real = viaje.peso_real is not None and Decimal(viaje.peso_real) != Decimal("0")
+
             update_fields = {
                 "fecha_llegada": fecha,
-                "fecha_salida": None,
                 "despacho_directo": es_despacho_directo,
                 "peso_tara": peso_tara,
             }
+            if not tiene_peso_real:
+                update_fields["fecha_salida"] = None
+            else:
+                log.info(
+                    f"Viaje camión {puerto_id}: se conserva fecha_salida existente porque peso_real={viaje.peso_real}"
+                )
+
             update_data = ViajeUpdate(**update_fields)
             await self._repo.update(viaje.id, update_data)
 
@@ -627,9 +633,7 @@ class ViajesService:
                 raise EntityNotFoundException(
                     f"La flota es del tipo '{flota.tipo}' diferente al tipo esperado 'camion'")
 
-            # La fecha ya viene como timestamp del servidor (now_local) desde el
-            # endpoint, así que no necesita normalización adicional.
-            log.info(f"[DEBUG chg_camion_salida] fecha={fecha} (tzinfo={getattr(fecha, 'tzinfo', None)}) peso={peso}")
+            log.info(f"[DEBUG chg_camion_salida] fecha recibida={fecha} (tzinfo={getattr(fecha, 'tzinfo', None)}) peso={peso}")
             update_fields = {
                 "fecha_salida": fecha,
                 "peso_real": peso

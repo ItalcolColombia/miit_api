@@ -14,9 +14,9 @@ class NotificationCargue(BaseSchema):
     despacho_directo: Optional[bool] = None
 
 
-    model_config = ConfigDict(
-        extra='ignore',
-        json_schema_extra={
+    class Config:
+        extra = 'ignore'
+        json_schema_extra = {
             "example": {
                 "truckPlate": "SVX789",
                 "truckTransaction": "CamionPrueba1",
@@ -25,61 +25,59 @@ class NotificationCargue(BaseSchema):
                 "despacho_directo": True,
             }
         }
-    )
 
 class NotificationBuque(BaseSchema):
     voyage: Optional[str]
     status: Optional[str]
-    data: Optional[List[Any]] = None,
+    # Eliminar la coma final: dejar el valor por defecto como None (no una tupla (None,))
+    data: Optional[List[Any]] = None
 
 
-    model_config = ConfigDict(
-        extra='ignore',
-        json_schema_extra={
+    class Config:
+        extra = 'ignore'
+        json_schema_extra = {
             "example": {
                 "voyage": "VOY2024049",
                 "status": "Finished",
             }
         }
-    )
 
 class NotificationPitCargue(BaseSchema):
     cargoPit: Optional[int] = None
 
-    model_config = ConfigDict(
-        extra='ignore',
-        json_schema_extra={
+    class Config:
+        extra = 'ignore'
+        json_schema_extra = {
             "example": {
                 "cargoPit": 2,
             }
         }
-    )
 
 class NotificationBlsPeso(BaseSchema):
     noBL: Optional[str] = None
     voyage: Optional[str] = None
     weightBl: Optional[Decimal] = None
 
-    model_config = ConfigDict(
-        extra='ignore',
-        json_schema_extra={
+    class Config:
+        extra = 'ignore'
+        json_schema_extra = {
             "example": {
                 "noBL": 'SSPRUEBA001',
                 "voyage": "VOY2024049",
                 "weightBl": Decimal('125498'),
             }
         }
-    )
 
 
 class EntradaParcialBuqueResponse(BaseSchema):
     voyage: Optional[str] = None
     status: Optional[str] = None
-    data: Optional[List[NotificationBlsPeso]] = None
+    # Evitar referencia directa al tipo concreto para prevenir errores de evaluación
+    data: Optional[List[Any]] = None
 
-    model_config = ConfigDict(
-        extra='ignore',
-        json_schema_extra={
+    class Config:
+        extra = 'ignore'
+        json_schema_extra = {
             "example": {
                 "voyage": "PISD-0001",
                 "status": "InProgress",
@@ -97,7 +95,6 @@ class EntradaParcialBuqueResponse(BaseSchema):
                 ]
             }
         }
-    )
 
 class NotificationEnvioFinal(BaseSchema):
     voyage: Optional[str] = None
@@ -112,9 +109,9 @@ class NotificationEnvioFinal(BaseSchema):
     usuario_id: Optional[int] = None
     usuario: Optional[str] = None
 
-    model_config = ConfigDict(
-        extra='ignore',
-        json_schema_extra={
+    class Config:
+        extra = 'ignore'
+        json_schema_extra = {
             "example": {
                 "voyage": "NBK1-0005",
                 "referencia": "NBK1-0AC793EF-3F",
@@ -129,4 +126,3 @@ class NotificationEnvioFinal(BaseSchema):
                 "usuario": ""
             }
         }
-    )
