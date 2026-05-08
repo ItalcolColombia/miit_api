@@ -2,6 +2,11 @@
 #Definir imagen de SO
 FROM registry.access.redhat.com/ubi9/python-312
 
+# Argumentos de build para ambiente y configuración
+ARG GIT_BRANCH=main
+ARG ghp_TOKEN
+ARG KEEP_VERSIONED_CERTS=false
+
 USER root
 
 ##Instalar dependencias del sistema
@@ -28,6 +33,7 @@ RUN update-ca-trust extract
 
 #Configuración zona horaria (America/Bogota)
 ENV TZ=America/Bogota
+ENV TG_API_VERIFY_SSL=True
 RUN ln -sf /usr/share/zoneinfo/America/Bogota /etc/localtime && \
     echo "America/Bogota" > /etc/timezone
 
@@ -37,8 +43,12 @@ RUN pip install --upgrade pip "setuptools<81" wheel supervisor
 # Establece el directorio de trabajo
 WORKDIR /var/www/metalsoft/miit_api
 
-#Clonar y obtener proyecto
-RUN git clone https://oauth2:${ghp_TOKEN}@github.com/ItalcolColombia/miit_api .
+#Clonar y obtener proyecto de la rama especificada
+RUN git clone --branch ${GIT_BRANCH} https://oauth2:${ghp_TOKEN}@github.com/ItalcolColombia/miit_api .
+
+# Si no se requieren certificados versionados dentro de la imagen, se eliminan.
+# El contenedor seguirá usando el trust store del sistema (ca-certificates).
+RUN if [ "${KEEP_VERSIONED_CERTS}" != "true" ]; then rm -rf certs; fi
 
 
 # #Copia los archivos de la api al contenedor
