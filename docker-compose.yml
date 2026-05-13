@@ -4,6 +4,10 @@ services:
     build:
           context: .
           dockerfile: Dockerfile
+          args:
+            GIT_BRANCH: ${GIT_BRANCH:-main}
+            ghp_TOKEN: ${ghp_TOKEN}
+            KEEP_VERSIONED_CERTS: ${KEEP_VERSIONED_CERTS:-false}
     container_name: api
     ports:
       - "8443:8443"
