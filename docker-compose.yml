@@ -20,7 +20,7 @@ services:
       API_PASSWORD_ADMINISTRATOR: ${API_PASSWORD_ADMINISTRATOR}
       DB_TYPE: ${DB_TYPE}
       DB_NAME: ${DB_NAME}
-      DB_HOST: bdc
+      DB_HOST: ${DB_HOST}
       DB_PORT: ${DB_PORT}
       DB_USER: ${DB_USER}
       DB_PASSWORD: ${DB_PASSWORD}
@@ -39,45 +39,4 @@ services:
 
     volumes:
       - ./logs:/var/www/metalsoft/log/miit_api
-    depends_on:
-      - bdc
     restart: always
-
-  bdc:
-    image: postgres:17
-    container_name: bdc
-    environment:
-      POSTGRES_DB: ${DB_NAME}
-      POSTGRES_USER: ${DB_USER}
-      POSTGRES_PASSWORD: ${DB_PASSWORD}
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U postgres"]
-      interval: 5s
-      timeout: 5s
-      retries: 5
-    volumes:
-      - bdc_data:/var/lib/postgresql/data
-    ports:
-      - "5517:5432"
-    restart: always
-
-
-  pgadmin:
-    image: dpage/pgadmin4
-    container_name: pgadmin
-    ports:
-      - "5050:80"
-    environment:
-      PGADMIN_DEFAULT_EMAIL: ${PGADMIN_DEFAULT_EMAIL}
-      PGADMIN_DEFAULT_PASSWORD: ${PGADMIN_DEFAULT_PASSWORD}
-      PGADMIN_LISTEN_PORT: ${PGADMIN_LISTEN_PORT}
-    volumes:
-      - pgadmin_data:/var/lib/pgadmin
-    depends_on:
-      - bdc
-    restart: always
-
-# Definición de volúmenes para persistencia de datos
-volumes:
-  bdc_data:
-  pgadmin_data:
