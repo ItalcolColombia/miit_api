@@ -33,12 +33,14 @@ class Settings(BaseSettings):
         "informesqa.turbograneles.com",
         "localhost:8000",
         "localhost:5173",
+        "localhost:8080",
     ]
     CORS_ORIGINS: list[str] = [
         "https://informes.turbograneles.com",
         "https://informesqa.turbograneles.com",
         "http://localhost:5173",
         "http://localhost:3000",
+        "http://localhost:8080",
     ]
 
     # ==================== API Super User (SENSITIVE) ====================
