@@ -236,6 +236,8 @@ class ViajesActivosPorMaterialResponse(BaseModel):
     material: str
     puntos_cargue: Optional[int] = None
     peso: Optional[Decimal] = None
+    buque_origen: Optional[str] = None
+    despacho_directo: Optional[bool] = None
 
     model_config = ConfigDict(from_attributes=True)
 

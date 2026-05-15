@@ -6,6 +6,7 @@ from fastapi_pagination import Page
 from core.di.service_injection import get_viajes_service, get_mat_service, get_mov_service, \
     get_pesadas_service, get_transacciones_service, get_flotas_service, get_alm_mat_service, get_ajustes_service
 from core.enums.user_role_enum import UserRoleEnum
+from core.exceptions.base_exception import BasedException
 from core.exceptions.entity_exceptions import EntityNotFoundException
 from schemas.ajustes_schema import AjusteCreate
 from schemas.almacenamientos_materiales_schema import VAlmMaterialesResponse
@@ -28,7 +29,6 @@ from services.transacciones_service import TransaccionesService
 from services.viajes_service import ViajesService
 from utils.logger_util import LoggerUtil
 from utils.response_util import ResponseUtil
-from core.exceptions.base_exception import BasedException
 
 log = LoggerUtil()
 
@@ -70,7 +70,8 @@ async def get_almacenamientos_paginado(
 @router.get("/viajes-activos",
             summary="Obtener viajes activos agrupados por material",
             description="Retorna los viajes activos (estado_operador=true en flota) agrupados por material. "
-                        "Para buques agrupa por materiales de BLs, para camiones usa el material del viaje.",
+                        "Para buques agrupa por materiales de BLs, para camiones usa el material del viaje e incluye "
+                        "los campos buque_origen y despacho_directo.",
             response_model=List[ViajesActivosPorMaterialResponse],
             responses={
                 status.HTTP_404_NOT_FOUND: {"model": ErrorResponse},

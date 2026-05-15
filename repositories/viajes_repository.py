@@ -1,8 +1,8 @@
 from typing import List, Optional
 
-from sqlalchemy import select, func, and_, or_
+from sqlalchemy import select, func, and_, or_, literal
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.orm.exc import NoResultFound
+from sqlalchemy.orm import aliased
 
 from core.contracts.auditor import Auditor
 from database.models import Viajes, VViajes, Flotas, Bls, Materiales
@@ -75,7 +75,7 @@ class ViajesRepository(IRepository[Viajes, ViajesResponse]):
         Obtener viajes activos agrupados por material.
 
         Para buques: agrupa los BLs por material
-        Para camiones: usa el material_id del viaje
+        Para camiones: usa el material_id del viaje y resuelve la referencia del buque origen
 
         Args:
             tipo_flota: 'buque' o 'camion'
@@ -102,6 +102,8 @@ class ViajesRepository(IRepository[Viajes, ViajesResponse]):
                             func.nullif(func.max(Viajes.peso_tara), 0),
                             func.max(Viajes.peso_meta)
                         ).label('peso'),
+                        literal(None).label('buque_origen'),
+                        literal(None).label('despacho_directo'),
                         func.max(Viajes.fecha_hora).label('fecha_hora_orden')
                     )
                     .join(Flotas, Viajes.flota_id == Flotas.id)
@@ -122,6 +124,9 @@ class ViajesRepository(IRepository[Viajes, ViajesResponse]):
                     .order_by(func.max(Viajes.id).desc())
                 )
             else:  # camion
+                viaje_origen_alias = aliased(Viajes)
+                flota_origen_alias = aliased(Flotas)
+
                 # Para camiones, usamos el material_id del viaje
                 # Usamos group_by para evitar duplicados por la misma combinación flota+material
                 # Filtramos por viajes cuya fecha_llegada <= ahora Y (fecha_salida es nula O fecha_salida >= ahora)
@@ -135,10 +140,20 @@ class ViajesRepository(IRepository[Viajes, ViajesResponse]):
                             func.nullif(func.max(Viajes.peso_tara), 0),
                             func.max(Viajes.peso_meta)
                         ).label('peso'),
+                        func.max(flota_origen_alias.referencia).label('buque_origen'),
+                        func.bool_or(Viajes.despacho_directo).label('despacho_directo'),
                         func.max(Viajes.fecha_hora).label('fecha_hora_orden')
                     )
                     .join(Flotas, Viajes.flota_id == Flotas.id)
                     .join(Materiales, Viajes.material_id == Materiales.id)
+                    .outerjoin(viaje_origen_alias, viaje_origen_alias.puerto_id == Viajes.viaje_origen)
+                    .outerjoin(
+                        flota_origen_alias,
+                        and_(
+                            flota_origen_alias.id == viaje_origen_alias.flota_id,
+                            flota_origen_alias.tipo == 'buque'
+                        )
+                    )
                     .where(Flotas.tipo == 'camion')
                     .where(Flotas.estado_puerto == True)
                     .where(Viajes.material_id.isnot(None))
@@ -168,7 +183,9 @@ class ViajesRepository(IRepository[Viajes, ViajesResponse]):
                     'nombre': viaje.nombre,
                     'material': viaje.material,
                     'puntos_cargue': viaje.puntos_cargue,
-                    'peso': viaje.peso
+                    'peso': viaje.peso,
+                    'buque_origen': getattr(viaje, 'buque_origen', None),
+                    'despacho_directo': getattr(viaje, 'despacho_directo', None)
                 }
                 for viaje in viajes
             ]

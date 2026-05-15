@@ -9,7 +9,7 @@ from schemas.base_schema import BaseSchema
 
 class AjusteCreate(BaseSchema):
     almacenamiento: str = Field(..., max_length=50, description="Nombre del almacenamiento")
-    saldo_nuevo: Decimal = Field(..., ge=0, max_digits=14, decimal_places=2)
+    saldo_nuevo: Decimal = Field(..., max_digits=14, decimal_places=2)
     motivo: Optional[str] = Field(None, max_length=255)  # Ahora opcional; el service puede asignar un valor por defecto
 
 class AjusteResponse(BaseSchema):

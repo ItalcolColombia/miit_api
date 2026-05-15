@@ -4,6 +4,7 @@ from typing import List, Dict, Any, Optional, Tuple
 from sqlalchemy import text, select, and_
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from core.config.filtros_reportes_config import get_filtros_reporte
 from database.models import Reporte, ReporteColumna, PermisoReporte
 
 
@@ -15,6 +16,85 @@ class ReportesRepository:
 
     def __init__(self, db: AsyncSession):
         self.db = db
+
+    def _build_dynamic_filter_clauses(
+            self,
+            filtros: Dict[str, Any],
+            param_prefix: str = "filtro"
+    ) -> Tuple[List[str], Dict[str, Any]]:
+        """
+        Construye cláusulas SQL y parámetros para filtros dinámicos.
+        Soporta la estructura filtros_operadores y mantiene fallback legacy.
+        """
+        clauses: List[str] = []
+        params: Dict[str, Any] = {}
+
+        filtros_operadores = filtros.get('filtros_operadores') or []
+
+        if filtros_operadores:
+            for idx, filtro in enumerate(filtros_operadores):
+                campo = filtro.get('campo')
+                operador = str(filtro.get('operador', '')).lower()
+                valor = filtro.get('valor')
+                param_base = f"{param_prefix}_{idx}_{campo}"
+
+                if operador == 'eq':
+                    param_name = f"{param_base}_eq"
+                    clauses.append(f"{campo} = :{param_name}")
+                    params[param_name] = valor
+                elif operador == 'ne':
+                    param_name = f"{param_base}_ne"
+                    clauses.append(f"{campo} <> :{param_name}")
+                    params[param_name] = valor
+                elif operador == 'gte':
+                    param_name = f"{param_base}_gte"
+                    clauses.append(f"{campo} >= :{param_name}")
+                    params[param_name] = valor
+                elif operador == 'lte':
+                    param_name = f"{param_base}_lte"
+                    clauses.append(f"{campo} <= :{param_name}")
+                    params[param_name] = valor
+                elif operador == 'contains':
+                    param_name = f"{param_base}_contains"
+                    clauses.append(f"{campo} ILIKE :{param_name}")
+                    params[param_name] = f"%{valor}%"
+                elif operador == 'in':
+                    valores = valor if isinstance(valor, list) else []
+                    if not valores:
+                        continue
+
+                    placeholders = []
+                    for sub_idx, item in enumerate(valores):
+                        item_param = f"{param_base}_in_{sub_idx}"
+                        placeholders.append(f":{item_param}")
+                        params[item_param] = item
+
+                    clauses.append(f"{campo} IN ({', '.join(placeholders)})")
+                elif operador == 'is_null':
+                    clauses.append(f"{campo} IS NULL")
+                elif operador == 'is_not_null':
+                    clauses.append(f"{campo} IS NOT NULL")
+
+            return clauses, params
+
+        # Fallback legacy para compatibilidad con integraciones antiguas.
+        filtros_columna = filtros.get('filtros_columna', {})
+        for campo, valor in filtros_columna.items():
+            if not valor:
+                continue
+
+            filtros_config = get_filtros_reporte(filtros.get('codigo_reporte', ''))
+            filtro_info = next((f for f in filtros_config if f.campo == campo), None)
+
+            param_name = f"{param_prefix}_{campo}"
+            if filtro_info and filtro_info.tipo_filtro == "search":
+                clauses.append(f"{campo} ILIKE :{param_name}")
+                params[param_name] = f"%{valor}%"
+            else:
+                clauses.append(f"{campo} = :{param_name}")
+                params[param_name] = valor
+
+        return clauses, params
 
     # ========================================================
     # CATÁLOGO DE REPORTES
@@ -171,7 +251,10 @@ class ReportesRepository:
             campo_fecha: str,
             filtros: Dict[str, Any],
             page: int = 1,
-            page_size: int = 50
+            page_size: int = 50,
+            campos_agrupacion: Optional[str] = None,
+            columnas_totalizables: Optional[List[Dict[str, Any]]] = None,
+            tipo_consulta: str = 'normal'
     ) -> Tuple[List[Dict[str, Any]], int]:
         """
         Consulta datos de una vista materializada con filtros y paginación.
@@ -182,6 +265,8 @@ class ReportesRepository:
             filtros: Diccionario con filtros a aplicar
             page: Número de página
             page_size: Registros por página
+            campos_agrupacion: Campos para agrupar separados por coma
+            columnas_totalizables: Columnas agregables para reportes agrupados
 
         Returns:
             Tupla con (datos, total_registros)
@@ -208,23 +293,12 @@ class ReportesRepository:
             where_clauses.append(f"{campo_fecha} <= CAST(:fecha_fin AS timestamp)")
             params['fecha_fin'] = filtros['fecha_fin']
 
-        # Filtros dinámicos de columna
-        filtros_columna = filtros.get('filtros_columna', {})
-        for campo, valor in filtros_columna.items():
-            if valor:
-                # Determinar tipo de filtro basado en configuración
-                from core.config.filtros_reportes_config import get_filtros_reporte
-                filtros_config = get_filtros_reporte(filtros.get('codigo_reporte', ''))
-                filtro_info = next((f for f in filtros_config if f.campo == campo), None)
-
-                if filtro_info and filtro_info.tipo_filtro == "search":
-                    # Búsqueda parcial case-insensitive (ILIKE)
-                    where_clauses.append(f"{campo} ILIKE :filtro_{campo}")
-                    params[f'filtro_{campo}'] = f"%{valor}%"
-                else:
-                    # Coincidencia exacta para filtros tipo select
-                    where_clauses.append(f"{campo} = :filtro_{campo}")
-                    params[f'filtro_{campo}'] = valor
+        dynamic_clauses, dynamic_params = self._build_dynamic_filter_clauses(
+            filtros,
+            param_prefix="filtro"
+        )
+        where_clauses.extend(dynamic_clauses)
+        params.update(dynamic_params)
 
         # Construir WHERE
         where_sql = ""
@@ -241,6 +315,143 @@ class ReportesRepository:
         else:
             orden_sql = f"ORDER BY {campo_fecha} DESC"
 
+        # ── CORTE DE SALDO (DISTINCT ON) ──
+        if tipo_consulta == 'corte_saldo' and campos_agrupacion:
+            distinct_campos = [c.strip() for c in campos_agrupacion.split(',')]
+            distinct_sql = ", ".join(distinct_campos)
+
+            # Para corte: fecha_fin = cutoff, fecha_inicio = límite inferior de actividad
+            corte_where = []
+            corte_params = {}
+
+            # Excluir almacenamientos virtuales (ej: despacho directo)
+            corte_where.append("es_virtual = false")
+
+            # Cutoff: solo movimientos hasta fecha_fin
+            if filtros.get('fecha_fin'):
+                corte_where.append(f"{campo_fecha} <= CAST(:fecha_fin AS timestamp)")
+                corte_params['fecha_fin'] = filtros['fecha_fin']
+
+            # Límite inferior: solo items con actividad desde fecha_inicio
+            tiene_fecha_inicio = filtros.get('fecha_inicio') is not None
+
+            # Filtro por material
+            if filtros.get('material_id'):
+                codigo_material = await self._get_material_codigo(filtros['material_id'])
+                if codigo_material:
+                    corte_where.append("codigo_material = :codigo_material")
+                    corte_params['codigo_material'] = codigo_material
+
+            dynamic_clauses, dynamic_params = self._build_dynamic_filter_clauses(
+                filtros,
+                param_prefix="corte_filtro"
+            )
+            corte_where.extend(dynamic_clauses)
+            corte_params.update(dynamic_params)
+
+            corte_where_sql = ""
+            if corte_where:
+                corte_where_sql = "WHERE " + " AND ".join(corte_where)
+
+            # Subquery exterior: filtrar por fecha_inicio (solo items con actividad reciente)
+            outer_where_sql = ""
+            if tiene_fecha_inicio:
+                outer_where_sql = f"WHERE sub.{campo_fecha} >= CAST(:fecha_inicio AS timestamp)"
+                corte_params['fecha_inicio'] = filtros['fecha_inicio']
+
+            # Ordenamiento exterior
+            outer_orden_sql = ""
+            if filtros.get('orden_campo'):
+                direccion = filtros.get('orden_direccion', 'DESC').upper()
+                if direccion not in ('ASC', 'DESC'):
+                    direccion = 'DESC'
+                outer_orden_sql = f"ORDER BY sub.{filtros['orden_campo']} {direccion}"
+            else:
+                outer_orden_sql = f"ORDER BY sub.nombre_almacenamiento ASC, sub.material ASC"
+
+            # Count
+            count_query = text(f"""
+                SELECT COUNT(*) as total FROM (
+                    SELECT DISTINCT ON ({distinct_sql}) *
+                    FROM {vista_nombre}
+                    {corte_where_sql}
+                    ORDER BY {distinct_sql}, {campo_fecha} DESC
+                ) sub
+                {outer_where_sql}
+            """)
+            count_result = await self.db.execute(count_query, corte_params)
+            total_registros = count_result.scalar() or 0
+
+            # Data con paginación
+            offset = (page - 1) * page_size
+            corte_params['limit'] = page_size
+            corte_params['offset'] = offset
+
+            data_query = text(f"""
+                SELECT * FROM (
+                    SELECT DISTINCT ON ({distinct_sql}) *
+                    FROM {vista_nombre}
+                    {corte_where_sql}
+                    ORDER BY {distinct_sql}, {campo_fecha} DESC
+                ) sub
+                {outer_where_sql}
+                {outer_orden_sql}
+                LIMIT :limit OFFSET :offset
+            """)
+
+            result = await self.db.execute(data_query, corte_params)
+            datos = [dict(row._mapping) for row in result.fetchall()]
+
+            return datos, total_registros
+
+        # ── AGRUPADO (GROUP BY) ──
+        if campos_agrupacion and columnas_totalizables:
+            grupo_campos = [c.strip() for c in campos_agrupacion.split(',') if c.strip()]
+            if grupo_campos:
+                grupo_sql = ", ".join(grupo_campos)
+
+                # Construir SELECT: campos agrupados + agregaciones
+                select_parts = list(grupo_campos)
+                for col in columnas_totalizables:
+                    campo = col['campo']
+                    tipo = col.get('tipo', 'SUM').upper()
+                    select_parts.append(f"{tipo}({campo}) AS {campo}")
+
+                select_sql = ", ".join(select_parts)
+
+                # Ajustar ORDER BY para que use un campo del GROUP BY
+                if not filtros.get('orden_campo'):
+                    orden_sql = f"ORDER BY {grupo_campos[0]}"
+
+                # Count agrupado
+                count_query = text(f"""
+                    SELECT COUNT(*) as total FROM (
+                        SELECT 1 FROM {vista_nombre} {where_sql} GROUP BY {grupo_sql}
+                    ) sub
+                """)
+                count_result = await self.db.execute(count_query, params)
+                total_registros = count_result.scalar() or 0
+
+                # Data agrupada con paginación
+                offset = (page - 1) * page_size
+                params['limit'] = page_size
+                params['offset'] = offset
+
+                data_query = text(f"""
+                    SELECT {select_sql}
+                    FROM {vista_nombre}
+                    {where_sql}
+                    GROUP BY {grupo_sql}
+                    {orden_sql}
+                    LIMIT :limit OFFSET :offset
+                """)
+
+                result = await self.db.execute(data_query, params)
+                datos = [dict(row._mapping) for row in result.fetchall()]
+
+                return datos, total_registros
+
+        # Query normal (sin agrupación)
         # Contar total - optimización para tablas grandes
         # Si no hay filtros, usar estimación rápida de PostgreSQL
         if not where_clauses:
@@ -301,7 +512,9 @@ class ReportesRepository:
             vista_nombre: str,
             campo_fecha: str,
             columnas_totalizables: List[Dict[str, Any]],
-            filtros: Dict[str, Any]
+            filtros: Dict[str, Any],
+            tipo_consulta: str = 'normal',
+            campos_agrupacion: Optional[str] = None
     ) -> Dict[str, Any]:
         """
         Calcula totales para las columnas totalizables.
@@ -317,6 +530,68 @@ class ReportesRepository:
         """
         if not columnas_totalizables:
             return {}
+
+        # ── CORTE DE SALDO (DISTINCT ON) para totales ──
+        if tipo_consulta == 'corte_saldo' and campos_agrupacion:
+            distinct_campos = [c.strip() for c in campos_agrupacion.split(',')]
+            distinct_sql = ", ".join(distinct_campos)
+
+            # Reconstruir WHERE para el corte (solo fecha_fin)
+            corte_where = []
+            corte_params = {}
+
+            # Excluir almacenamientos virtuales (ej: despacho directo)
+            corte_where.append("es_virtual = false")
+
+            if filtros.get('fecha_fin'):
+                corte_where.append(f"{campo_fecha} <= CAST(:fecha_fin AS timestamp)")
+                corte_params['fecha_fin'] = filtros['fecha_fin']
+
+            if filtros.get('material_id'):
+                codigo_material = await self._get_material_codigo(filtros['material_id'])
+                if codigo_material:
+                    corte_where.append("codigo_material = :codigo_material")
+                    corte_params['codigo_material'] = codigo_material
+
+            dynamic_clauses, dynamic_params = self._build_dynamic_filter_clauses(
+                filtros,
+                param_prefix="totales_corte_filtro"
+            )
+            corte_where.extend(dynamic_clauses)
+            corte_params.update(dynamic_params)
+
+            corte_where_sql = ""
+            if corte_where:
+                corte_where_sql = "WHERE " + " AND ".join(corte_where)
+
+            # Outer WHERE para fecha_inicio
+            outer_where_sql = ""
+            if filtros.get('fecha_inicio'):
+                outer_where_sql = f"WHERE sub.{campo_fecha} >= CAST(:fecha_inicio AS timestamp)"
+                corte_params['fecha_inicio'] = filtros['fecha_inicio']
+
+            # Totales sobre el resultado del DISTINCT ON
+            select_parts = []
+            for col in columnas_totalizables:
+                campo_col = col['campo']
+                tipo = col.get('tipo', 'SUM').upper()
+                select_parts.append(f"{tipo}(sub.{campo_col}) as {campo_col}")
+
+            select_sql = ", ".join(select_parts)
+
+            query = text(f"""
+                SELECT {select_sql} FROM (
+                    SELECT DISTINCT ON ({distinct_sql}) *
+                    FROM {vista_nombre}
+                    {corte_where_sql}
+                    ORDER BY {distinct_sql}, {campo_fecha} DESC
+                ) sub
+                {outer_where_sql}
+            """)
+
+            result = await self.db.execute(query, corte_params)
+            row = result.fetchone()
+            return dict(row._mapping) if row else {}
 
         # Construir SELECT con agregaciones
         select_parts = []
@@ -357,20 +632,12 @@ class ReportesRepository:
             where_clauses.append(f"{campo_fecha} <= CAST(:fecha_fin AS timestamp)")
             params['fecha_fin'] = filtros['fecha_fin']
 
-        # Filtros dinámicos de columna
-        filtros_columna = filtros.get('filtros_columna', {})
-        for campo, valor in filtros_columna.items():
-            if valor:
-                from core.config.filtros_reportes_config import get_filtros_reporte
-                filtros_config = get_filtros_reporte(filtros.get('codigo_reporte', ''))
-                filtro_info = next((f for f in filtros_config if f.campo == campo), None)
-
-                if filtro_info and filtro_info.tipo_filtro == "search":
-                    where_clauses.append(f"{campo} ILIKE :filtro_{campo}")
-                    params[f'filtro_{campo}'] = f"%{valor}%"
-                else:
-                    where_clauses.append(f"{campo} = :filtro_{campo}")
-                    params[f'filtro_{campo}'] = valor
+        dynamic_clauses, dynamic_params = self._build_dynamic_filter_clauses(
+            filtros,
+            param_prefix="totales_filtro"
+        )
+        where_clauses.extend(dynamic_clauses)
+        params.update(dynamic_params)
 
         where_sql = ""
         if where_clauses:

@@ -1,17 +1,16 @@
 from typing import List, Optional
 
 from fastapi_pagination import Page, Params
-
+from pydantic import BaseModel
 from starlette import status
 
+from core.exceptions.auth_exception import InvalidCredentialsException
 from core.exceptions.base_exception import BasedException
 from core.exceptions.entity_exceptions import (
     EntityAlreadyRegisteredException,
 )
 from repositories.usuarios_repository import UsuariosRepository
-from core.exceptions.auth_exception import InvalidCredentialsException
-from schemas.usuarios_schema import UsuariosResponse, UsuarioCreate, UsuarioUpdate, ProfileUpdate
-from pydantic import BaseModel
+from schemas.usuarios_schema import UsuariosResponse, UsuarioCreate, UsuarioUpdate
 from utils.any_utils import AnyUtils
 from utils.logger_util import LoggerUtil
 

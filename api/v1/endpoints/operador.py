@@ -1,4 +1,4 @@
-from datetime import datetime, timezone
+from datetime import datetime
 from decimal import Decimal
 from typing import List, Optional
 
@@ -129,7 +129,7 @@ async def buque_in(
     try:
         fecha_llegada_actual = now_local()
         log.info(f"[DEBUG buque_in] fecha_llegada_actual={fecha_llegada_actual} (tzinfo={getattr(fecha_llegada_actual, 'tzinfo', None)})")
-        await service.chg_estado_flota(puerto_id, estado_puerto=True, estado_operador=True, fecha_llegada=fecha_llegada_actual)
+        await service.chg_estado_flota(puerto_id, estado_puerto=True, estado_operador=True, fecha_llegada=fecha_llegada_actual, reset_fecha_salida=True)
         log.info(f"Arribo de buque {puerto_id} marcado exitosamente.")
         return response_json(
             status_code=status.HTTP_200_OK,

@@ -722,7 +722,7 @@ class TransaccionesService:
         """
         from core.config.settings import get_settings
         from services.ext_api_service import ExtApiService
-        from schemas.ext_api_schema import NotificationCargue, NotificationBuque, NotificationBlsPeso
+        from schemas.ext_api_schema import NotificationCargue
         from utils.any_utils import AnyUtils
         import httpx
 

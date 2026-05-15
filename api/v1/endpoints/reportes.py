@@ -1,5 +1,7 @@
 from datetime import datetime
-from typing import Optional
+import re
+from collections import defaultdict
+from typing import Optional, Dict, Any, Tuple
 
 from fastapi import APIRouter, Depends, Query, Response, status, Request
 
@@ -17,8 +19,38 @@ from schemas.usuarios_schema import VUsuariosRolResponse
 from services.auth_service import AuthService
 from services.reportes.exportacion_service import ExportacionService
 from services.reportes.reportes_service import ReportesService
+from utils.time_util import now_local
 
 router = APIRouter(prefix="/reportes", tags=["Reportes"])
+
+PATRON_FILTRO_EXPLICITO = re.compile(r"^filtros\[(?P<campo>[^\[\]]+)\]\[(?P<operador>[^\[\]]+)\]$")
+
+
+def _extraer_filtros_columna(
+        request: Request,
+        known_params: set
+) -> Tuple[Dict[str, Any], Dict[str, Dict[str, str]]]:
+    """
+    Separa filtros legacy (campo=valor) y filtros explícitos
+    (filtros[campo][operador]=valor).
+    """
+    filtros_legacy: Dict[str, Any] = {}
+    filtros_explicitos: Dict[str, Dict[str, str]] = defaultdict(dict)
+
+    for key, value in request.query_params.multi_items():
+        if key in known_params:
+            continue
+
+        match = PATRON_FILTRO_EXPLICITO.match(key)
+        if match:
+            campo = match.group("campo")
+            operador = match.group("operador")
+            filtros_explicitos[campo][operador] = value
+            continue
+
+        filtros_legacy[key] = value
+
+    return filtros_legacy, dict(filtros_explicitos)
 
 
 # ============================================================
@@ -139,12 +171,8 @@ async def consultar_reporte(
         'orden_campo', 'orden_direccion'
     }
 
-    # Extraer filtros dinámicos de columna
-    all_params = dict(request.query_params)
-    filtros_columna = {
-        k: v for k, v in all_params.items()
-        if k not in known_params
-    }
+    # Extraer filtros dinámicos legacy y explícitos
+    filtros_columna, filtros_explicitos = _extraer_filtros_columna(request, known_params)
 
     filtros = {
         'material_id': material_id,
@@ -160,6 +188,9 @@ async def consultar_reporte(
     # Agregar filtros dinámicos de columna
     if filtros_columna:
         filtros['filtros_columna'] = filtros_columna
+
+    if filtros_explicitos:
+        filtros['filtros_explicitos'] = filtros_explicitos
 
     return await reportes_service.obtener_reporte(
         codigo_reporte=codigo_reporte,
@@ -274,12 +305,8 @@ async def exportar_reporte(
         'formato', 'material_id', 'fecha_inicio', 'fecha_fin'
     }
 
-    # Extraer filtros dinámicos de columna
-    all_params = dict(request.query_params)
-    filtros_columna = {
-        k: v for k, v in all_params.items()
-        if k not in known_params
-    }
+    # Extraer filtros dinámicos legacy y explícitos
+    filtros_columna, filtros_explicitos = _extraer_filtros_columna(request, known_params)
 
     # Construir filtros
     filtros = {
@@ -293,6 +320,9 @@ async def exportar_reporte(
     if filtros_columna:
         filtros['filtros_columna'] = filtros_columna
 
+    if filtros_explicitos:
+        filtros['filtros_explicitos'] = filtros_explicitos
+
     # Obtener datos para exportar
     datos_exportar = await reportes_service.obtener_datos_para_exportar(
         codigo_reporte=codigo_reporte,
@@ -301,7 +331,7 @@ async def exportar_reporte(
     )
 
     # Generar nombre de archivo
-    fecha_actual = datetime.now().strftime("%Y-%m-%d_%H%M%S")
+    fecha_actual = now_local().strftime("%Y-%m-%d_%H%M%S")
     nombre_base = f"{codigo_reporte}_{fecha_actual}"
 
     # Exportar según formato
@@ -378,7 +408,7 @@ async def refrescar_vistas(
 
     return {
         "message": "Todas las vistas de reportes han sido refrescadas",
-        "timestamp": datetime.now().isoformat()
+        "timestamp": now_local().isoformat()
     }
 
 
@@ -407,5 +437,5 @@ async def refrescar_vista_reporte(
 
     return {
         "message": f"Vista del reporte '{codigo_reporte}' ha sido refrescada",
-        "timestamp": datetime.now().isoformat()
+        "timestamp": now_local().isoformat()
     }

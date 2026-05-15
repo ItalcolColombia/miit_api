@@ -3,7 +3,6 @@
 import logging
 import os
 import sys
-from datetime import datetime, timezone
 from logging.handlers import TimedRotatingFileHandler
 
 from colorlog import ColoredFormatter

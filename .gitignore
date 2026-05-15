@@ -35,6 +35,7 @@ certs/
 
 # Archivos de datos o logs generados localmente
 *.log
+/logs
 !.gitkeep
 *.sqlite3
 *.db
@@ -55,8 +56,12 @@ ehthumbs.db
 
 # Pruebas contenerización
 /pgdata
+/scripts
 
 /docker-compose.simulate.yml
 /README.simulate_ecr.md
+.claude*
 
-/docs
+# Documentación interna
+/docs/docs-interno
+

@@ -5,7 +5,7 @@ Este archivo define qué columnas son filtrables para cada reporte
 y el tipo de filtro a usar (select o search).
 """
 from dataclasses import dataclass
-from typing import Dict, List
+from typing import Dict, List, Optional
 
 
 @dataclass
@@ -14,7 +14,9 @@ class FiltroConfig:
     campo: str
     nombre_mostrar: str
     tipo_filtro: str  # "select" o "search"
-    placeholder: str = None  # Solo para tipo "search"
+    placeholder: Optional[str] = None  # Solo para tipo "search"
+    operadores_permitidos: Optional[List[str]] = None
+    tipo_dato_filtro: Optional[str] = None
 
 
 # ============================================================
@@ -72,7 +74,27 @@ FILTROS_POR_REPORTE: Dict[str, List[FiltroConfig]] = {
     ],
 
     "RPT_PERMANENCIA": [
-        FiltroConfig("en_puerto", "En Puerto", "select"),
+        FiltroConfig(
+            "en_puerto",
+            "En Puerto",
+            "select",
+            operadores_permitidos=["eq"],
+            tipo_dato_filtro="boolean"
+        ),
+        FiltroConfig(
+            "fecha_llegada_puerto",
+            "Fecha Llegada Puerto",
+            "search",
+            operadores_permitidos=["gte", "lte"],
+            tipo_dato_filtro="datetime"
+        ),
+        FiltroConfig(
+            "fecha_salida_puerto",
+            "Fecha Salida Puerto",
+            "search",
+            operadores_permitidos=["is_null", "is_not_null"],
+            tipo_dato_filtro="datetime"
+        ),
         FiltroConfig("almacenamiento_origen", "Almacenamiento", "select"),
         FiltroConfig("material", "Material", "search", "Buscar por nombre de material..."),
         FiltroConfig("placa", "Placa", "search", "Buscar por placa..."),
@@ -116,3 +138,29 @@ def get_campos_filtro_validos(codigo_reporte: str) -> set:
     """
     filtros = get_filtros_reporte(codigo_reporte)
     return {f.campo for f in filtros}
+
+
+def get_operadores_permitidos_por_campo(codigo_reporte: str) -> Dict[str, List[str]]:
+    """
+    Obtiene operadores permitidos por campo para un reporte.
+
+    Si un campo no tiene operadores explícitos configurados, aplica defaults
+    según el tipo de filtro.
+    """
+    operadores_default_por_tipo = {
+        "select": ["eq", "ne", "in", "is_null", "is_not_null"],
+        "search": ["contains", "eq", "ne", "is_null", "is_not_null"]
+    }
+
+    resultado: Dict[str, List[str]] = {}
+    for filtro in get_filtros_reporte(codigo_reporte):
+        if filtro.operadores_permitidos:
+            resultado[filtro.campo] = filtro.operadores_permitidos
+            continue
+
+        resultado[filtro.campo] = operadores_default_por_tipo.get(
+            filtro.tipo_filtro,
+            ["eq"]
+        )
+
+    return resultado

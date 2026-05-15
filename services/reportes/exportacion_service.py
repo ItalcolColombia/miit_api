@@ -15,6 +15,8 @@ from reportlab.platypus import (
     Spacer
 )
 
+from utils.time_util import now_local
+
 
 class ExportacionService:
     """
@@ -53,6 +55,16 @@ class ExportacionService:
     # EXPORTACIÓN A EXCEL
     # ========================================================
 
+    @staticmethod
+    def _filtrar_columnas_visibles(
+            columnas: List[Dict[str, Any]]
+    ) -> List[Dict[str, Any]]:
+        """
+        Filtra columnas para incluir solo las marcadas como visibles.
+        Si una columna no tiene el campo 'visible', se asume visible por compatibilidad.
+        """
+        return [col for col in columnas if col.get('visible', True)]
+
     def exportar_excel(
             self,
             datos: List[Dict[str, Any]],
@@ -72,6 +84,7 @@ class ExportacionService:
         Returns:
             Contenido del archivo Excel en bytes
         """
+        columnas = self._filtrar_columnas_visibles(columnas)
         wb = Workbook()
         ws = wb.active
         ws.title = nombre_reporte[:31]  # Límite de Excel para nombre de hoja
@@ -116,7 +129,7 @@ class ExportacionService:
         date_cell = ws.cell(
             row=2,
             column=1,
-            value=f"Generado: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}"
+            value=f"Generado: {now_local().strftime('%Y-%m-%d %H:%M:%S')}"
         )
         date_cell.font = Font(italic=True, size=10)
         date_cell.alignment = Alignment(horizontal="center")
@@ -283,6 +296,7 @@ class ExportacionService:
         Returns:
             Contenido del archivo PDF en bytes
         """
+        columnas = self._filtrar_columnas_visibles(columnas)
         buffer = io.BytesIO()
 
         num_columnas = len(columnas)
@@ -406,7 +420,7 @@ class ExportacionService:
         elements.append(Paragraph(f"Informe de {nombre_reporte}", title_style))
 
         # Fecha de generación
-        fecha_generacion = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+        fecha_generacion = now_local().strftime('%Y-%m-%d %H:%M:%S')
         elements.append(Paragraph(f"Generado: {fecha_generacion}", date_style))
 
         # Todas las columnas visibles
@@ -553,11 +567,17 @@ class ExportacionService:
         # Calcular pesos según tipo de columna
         pesos = []
         for col in columnas:
+            campo = col.get('campo', '').lower()
             nombre = col.get('nombre_mostrar', col.get('campo', '')).lower()
             tipo_dato = col.get('tipo_dato', 'string')
 
+            # Ajustes específicos solicitados para mejorar legibilidad en reporte de ajustes.
+            if campo == 'codigo_material':
+                pesos.append(0.9)
+            elif campo == 'motivo':
+                pesos.append(3.8)
             # Columnas de texto largo: más peso
-            if any(x in nombre for x in ['material', 'descripcion', 'descripción', 'nombre', 'observacion', 'observación', 'almacenamiento', 'detalle']):
+            elif any(x in nombre for x in ['material', 'descripcion', 'descripción', 'nombre', 'observacion', 'observación', 'almacenamiento', 'detalle']):
                 pesos.append(3.0)
             # Columnas de fecha
             elif tipo_dato in ('date', 'datetime') or 'fecha' in nombre:
@@ -678,6 +698,7 @@ class ExportacionService:
         Returns:
             Contenido del archivo CSV como string
         """
+        columnas = self._filtrar_columnas_visibles(columnas)
         # Crear DataFrame con las columnas en el orden correcto
         campos = [col['campo'] for col in columnas]
         nombres = {col['campo']: col['nombre_mostrar'] for col in columnas}
@@ -688,10 +709,7 @@ class ExportacionService:
             fila_filtrada = {campo: fila.get(campo, '') for campo in campos}
             datos_filtrados.append(fila_filtrada)
 
-        df = pd.DataFrame(datos_filtrados)
-
-        # Reordenar columnas
-        df = df[campos]
+        df = pd.DataFrame(datos_filtrados, columns=campos)
 
         # Renombrar columnas
         df.rename(columns=nombres, inplace=True)
