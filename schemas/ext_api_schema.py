@@ -87,12 +87,14 @@ class EntradaParcialBuqueResponse(BaseSchema):
                     {
                         "noBL": "PISD0001-10",
                         "voyage": "PISD-0001",
-                        "weightBl": 323653.46
+                        "weightBl": 323653.46,
+                        "excessWeightBl": 0
                     },
                     {
                         "noBL": "PISD0001-9",
                         "voyage": "PISD-0001",
-                        "weightBl": 323653.46
+                        "weightBl": 323653.46,
+                        "excessWeightBl": 0
                     }
                 ]
             }

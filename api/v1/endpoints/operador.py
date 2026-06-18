@@ -213,11 +213,15 @@ async def end_buque(
 @router.get("/entrada-parcial-buque/{puerto_id}",
             status_code=status.HTTP_200_OK,
             summary="Obtener pesos parciales (delta) de BLs de un buque con arribo activo",
-            description="Calcula y retorna los pesos parciales (delta) prorrateados de los BLs "
-                        "de un buque con arribo en curso, basándose en las pesadas acumuladas de "
-                        "las transacciones de recibo. Cada consulta actualiza el acumulado enviado "
-                        "(peso_enviado_api) para que la siguiente consulta retorne solo el incremento. "
-                        "Corresponde a la notificación de despacho directo parcial.",
+            description="""
+            Calcula y retorna los pesos parciales (delta) prorrateados de los BLs de un buque con arribo en curso,
+            basándose en las pesadas acumuladas de las transacciones de recibo. Cada consulta ACTUALIZA el
+            acumulado enviado (campo `peso_enviado_api`) para que la siguiente consulta retorne solo el incremento.
+            La respuesta tiene la forma de `NotificationBuque` con campos `voyage`, `status` (por ejemplo `InProgress`)
+            y `data` que contiene una lista de objetos por BL. Cada objeto de `data` incluye `noBL`, `voyage`,
+            `weightBl` (delta normal) y `excessWeightBl` (delta por exceso). Si no hay cambios, `data` puede ser
+            una lista vacía o `null`.
+            """,
             response_model=EntradaParcialBuqueResponse,
             response_description="Detalle de pesos parciales por BL del buque en estado InProgress.",
             responses={
@@ -230,54 +234,22 @@ async def end_buque(
                                 "status": "InProgress",
                                 "data": [
                                     {
-                                        "noBL": "PISD0001-10",
-                                        "voyage": "PISD-0001",
-                                        "weightBl": 323653.46
-                                    },
-                                    {
-                                        "noBL": "PISD0001-9",
-                                        "voyage": "PISD-0001",
-                                        "weightBl": 323653.46
-                                    },
-                                    {
-                                        "noBL": "PISD0001-8",
-                                        "voyage": "PISD-0001",
-                                        "weightBl": 517845.53
-                                    },
-                                    {
-                                        "noBL": "PISD0001-7",
-                                        "voyage": "PISD-0001",
-                                        "weightBl": 291288.11
-                                    },
-                                    {
-                                        "noBL": "PISD0001-6",
-                                        "voyage": "PISD-0001",
-                                        "weightBl": 582576.23
-                                    },
-                                    {
-                                        "noBL": "PISD0001-5",
-                                        "voyage": "PISD-0001",
-                                        "weightBl": 582576.23
-                                    },
-                                    {
-                                        "noBL": "PISD0001-4",
-                                        "voyage": "PISD-0001",
-                                        "weightBl": 582576.23
-                                    },
-                                    {
                                         "noBL": "PISD0001-3",
                                         "voyage": "PISD-0001",
-                                        "weightBl": 5356464.74
+                                        "weightBl": 323653.46,
+                                        "excessWeightBl": 0
                                     },
                                     {
                                         "noBL": "PISD0001-2",
                                         "voyage": "PISD-0001",
-                                        "weightBl": 1374410.6
+                                        "weightBl": 323653.46,
+                                        "excessWeightBl": 0
                                     },
                                     {
                                         "noBL": "PISD0001-1",
                                         "voyage": "PISD-0001",
-                                        "weightBl": 2219615.42
+                                        "weightBl": 517845.53,
+                                        "excessWeightBl": 0
                                     }
                                 ]
                             }

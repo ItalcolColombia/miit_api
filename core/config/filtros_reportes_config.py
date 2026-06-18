@@ -97,6 +97,7 @@ FILTROS_POR_REPORTE: Dict[str, List[FiltroConfig]] = {
         ),
         FiltroConfig("almacenamiento_origen", "Almacenamiento", "select"),
         FiltroConfig("material", "Material", "search", "Buscar por nombre de material..."),
+        FiltroConfig("trucktransaction", "Truck Transaction", "search", "Buscar truck transaction..."),
         FiltroConfig("placa", "Placa", "search", "Buscar por placa..."),
         FiltroConfig("buque_origen", "Buque", "select"),
         FiltroConfig("no_bl", "No. BL", "search", "Buscar por número de BL..."),
