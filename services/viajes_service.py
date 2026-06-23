@@ -556,6 +556,10 @@ class ViajesService:
 
             log.info(f"[DEBUG chg_camion_ingreso] fecha recibida={fecha} (tzinfo={getattr(fecha, 'tzinfo', None)})")
 
+            from utils.time_util import normalize_to_app_tz
+            fecha = normalize_to_app_tz(fecha)
+            log.info(f"[DEBUG chg_camion_ingreso] fecha normalizada={fecha} (tzinfo={getattr(fecha, 'tzinfo', None)})")
+
             # Determinar si es despacho directo
             # Regla: Si hay un viaje_origen que apunta a un buque activo (estado_puerto=True y estado_operador=True)
             es_despacho_directo = False
@@ -634,6 +638,11 @@ class ViajesService:
                     f"La flota es del tipo '{flota.tipo}' diferente al tipo esperado 'camion'")
 
             log.info(f"[DEBUG chg_camion_salida] fecha recibida={fecha} (tzinfo={getattr(fecha, 'tzinfo', None)}) peso={peso}")
+
+            from utils.time_util import normalize_to_app_tz
+            fecha = normalize_to_app_tz(fecha)
+            log.info(f"[DEBUG chg_camion_salida] fecha normalizada={fecha} (tzinfo={getattr(fecha, 'tzinfo', None)}) peso={peso}")
+
             update_fields = {
                 "fecha_salida": fecha,
                 "peso_real": peso
