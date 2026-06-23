@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import datetime, timezone
 from decimal import Decimal
 from typing import List, Optional
 
@@ -22,7 +22,7 @@ from services.pesadas_service import PesadasService
 from services.viajes_service import ViajesService
 from utils.logger_util import LoggerUtil
 from utils.response_util import ResponseUtil
-from utils.time_util import now_local
+from utils.time_util import normalize_to_app_tz, now_local
 
 log = LoggerUtil()
 response_json = ResponseUtil.json_response
@@ -430,11 +430,16 @@ async def in_camion(
         service: ViajesService = Depends(get_viajes_service)):
     log.info(f"Payload recibido: Flota {puerto_id} - Ingreso ")
     try:
-        fecha_ingreso_actual = fecha_ingreso if fecha_ingreso is not None else now_local()
-        if fecha_ingreso is None:
-            log.warning(f"[DEBUG endpoint in_camion] fecha_ingreso no enviada; se usa hora del servidor={fecha_ingreso_actual} (tzinfo={fecha_ingreso_actual.tzinfo})")
+        if fecha_ingreso is not None:
+            # FastAPI stripea la Z de query params con Z (UTC) → datetime naive.
+            # Asumir que el valor original era UTC y convertir a Bogotá.
+            if fecha_ingreso.tzinfo is None:
+                fecha_ingreso = fecha_ingreso.replace(tzinfo=timezone.utc)
+            fecha_ingreso_actual = normalize_to_app_tz(fecha_ingreso)
+            log.info(f"[DEBUG endpoint in_camion] fecha_ingreso recibida y normalizada={fecha_ingreso_actual} (tzinfo={fecha_ingreso_actual.tzinfo})")
         else:
-            log.info(f"[DEBUG endpoint in_camion] fecha_ingreso recibida por parámetro={fecha_ingreso_actual} (tzinfo={getattr(fecha_ingreso_actual, 'tzinfo', None)})")
+            fecha_ingreso_actual = now_local()
+            log.warning(f"[DEBUG endpoint in_camion] fecha_ingreso no enviada; se usa hora del servidor={fecha_ingreso_actual} (tzinfo={fecha_ingreso_actual.tzinfo})")
 
         service_data = await service.chg_camion_ingreso(
             puerto_id,
@@ -488,11 +493,16 @@ async def out_camion(
         service: ViajesService = Depends(get_viajes_service)):
     log.info(f"Payload recibido: Camion {puerto_id} - Salida")
     try:
-        fecha_salida_actual = fecha_salida if fecha_salida is not None else now_local()
-        if fecha_salida is None:
-            log.warning(f"[DEBUG endpoint out_camion] fecha_salida no enviada; se usa hora del servidor={fecha_salida_actual} (tzinfo={fecha_salida_actual.tzinfo}) peso_real={peso_real}")
+        if fecha_salida is not None:
+            # FastAPI stripea la Z de query params con Z (UTC) → datetime naive.
+            # Asumir que el valor original era UTC y convertir a Bogotá.
+            if fecha_salida.tzinfo is None:
+                fecha_salida = fecha_salida.replace(tzinfo=timezone.utc)
+            fecha_salida_actual = normalize_to_app_tz(fecha_salida)
+            log.info(f"[DEBUG endpoint out_camion] fecha_salida recibida y normalizada={fecha_salida_actual} (tzinfo={fecha_salida_actual.tzinfo}) peso_real={peso_real}")
         else:
-            log.info(f"[DEBUG endpoint out_camion] fecha_salida recibida por parámetro={fecha_salida_actual} (tzinfo={getattr(fecha_salida_actual, 'tzinfo', None)}) peso_real={peso_real}")
+            fecha_salida_actual = now_local()
+            log.warning(f"[DEBUG endpoint out_camion] fecha_salida no enviada; se usa hora del servidor={fecha_salida_actual} (tzinfo={fecha_salida_actual.tzinfo}) peso_real={peso_real}")
 
         await service.chg_camion_salida(puerto_id, fecha_salida_actual, peso_real)
         try:
