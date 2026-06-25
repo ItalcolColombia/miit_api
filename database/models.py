@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, BigInteger, Double, Numeric, Table, Text, String, DateTime, ForeignKey, Date, Boolean, TIMESTAMP
+from sqlalchemy import Column, Integer, BigInteger, Double, Numeric, Table, Text, String, DateTime, ForeignKey, Date, Boolean, TIMESTAMP, SmallInteger
 from sqlalchemy import Identity
 from sqlalchemy.orm import relationship, declarative_base, backref
 from sqlalchemy.schema import UniqueConstraint
@@ -95,6 +95,7 @@ class Viajes(Base):
     fecha_hora = Column(DateTime(timezone=True), server_default=func.timezone('America/Bogota', func.now()), onupdate=func.timezone('America/Bogota', func.now()))
     usuario_id = Column(Integer, nullable=True)
     bl_id = Column(Integer, nullable=True)
+    estado_cita = Column(SmallInteger, nullable=False, default=1)
     transacciones = relationship("Transacciones", backref="Viajes")
 
 class Materiales(Base):

@@ -759,6 +759,15 @@ class TransaccionesService:
                 resultado['message'] = f"Flota no es de tipo camion, es {flota.tipo}"
                 return resultado
 
+            # Actualizar estado_cita a 3 (cumplido)
+            try:
+                from schemas.viajes_schema import ViajeUpdate as _ViajeUpdate
+                update_cita = _ViajeUpdate(estado_cita=3)
+                await self.viajes_repo.update(viaje_id, update_cita)
+                log.info(f"estado_cita actualizado a 3 (cumplido) para viaje_id={viaje_id}")
+            except Exception as e_cita:
+                log.error(f"Error al actualizar estado_cita para viaje_id {viaje_id}: {e_cita}")
+
             # Actualizar estado_operador de la flota a False
             try:
                 from schemas.flotas_schema import FlotaUpdate
