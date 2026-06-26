@@ -263,8 +263,23 @@ class ViajesService:
         """
         try:
             # 1. Validar si puerto_id ya existe
-            if await self.get_viaje_by_puerto_id(viaje_create.puerto_id):
-                raise EntityAlreadyRegisteredException(f"Ya existe una cita con id '{viaje_create.puerto_id}'")
+            viaje_existente = await self.get_viaje_by_puerto_id(viaje_create.puerto_id)
+
+            if viaje_existente:
+                if viaje_create.estado_cita == 2:
+                    # Anular cita existente
+                    from schemas.viajes_schema import ViajeUpdate
+                    update_data = ViajeUpdate(estado_cita=2)
+                    await self._repo.update(viaje_existente.id, update_data)
+                    log.info(f"Cita {viaje_create.puerto_id} anulada (estado_cita=2)")
+                    return ViajesResponse(**viaje_existente.__dict__)
+                else:
+                    raise EntityAlreadyRegisteredException(
+                        f"Ya existe una cita con id '{viaje_create.puerto_id}'")
+
+            if viaje_create.estado_cita == 2:
+                raise EntityNotFoundException(
+                    f"No existe cita con id '{viaje_create.puerto_id}' para anular")
 
             # 2. Crear la flota si no existe
             nueva_flota = FlotaCreate.model_validate(viaje_create)

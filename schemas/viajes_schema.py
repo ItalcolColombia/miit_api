@@ -132,7 +132,11 @@ class ViajeCamionExtCreate(BaseModel):
     fecha_hora: Optional[datetime] = None
     usuario_id: Optional[int] = None
     no_bl: Optional[str] = Field(None, max_length=100, description="Número de BL al que corresponde el despacho")
-    estado_cita: Optional[int] = Field(1, ge=1, le=3, description="1=activo, 2=anulado, 3=cumplido")
+    estado_cita: Optional[int] = Field(
+        default=1, ge=1, le=3,
+        validation_alias="status",
+        description="1=activo, 2=anulado, 3=cumplido"
+    )
 
     @field_validator('material_name')
     def material_name_not_empty(cls, value):
@@ -178,7 +182,8 @@ class ViajeCamionExtCreate(BaseModel):
                 "material_name": "MAIZ USA",
                 "viaje_origen": "VOY2024044",
                 "despacho_directo": True,
-                "no_bl": "SSF034576272"
+                "no_bl": "SSF034576272",
+                "status": 1
             }
         }
 

@@ -367,14 +367,17 @@ async def load_release_operador(
 
 @router.post("/camion-registro",
              status_code=status.HTTP_201_CREATED,
-             summary="Registrar camión",
+             summary="Registrar o anular cita de camión",
              description="Evento realizado por el operador con la cita de enturnamiento notificada a través de la interfaz de PBCU. "
                          "Corresponde a CamionRegistro en el diagrama de flujo de proceso. "
-                         "Opcionalmente se puede incluir el no_bl para asociar el despacho a un BL específico.",
+                         "Opcionalmente se puede incluir el no_bl para asociar el despacho a un BL específico. "
+                         "El campo <strong>status</strong> indica: 1 = crear cita (activo), 2 = anular cita existente.",
              response_model=CamionRegistroResponse,
              responses={
                  status.HTTP_201_CREATED: {"model": CamionRegistroResponse},
                  status.HTTP_400_BAD_REQUEST: {"model": ErrorResponse},
+                 status.HTTP_404_NOT_FOUND: {"model": ErrorResponse},
+                 status.HTTP_409_CONFLICT: {"model": ErrorResponse},
                  status.HTTP_422_UNPROCESSABLE_CONTENT: {"model": ValidationErrorResponse},
              })
 async def create_camion(
