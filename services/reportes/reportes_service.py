@@ -51,6 +51,15 @@ class ReportesService:
         }
 
     @staticmethod
+    def _normalizar_datetimes_en_datos(datos: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+        from utils.time_util import normalize_to_app_tz
+        for fila in datos:
+            for key, value in fila.items():
+                if isinstance(value, datetime) and value.tzinfo is None:
+                    fila[key] = normalize_to_app_tz(value)
+        return datos
+
+    @staticmethod
     def _parse_bool_value(value: Any) -> bool:
         if isinstance(value, bool):
             return value
@@ -440,6 +449,9 @@ class ReportesService:
                 tipo_consulta=reporte.tipo_consulta or 'normal'
             )
             logger.debug(f"Datos obtenidos: {total_registros} registros")
+
+            # Normalizar datetimes naive a aware con timezone Bogotá
+            datos = self._normalizar_datetimes_en_datos(datos)
 
             # Calcular totales si hay columnas totalizables
             totales = None
@@ -836,6 +848,9 @@ class ReportesService:
             columnas_totalizables=columnas_totalizables if reporte.campos_agrupacion else None,
             tipo_consulta=reporte.tipo_consulta or 'normal'
         )
+
+        # Normalizar datetimes naive a aware con timezone Bogotá
+        datos = self._normalizar_datetimes_en_datos(datos)
 
         # Obtener totales
         totales = None

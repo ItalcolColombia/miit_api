@@ -375,6 +375,28 @@ class ViajesService:
             if not created_viaje:
                 raise EntityNotFoundException("Error al recuperar la cita recién creada")
 
+            # 10. Cerrar citas activas previas del mismo camión
+            if viaje_create.estado_cita == 1:
+                try:
+                    citas_previas = await self._repo.find_many(
+                        flota_id=flota.id,
+                        estado_cita=1
+                    )
+                    for cita in citas_previas:
+                        if cita.id != created_viaje.id:
+                            from schemas.viajes_schema import ViajeUpdate
+                            update_fields = {"estado_cita": 2}
+                            if cita.fecha_llegada and not cita.fecha_salida:
+                                update_fields["fecha_salida"] = cita.fecha_llegada
+                            cierre = ViajeUpdate(**update_fields)
+                            await self._repo.update(cita.id, cierre)
+                            log.warning(
+                                f"Cita anterior {cita.puerto_id} cerrada (estado_cita=2) "
+                                f"por nueva cita {viaje_create.puerto_id}"
+                            )
+                except Exception as e:
+                    log.error(f"Error al cerrar citas previas de flota {flota.id}: {e}")
+
             return ViajesResponse(**created_viaje.__dict__)
         except (EntityAlreadyRegisteredException, EntityNotFoundException) as e:
             raise e

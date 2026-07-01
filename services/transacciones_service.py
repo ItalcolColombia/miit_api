@@ -993,6 +993,14 @@ class TransaccionesService:
                 if not viaje:
                     raise EntityNotFoundException(f"No existe viaje con ID '{viaje_id}'")
 
+                # Validar que la cita esté activa (solo para despachos de camión)
+                if tipo_lower == 'despacho' and viaje.estado_cita != 1:
+                    raise BasedException(
+                        message=f"La cita {viaje.puerto_id} tiene estado {viaje.estado_cita} "
+                                f"(1=activo, 2=anulado, 3=cumplido). No se puede crear transacción.",
+                        status_code=status.HTTP_400_BAD_REQUEST
+                    )
+
                 if tipo_lower == 'recibo':
                     # Para Recibo (buques): ref1 es el puerto_id del viaje
                     ref1 = viaje.puerto_id
