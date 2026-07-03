@@ -375,7 +375,7 @@ class ViajesService:
             if not created_viaje:
                 raise EntityNotFoundException("Error al recuperar la cita recién creada")
 
-            # 10. Cerrar citas activas previas del mismo camión
+            # 10. Cerrar citas activas previas del mismo camión (solo ≥ 48h)
             if viaje_create.estado_cita == 1:
                 try:
                     citas_previas = await self._repo.find_many(
@@ -384,16 +384,18 @@ class ViajesService:
                     )
                     for cita in citas_previas:
                         if cita.id != created_viaje.id:
-                            from schemas.viajes_schema import ViajeUpdate
-                            update_fields = {"estado_cita": 2}
-                            if cita.fecha_llegada and not cita.fecha_salida:
-                                update_fields["fecha_salida"] = cita.fecha_llegada
-                            cierre = ViajeUpdate(**update_fields)
-                            await self._repo.update(cita.id, cierre)
-                            log.warning(
-                                f"Cita anterior {cita.puerto_id} cerrada (estado_cita=2) "
-                                f"por nueva cita {viaje_create.puerto_id}"
-                            )
+                            if (cita.fecha_llegada and created_viaje.fecha_llegada and
+                                created_viaje.fecha_llegada - cita.fecha_llegada >= timedelta(hours=48)):
+                                from schemas.viajes_schema import ViajeUpdate
+                                update_fields = {"estado_cita": 2}
+                                if not cita.fecha_salida:
+                                    update_fields["fecha_salida"] = cita.fecha_llegada
+                                cierre = ViajeUpdate(**update_fields)
+                                await self._repo.update(cita.id, cierre)
+                                log.warning(
+                                    f"Cita anterior {cita.puerto_id} cerrada (estado_cita=2) "
+                                    f"por nueva cita {viaje_create.puerto_id} (>48h)"
+                                )
                 except Exception as e:
                     log.error(f"Error al cerrar citas previas de flota {flota.id}: {e}")
 
@@ -618,6 +620,7 @@ class ViajesService:
                 "fecha_llegada": fecha,
                 "despacho_directo": es_despacho_directo,
                 "peso_tara": peso_tara,
+                "estado_cita": 3,
             }
             if not tiene_peso_real:
                 update_fields["fecha_salida"] = None
@@ -682,7 +685,8 @@ class ViajesService:
 
             update_fields = {
                 "fecha_salida": fecha,
-                "peso_real": peso
+                "peso_real": peso,
+                "estado_cita": 4,
             }
             update_data = ViajeUpdate(**update_fields)
             updated = await self._repo.update(viaje.id, update_data)
@@ -1298,7 +1302,7 @@ class ViajesService:
             from core.config.settings import get_settings
             from utils.any_utils import AnyUtils
             from decimal import Decimal
-            from datetime import datetime, timezone
+            from datetime import datetime, timedelta, timezone
             from utils.time_util import now_local
             import asyncio
             import httpx
