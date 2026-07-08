@@ -384,8 +384,10 @@ class ViajesService:
                     )
                     for cita in citas_previas:
                         if cita.id != created_viaje.id:
+                            from utils.time_util import normalize_to_app_tz
                             if (cita.fecha_llegada and created_viaje.fecha_llegada and
-                                created_viaje.fecha_llegada - cita.fecha_llegada >= timedelta(hours=48)):
+                                normalize_to_app_tz(created_viaje.fecha_llegada) -
+                                normalize_to_app_tz(cita.fecha_llegada) >= timedelta(hours=48)):
                                 from schemas.viajes_schema import ViajeUpdate
                                 update_fields = {"estado_cita": 2}
                                 if not cita.fecha_salida:
