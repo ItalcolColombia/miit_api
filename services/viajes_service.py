@@ -688,7 +688,6 @@ class ViajesService:
             update_fields = {
                 "fecha_salida": fecha,
                 "peso_real": peso,
-                "estado_cita": 4,
             }
             update_data = ViajeUpdate(**update_fields)
             updated = await self._repo.update(viaje.id, update_data)
