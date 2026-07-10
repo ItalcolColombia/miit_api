@@ -133,9 +133,9 @@ class ViajeCamionExtCreate(BaseModel):
     usuario_id: Optional[int] = None
     no_bl: Optional[str] = Field(None, max_length=100, description="Número de BL al que corresponde el despacho")
     estado_cita: Optional[int] = Field(
-        default=1, ge=1, le=4,
+        default=1, ge=1, le=5,
         validation_alias="status",
-        description="1=activo, 2=anulado, 3=ingresó, 4=cumplido"
+        description="1=activo, 2=anulado, 3=ingresó, 4=cumplido, 5=traslado"
     )
 
     @field_validator('material_name')

@@ -759,12 +759,13 @@ class TransaccionesService:
                 resultado['message'] = f"Flota no es de tipo camion, es {flota.tipo}"
                 return resultado
 
-            # Actualizar estado_cita a 4 (cumplido)
+            # Actualizar estado_cita a 4 (cumplido), mantener 5 si es traslado
             try:
                 from schemas.viajes_schema import ViajeUpdate as _ViajeUpdate
-                update_cita = _ViajeUpdate(estado_cita=4)
+                nuevo_estado = 5 if viaje.estado_cita == 5 else 4
+                update_cita = _ViajeUpdate(estado_cita=nuevo_estado)
                 await self.viajes_repo.update(viaje_id, update_cita)
-                log.info(f"estado_cita actualizado a 4 (cumplido) para viaje_id={viaje_id}")
+                log.info(f"estado_cita actualizado a {nuevo_estado} para viaje_id={viaje_id}")
             except Exception as e_cita:
                 log.error(f"Error al actualizar estado_cita para viaje_id {viaje_id}: {e_cita}")
 
@@ -994,10 +995,10 @@ class TransaccionesService:
                     raise EntityNotFoundException(f"No existe viaje con ID '{viaje_id}'")
 
                 # Validar que el camión haya ingresado (solo despachos)
-                if tipo_lower == 'despacho' and viaje.estado_cita != 3:
+                if tipo_lower == 'despacho' and viaje.estado_cita not in (3, 5):
                     raise BasedException(
                         message=f"La cita {viaje.puerto_id} tiene estado {viaje.estado_cita} "
-                                f"(1=activo, 2=anulado, 3=ingresó, 4=cumplido). "
+                                f"(1=activo, 2=anulado, 3=ingresó, 4=cumplido, 5=traslado). "
                                 f"Debe marcar ingreso (gate-in) antes de pesar.",
                         status_code=status.HTTP_400_BAD_REQUEST
                     )
