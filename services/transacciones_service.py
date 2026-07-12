@@ -759,15 +759,8 @@ class TransaccionesService:
                 resultado['message'] = f"Flota no es de tipo camion, es {flota.tipo}"
                 return resultado
 
-            # Actualizar estado_cita a 4 (cumplido), mantener 5 si es traslado
-            try:
-                from schemas.viajes_schema import ViajeUpdate as _ViajeUpdate
-                nuevo_estado = 5 if viaje.estado_cita == 5 else 4
-                update_cita = _ViajeUpdate(estado_cita=nuevo_estado)
-                await self.viajes_repo.update(viaje_id, update_cita)
-                log.info(f"estado_cita actualizado a {nuevo_estado} para viaje_id={viaje_id}")
-            except Exception as e_cita:
-                log.error(f"Error al actualizar estado_cita para viaje_id {viaje_id}: {e_cita}")
+            # estado_cita se actualiza en chg_camion_salida (gate-out) para evitar
+            # contención entre _ejecutar_finalizacion_camion y gate-out
 
             # Actualizar estado_operador de la flota a False
             try:
@@ -996,10 +989,16 @@ class TransaccionesService:
 
                 # Validar que el camión haya ingresado (solo despachos)
                 if tipo_lower == 'despacho' and viaje.estado_cita not in (3, 5):
+                    mensajes_por_estado = {
+                        1: f"La cita {viaje.puerto_id} está activa (estado 1). Debe marcar ingreso (gate-in) antes de pesar.",
+                        2: f"La cita {viaje.puerto_id} está anulada (estado 2). No se puede pesar sobre una cita anulada.",
+                        4: f"La cita {viaje.puerto_id} ya fue finalizada (estado 4). No se puede pesar sobre una cita cumplida.",
+                    }
                     raise BasedException(
-                        message=f"La cita {viaje.puerto_id} tiene estado {viaje.estado_cita} "
-                                f"(1=activo, 2=anulado, 3=ingresó, 4=cumplido, 5=traslado). "
-                                f"Debe marcar ingreso (gate-in) antes de pesar.",
+                        message=mensajes_por_estado.get(
+                            viaje.estado_cita,
+                            f"La cita {viaje.puerto_id} tiene estado {viaje.estado_cita}. Debe marcar ingreso (gate-in) antes de pesar."
+                        ),
                         status_code=status.HTTP_400_BAD_REQUEST
                     )
 
@@ -1082,8 +1081,12 @@ class TransaccionesService:
             raise e
         except EntityAlreadyRegisteredException as e:
             raise e
+        except BasedException as e:
+            log.error(f"Error al crear transacción ext: viaje_id={tran_ext.viaje_id}, "
+                      f"tipo={tran_ext.tipo}, material={tran_ext.material}: {e.detail}")
+            raise e
         except Exception as e:
-            log.error(f"Error al crear transacción ext: {e}")
+            log.error(f"Error inesperado al crear transacción ext: {e}")
             raise BasedException(
                 message=f"Error inesperado al crear la transacción: {str(e)}",
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR

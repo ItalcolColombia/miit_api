@@ -157,6 +157,7 @@ class ViajesRepository(IRepository[Viajes, ViajesResponse]):
                     .where(Flotas.tipo == 'camion')
                     .where(Flotas.estado_puerto == True)
                     .where(Viajes.material_id.isnot(None))
+                    .where(Viajes.estado_cita.in_([3, 5]))
                     .where(
                         and_(
                             Viajes.fecha_llegada <= fecha_actual,
