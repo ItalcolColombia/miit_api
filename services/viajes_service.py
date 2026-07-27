@@ -1225,6 +1225,10 @@ class ViajesService:
                          f"peso_prorrateado_actual={peso_prorrateado_actual}, peso_enviado_anterior={peso_enviado_anterior}, "
                          f"delta_total={delta_total}, delta_peso={delta_peso}, delta_peso_exceso={delta_peso_exceso}")
 
+                if delta_peso == 0 and delta_peso_exceso == 0:
+                    log.info(f"EntradaParcialBuque - BL {bl.no_bl}: sin cambios, omitiendo")
+                    continue
+
                 dt_bl.append(
                     NotificationBlsPeso(
                         noBL=bl.no_bl,
@@ -1287,7 +1291,7 @@ class ViajesService:
         resultado = NotificationBuque(
             voyage=puerto_id,
             status="InProgress",
-            data=dt_bl if dt_bl else None
+            data=dt_bl if dt_bl else []
         ).model_dump()
 
         log.info(f"EntradaParcialBuque - Resultado para buque {puerto_id}: {resultado}")

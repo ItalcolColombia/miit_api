@@ -215,12 +215,12 @@ async def end_buque(
             summary="Obtener pesos parciales (delta) de BLs de un buque con arribo activo",
             description="""
             Calcula y retorna los pesos parciales (delta) prorrateados de los BLs de un buque con arribo en curso,
-            basándose en las pesadas acumuladas de las transacciones de recibo. Cada consulta ACTUALIZA el
-            acumulado enviado (campo `peso_enviado_api`) para que la siguiente consulta retorne solo el incremento.
+            basándose en las pesadas acumuladas de las transacciones de recibo. Funciona para ambos flujos:
+            Recibo de Buque y Despacho Directo. Cada consulta ACTUALIZA el acumulado enviado
+            (campo `peso_enviado_api`) para que la siguiente consulta retorne solo el incremento.
             La respuesta tiene la forma de `NotificationBuque` con campos `voyage`, `status` (por ejemplo `InProgress`)
-            y `data` que contiene una lista de objetos por BL. Cada objeto de `data` incluye `noBL`, `voyage`,
-            `weightBl` (delta normal) y `excessWeightBl` (delta por exceso). Si no hay cambios, `data` puede ser
-            una lista vacía o `null`.
+            y `data` que contiene una lista de objetos por BL. Solo se incluyen BLs con cambios (delta > 0 en peso
+            o exceso). Si no hay cambios en ningún BL, `data` es una lista vacía.
             """,
             response_model=EntradaParcialBuqueResponse,
             response_description="Detalle de pesos parciales por BL del buque en estado InProgress.",
