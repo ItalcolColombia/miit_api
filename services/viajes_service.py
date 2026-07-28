@@ -1226,17 +1226,16 @@ class ViajesService:
                          f"delta_total={delta_total}, delta_peso={delta_peso}, delta_peso_exceso={delta_peso_exceso}")
 
                 if delta_peso == 0 and delta_peso_exceso == 0:
-                    log.info(f"EntradaParcialBuque - BL {bl.no_bl}: sin cambios, omitiendo")
-                    continue
-
-                dt_bl.append(
-                    NotificationBlsPeso(
-                        noBL=bl.no_bl,
-                        voyage=puerto_id,
-                        weightBl=float(delta_peso),
-                        excessWeightBl=float(delta_peso_exceso)
-                    ).model_dump()
-                )
+                    log.info(f"EntradaParcialBuque - BL {bl.no_bl}: sin cambios, omitiendo de respuesta")
+                else:
+                    dt_bl.append(
+                        NotificationBlsPeso(
+                            noBL=bl.no_bl,
+                            voyage=puerto_id,
+                            weightBl=float(delta_peso),
+                            excessWeightBl=float(delta_peso_exceso)
+                        ).model_dump()
+                    )
 
                 bls_a_actualizar.append({
                     'bl_id': bl.id,
