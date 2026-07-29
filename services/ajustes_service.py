@@ -125,7 +125,7 @@ class AjustesService:
                             material_id=material_id,
                             tipo=tipo,
                             accion='Ajuste',
-                            observacion=f"Ajuste #{getattr(ajuste_obj, 'id', None)}: {motivo_final[:50]}",
+                            observacion = f"Ajuste #{getattr(ajuste_obj, 'id', None)}: {motivo_final}"[:255],
                             peso=abs(delta),
                             saldo_anterior=saldo_anterior,
                             saldo_nuevo=saldo_nuevo_calc,

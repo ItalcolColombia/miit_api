@@ -27,7 +27,7 @@ class MovimientosCreate(MovimientosResponse):
     material_id: Optional[int] = None
     tipo: Optional[str] = Field(None, max_length=50)
     accion: Optional[str] = Field(None, max_length=50)
-    observacion: Optional[str] = Field(None, max_length=50)
+    observacion: Optional[str] = Field(None, max_length=255)
     peso: Optional[Decimal] = Field(..., max_digits=14, decimal_places=2)
     saldo_anterior: Optional[Decimal] = Field(..., max_digits=14, decimal_places=2)
     saldo_nuevo: Optional[Decimal] = Field(..., max_digits=14, decimal_places=2)

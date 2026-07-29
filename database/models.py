@@ -182,7 +182,7 @@ class Movimientos(Base):
     material_id = Column(Integer(), ForeignKey('materiales.id'), nullable=False)
     tipo = Column(String(50), nullable=False)
     accion = Column(String(50), nullable=False)
-    observacion = Column(String(50), nullable=True)
+    observacion = Column(String(255), nullable=True)
     peso = Column(Numeric(10,2), nullable=False)
     saldo_anterior = Column(Numeric(10,2), nullable=False)
     saldo_nuevo = Column(Numeric(10,2), nullable=True)
