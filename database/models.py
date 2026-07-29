@@ -308,7 +308,7 @@ class VAlmMateriales(Base):
     __tablename__ = "v_almacenamientos_materiales"
     almacenamiento_id = Column(Integer, primary_key=True, index=True)
     almacenamiento = Column(String(200))
-    material_id = Column(Integer)
+    material_id = Column(Integer, primary_key=True)
     material = Column(String(200))
     saldo = Column(Numeric(10,2), nullable=False)
     fecha_hora = Column(DateTime(timezone=True))
