@@ -485,10 +485,12 @@ async def end_transaction(
 
 @router.post("/ajustes",
              status_code=status.HTTP_201_CREATED,
-             summary="Crear ajuste(s) de saldo para todos los materiales de un almacenamiento",
-             description="Recibe el nombre del almacenamiento y el saldo nuevo. "
-                         "Busca todos los materiales asociados a ese almacenamiento y crea un ajuste para cada uno, "
-                         "llevando el saldo al valor indicado. Útil para liberar (llevar a 0) un almacenamiento completo.",
+             summary="Crear ajuste(s) de saldo para materiales de un almacenamiento",
+             description="Ajusta el saldo de materiales de un almacenamiento. "
+                         "Si se omite material_id, aplica a todos los materiales del almacenamiento. "
+                         "Si se usa delta, calcula saldo_nuevo = saldo_anterior + delta. "
+                         "Delta sin material_id solo se permite si el almacenamiento tiene 1 material. "
+                         "Útil para liberar (llevar a 0) un almacenamiento completo o corregir inventario.",
              response_model=CreateResponse,
              responses={
                  status.HTTP_400_BAD_REQUEST: {"model": ErrorResponse},

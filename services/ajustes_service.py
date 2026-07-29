@@ -67,15 +67,39 @@ class AjustesService:
                             status_code=status.HTTP_404_NOT_FOUND
                         )
 
-                    saldo_nuevo = Decimal(ajuste.saldo_nuevo)
+                    # Filtrar por material_id si se especificó
+                    if ajuste.material_id is not None:
+                        filas = [r for r in filas if int(getattr(r, 'material_id')) == ajuste.material_id]
+                        if not filas:
+                            raise BasedException(
+                                message=f"El material_id {ajuste.material_id} no está asociado al almacenamiento '{ajuste.almacenamiento}'",
+                                status_code=status.HTTP_400_BAD_REQUEST
+                            )
+
+                    # Validar uso de delta sin material_id en almacenes con múltiples materiales
+                    usar_delta = ajuste.delta is not None
+                    if usar_delta:
+                        if ajuste.material_id is None and len(filas) > 1:
+                            raise BasedException(
+                                message=f"El almacenamiento '{ajuste.almacenamiento}' tiene {len(filas)} materiales. "
+                                        f"Debe especificar material_id cuando usa delta con múltiples materiales",
+                                status_code=status.HTTP_400_BAD_REQUEST
+                            )
+                        delta_fijo = Decimal(ajuste.delta)
 
                     for vrow in filas:
                         material_id = int(getattr(vrow, 'material_id'))
                         saldo_anterior = Decimal(getattr(vrow, 'saldo', 0) or 0)
-                        delta = saldo_nuevo - saldo_anterior
+
+                        if usar_delta:
+                            saldo_nuevo_calc = saldo_anterior + delta_fijo
+                            delta = delta_fijo
+                        else:
+                            saldo_nuevo_calc = Decimal(ajuste.saldo_nuevo)
+                            delta = saldo_nuevo_calc - saldo_anterior
 
                         if delta == 0:
-                            log.info(f"Ajuste omitido para almacenamiento {alm_id}, material {material_id}: saldo ya es {saldo_nuevo}")
+                            log.info(f"Ajuste omitido para almacenamiento {alm_id}, material {material_id}: saldo ya es {saldo_nuevo_calc}")
                             continue
 
                         tipo = 'Entrada' if delta > 0 else 'Salida'
@@ -85,7 +109,7 @@ class AjustesService:
                             almacenamiento_id=alm_id,
                             material_id=material_id,
                             saldo_anterior=saldo_anterior,
-                            saldo_nuevo=saldo_nuevo,
+                            saldo_nuevo=saldo_nuevo_calc,
                             delta=delta,
                             motivo=motivo_final,
                             usuario_id=current_user_id.get()
@@ -104,7 +128,7 @@ class AjustesService:
                             observacion=f"Ajuste #{getattr(ajuste_obj, 'id', None)}: {motivo_final[:50]}",
                             peso=abs(delta),
                             saldo_anterior=saldo_anterior,
-                            saldo_nuevo=saldo_nuevo,
+                            saldo_nuevo=saldo_nuevo_calc,
                             usuario_id=current_user_id.get()
                         )
                         session.add(mov_obj)
@@ -121,7 +145,7 @@ class AjustesService:
                                 sqlalchemy_update(AlmacenamientosMateriales)
                                 .where(AlmacenamientosMateriales.c.almacenamiento_id == alm_id)
                                 .where(AlmacenamientosMateriales.c.material_id == material_id)
-                                .values(saldo=saldo_nuevo, fecha_hora=now_local(), usuario_id=current_user_id.get())
+                                .values(saldo=saldo_nuevo_calc, fecha_hora=now_local(), usuario_id=current_user_id.get())
                             )
                             await session.execute(update_stmt)
                         except Exception as e_update_alm:
@@ -205,8 +229,12 @@ class AjustesService:
 
                     # Si todos los materiales tenían delta 0
                     if not respuestas:
+                        if usar_delta:
+                            valor_ref = f"aplicando delta {delta_fijo}"
+                        else:
+                            valor_ref = str(ajuste.saldo_nuevo)
                         raise BasedException(
-                            message=f"Todos los materiales del almacenamiento '{ajuste.almacenamiento}' ya tienen saldo {saldo_nuevo}",
+                            message=f"Todos los materiales del almacenamiento '{ajuste.almacenamiento}' ya tienen saldo {valor_ref}",
                             status_code=status.HTTP_400_BAD_REQUEST
                         )
 
