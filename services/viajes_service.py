@@ -13,6 +13,7 @@ from core.exceptions.entity_exceptions import (
     EntityNotFoundException,
 )
 from repositories.consumos_entrada_parcial_repository import ConsumosEntradaParcialRepository
+from repositories.transacciones_repository import TransaccionesRepository
 from repositories.viajes_repository import ViajesRepository
 from schemas.bls_schema import BlsCreate, BlsExtCreate, BlsResponse, BlsUpdate, VBlsResponse
 from schemas.clientes_schema import ClienteCreate
@@ -40,7 +41,7 @@ _TZ = timezone
 
 class ViajesService:
 
-    def __init__(self, viajes_repository: ViajesRepository, mat_service : MaterialesService, flotas_service : FlotasService, feedback_service : ExtApiService, transacciones_service : TransaccionesService, bl_service : BlsService, client_service : ClientesService, consumos_ep_repository: ConsumosEntradaParcialRepository = None) -> None:
+    def __init__(self, viajes_repository: ViajesRepository, mat_service : MaterialesService, flotas_service : FlotasService, feedback_service : ExtApiService, transacciones_service : TransaccionesService, bl_service : BlsService, client_service : ClientesService, consumos_ep_repository: ConsumosEntradaParcialRepository = None, transacciones_repository: Optional[TransaccionesRepository] = None) -> None:
         self._repo = viajes_repository
         self.mat_service = mat_service
         self.flotas_service = flotas_service
@@ -49,6 +50,7 @@ class ViajesService:
         self.feedback_service = feedback_service
         self.transacciones_service= transacciones_service
         self.consumos_ep_repository = consumos_ep_repository
+        self.transacciones_repository = transacciones_repository
 
     async def get_viaje_by_puerto_id(self, puerto_id: str) -> Optional[ViajesResponse]:
         """
@@ -936,6 +938,21 @@ class ViajesService:
                     status_code=status.HTTP_400_BAD_REQUEST
                 )
 
+            trans_repo = self.transacciones_repository or (
+                self.transacciones_service._repo if self.transacciones_service else None
+            )
+            if trans_repo:
+                pendientes = await trans_repo.count_recibo_no_finalizadas(viaje.id)
+                if pendientes > 0:
+                    log.warning(
+                        f"FinalizaBuque - Cierre bloqueado para puerto_id {puerto_id}: "
+                        f"{pendientes} transacción(es) de recibo pendiente(s) de finalizar"
+                    )
+                    raise BasedException(
+                        message=f"Hay {pendientes} transacción(es) de recibo pendiente(s) de finalizar; no se cierra la cita hasta que finalicen el pesaje",
+                        status_code=status.HTTP_409_CONFLICT
+                    )
+
             # Calcular y actualizar los pesos reales de los BLs mediante prorrateo
             # ANTES de obtener los BLs para la notificación
             log.info(f"FinalizaBuque - Calculando pesos reales de BLs para viaje {viaje.id} (puerto_id: {puerto_id})")
@@ -1023,14 +1040,30 @@ class ViajesService:
             else:
                 dt_bl = None
 
-            # Actualizar fecha_salida del viaje si se proporciona
-            if fecha_salida is not None:
-                from utils.time_util import normalize_to_app_tz
-                fecha_salida_norm = normalize_to_app_tz(fecha_salida)
-                log.info(f"FinalizaBuque - fecha_salida original={fecha_salida} (tzinfo={getattr(fecha_salida, 'tzinfo', None)}), normalizada={fecha_salida_norm} (tzinfo={getattr(fecha_salida_norm, 'tzinfo', None)})")
-                update_viaje_data = ViajeUpdate(fecha_salida=fecha_salida_norm)
-                await self._repo.update(viaje.id, update_viaje_data)
-                log.info(f"FinalizaBuque - Fecha de salida actualizada para viaje {viaje.id}: {fecha_salida_norm}")
+            # Watermark de cierre: alinear peso_enviado_api de cada BL con el peso real
+            # prorrateado del snapshot de cierre. Así, una consulta posterior de
+            # entrada-parcial-buque dentro de la ventana de gracia solo retorna el delta
+            # pendiente (pesadas que aparecieron tras el cierre) y NO duplica lo que ya
+            # notificó FinalizaBuque ni genera deltas negativos.
+            for bl_cierre in bls_actualizados:
+                try:
+                    await self.bls_service.update(bl_cierre['bl_id'], BlsUpdate(peso_enviado_api=bl_cierre['peso_real']))
+                    log.info(f"FinalizaBuque - Watermark actualizado BL {bl_cierre['bl_id']} a peso_enviado_api={bl_cierre['peso_real']}")
+                except Exception as e_wm:
+                    log.error(f"FinalizaBuque - Error al actualizar watermark del BL {bl_cierre['bl_id']}: {e_wm}")
+
+            # Actualizar fecha_salida del viaje (si no se envió, se usa ahora local para
+            # anclar la ventana de gracia de entrada-parcial-buque de forma determinística
+            # en ambos flujos de cierre: operador y ETL/SCADA)
+            from utils.time_util import normalize_to_app_tz, now_local
+            if fecha_salida is None:
+                fecha_salida = now_local()
+                log.warning(f"FinalizaBuque - fecha_salida no enviada para puerto_id {puerto_id}; se usa hora del servidor={fecha_salida} (tzinfo={getattr(fecha_salida, 'tzinfo', None)})")
+            fecha_salida_norm = normalize_to_app_tz(fecha_salida)
+            log.info(f"FinalizaBuque - fecha_salida original={fecha_salida} (tzinfo={getattr(fecha_salida, 'tzinfo', None)}), normalizada={fecha_salida_norm} (tzinfo={getattr(fecha_salida_norm, 'tzinfo', None)})")
+            update_viaje_data = ViajeUpdate(fecha_salida=fecha_salida_norm)
+            await self._repo.update(viaje.id, update_viaje_data)
+            log.info(f"FinalizaBuque - Fecha de salida actualizada para viaje {viaje.id}: {fecha_salida_norm}")
 
             # Actualizar estados de la flota
             try:
@@ -1142,11 +1175,27 @@ class ViajesService:
                 status_code=status.HTTP_400_BAD_REQUEST
             )
 
-        if not flota.estado_puerto or not flota.estado_operador:
+        flota_activa = bool(flota.estado_puerto) and bool(flota.estado_operador)
+
+        dentro_ventana = False
+        if not flota_activa and viaje.fecha_salida is not None:
+            from utils.time_util import ensure_aware_in_app_tz, now_local
+            fecha_salida_norm = ensure_aware_in_app_tz(viaje.fecha_salida)
+            grace_minutes = get_settings().ENTRADA_PARCIAL_GRACE_MINUTES
+            if fecha_salida_norm is not None:
+                dentro_ventana = now_local() - fecha_salida_norm <= timedelta(minutes=grace_minutes)
+                log.info(
+                    f"EntradaParcialBuque - Buque {puerto_id} finalizado (estado_puerto={flota.estado_puerto}, estado_operador={flota.estado_operador}). "
+                    f"fecha_salida={viaje.fecha_salida}, dentro_ventana_gracia={dentro_ventana} (ventana configurada={grace_minutes} min)"
+                )
+
+        if not flota_activa and not dentro_ventana:
             raise BasedException(
                 message=f"El buque {puerto_id} no tiene un arribo activo (estado_puerto={flota.estado_puerto}, estado_operador={flota.estado_operador})",
                 status_code=status.HTTP_400_BAD_REQUEST
             )
+
+        status_respuesta = "InProgress" if flota_activa else "Finished"
 
         viaje_id = viaje.id
 
@@ -1175,7 +1224,7 @@ class ViajesService:
             log.warning(f"EntradaParcialBuque - No se encontraron BLs para buque {viaje_id}")
             return NotificationBuque(
                 voyage=puerto_id,
-                status="InProgress",
+                status=status_respuesta,
                 data=[]
             ).model_dump()
 
@@ -1289,7 +1338,7 @@ class ViajesService:
 
         resultado = NotificationBuque(
             voyage=puerto_id,
-            status="InProgress",
+            status=status_respuesta,
             data=dt_bl if dt_bl else []
         ).model_dump()
 

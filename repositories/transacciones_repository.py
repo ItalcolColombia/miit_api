@@ -68,6 +68,33 @@ class TransaccionesRepository(IRepository[Transacciones, TransaccionResponse]):
         except Exception:
             return 0
 
+    async def count_recibo_no_finalizadas(self, viaje_id: int) -> int:
+        """
+        Cuenta las transacciones de tipo 'Recibo' de un viaje que NO están en estado
+        'Finalizada' ni 'Cancelada' (es decir, 'Proceso' o 'Registrada').
+
+        Se usa como guardia antes de cerrar un buque: si hay transacciones pendientes,
+        el cierre se bloquea para evitar perder el último delta de entrada parcial.
+
+        Args:
+            viaje_id: ID del viaje
+
+        Returns:
+            Número de transacciones de recibo pendientes de finalizar
+        """
+        try:
+            query = (
+                select(func.count(Transacciones.id))
+                .where(Transacciones.viaje_id == viaje_id)
+                .where(Transacciones.tipo == 'Recibo')
+                .where(Transacciones.estado.notin_(['Finalizada', 'Cancelada']))
+            )
+            result = await self.db.execute(query)
+            count = result.scalar_one_or_none()
+            return count if count else 0
+        except Exception:
+            return 0
+
     async def find_finalized_by_viaje(self, viaje_id: int, tipo: str = 'Despacho') -> List[TransaccionResponse]:
         """
         Busca todas las transacciones finalizadas de un tipo específico para un viaje.

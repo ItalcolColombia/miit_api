@@ -22,7 +22,7 @@ class Settings(BaseSettings):
     API_HOST: str = "0.0.0.0"
     API_PORT: int = 8000
     API_V1_STR: str = "v1"
-    API_VERSION_NUM: str = "1.1.21"
+    API_VERSION_NUM: str = "1.1.22"
     API_LOG_LEVEL: str = "DEBUG"
     APP_LOG_DIR: str = "/var/www/metalsoft/logs/miit_api/"
 
@@ -76,6 +76,12 @@ class Settings(BaseSettings):
     # ==================== Feature Configuration ====================
     # Despacho Directo - Almacenamiento Virtual
     ALMACENAMIENTO_DESPACHO_DIRECTO_ID: int = 0
+
+    # Entrada Parcial Buque: ventana de gracia (minutos) posterior al cierre de la cita.
+    # Cuando el buque ya fue finalizado (estado Finished) y tiene fecha_salida, se permite
+    # consultar entrada-parcial-buque si han pasado MENOS O IGUAL a estos minutos, para que
+    # el integrador alcance a recibir el último delta de consumos de entrada parcial.
+    ENTRADA_PARCIAL_GRACE_MINUTES: int = 60
 
     # ==================== External API: TurboGraneles (SENSITIVE) ====================
     TG_API_AUTH: str = ""

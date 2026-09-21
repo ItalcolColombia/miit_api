@@ -148,6 +148,7 @@ async def get_viajes_service(
         feedback_service: Annotated[ExtApiService, Depends(get_ext_api_service)],
         transacciones_service: Annotated[TransaccionesService, Depends(get_transacciones_service)],
         consumos_ep_repository: Annotated[ConsumosEntradaParcialRepository, Depends(get_consumos_entrada_parcial_repository)],
+        transacciones_repository: Annotated[TransaccionesRepository, Depends(get_transacciones_repository)],
 ) -> ViajesService:
     return ViajesService(
         viajes_repository=viajes_repository,
@@ -158,6 +159,7 @@ async def get_viajes_service(
         client_service=clientes_service,
         transacciones_service=transacciones_service,
         consumos_ep_repository=consumos_ep_repository,
+        transacciones_repository=transacciones_repository,
     )
 
 
